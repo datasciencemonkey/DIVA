@@ -8,6 +8,17 @@ dependencies = [
     "databricks-sdk==0.133.0",
     "python-dotenv==1.2.2",
     "requests==2.34.2",
+    # LiveKit voice-agent worker stack (ReferenceApp-verified pins)
+    "livekit==1.1.5",
+    "livekit-agents==1.5.6",
+    "livekit-api==1.1.0",
+    "livekit-plugins-openai==1.5.6",
+    "livekit-plugins-deepgram==1.5.6",
+    "livekit-plugins-silero==1.5.6",
+    "httpx==0.28.1",
+    "httpx-sse==0.4.3",
+    "opentelemetry-sdk==1.39.1",
+    "opentelemetry-exporter-otlp-proto-http==1.39.1",
 ]
 
 [dependency-groups]
