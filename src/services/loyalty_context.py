@@ -8,9 +8,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from src.policy.tiers import VALID_TIERS
 from src.services.db import SCHEMA, _run_query
-
-VALID_TIERS = ("Standard", "Premium", "VIP")
 
 
 @dataclass(frozen=True)

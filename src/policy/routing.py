@@ -9,15 +9,13 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
-VALID_TIERS = ("Standard", "Premium", "VIP")
+from src.policy.tiers import VALID_TIERS, THOROUGHNESS as _THOROUGHNESS
 
 _ENV_BY_TIER = {
     "Standard": "UG_MODEL_STANDARD",
     "Premium": "UG_MODEL_PREMIUM",
     "VIP": "UG_MODEL_VIP",
 }
-
-_THOROUGHNESS = {"Standard": "concise", "Premium": "balanced", "VIP": "thorough"}
 
 
 @dataclass(frozen=True)
@@ -40,4 +38,10 @@ def _directives_for(tier: str) -> dict:
 def route_for(loyalty_tier: str | None) -> RoutingDecision:
     tier = loyalty_tier if loyalty_tier in VALID_TIERS else "Standard"
     model = os.getenv(_ENV_BY_TIER[tier], "") or os.getenv("UG_MODEL_FALLBACK", "")
+    if not model:
+        raise RuntimeError(
+            f"No model configured for tier {tier!r} and no UG_MODEL_FALLBACK set — "
+            "set UG_MODEL_STANDARD/PREMIUM/VIP + UG_MODEL_FALLBACK "
+            "(see docs/discovery/model-routing-contract.md)."
+        )
     return RoutingDecision(tier=tier, model=model, directives=_directives_for(tier))

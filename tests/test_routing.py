@@ -42,3 +42,10 @@ def test_warm_recognition_only_for_premium_and_vip():
     assert route_for("Standard").directives["recognition_tone"] == "neutral"
     assert route_for("Premium").directives["recognition_tone"] == "warm"
     assert route_for("VIP").directives["recognition_tone"] == "warm"
+
+
+def test_route_for_raises_when_no_model_resolves(monkeypatch):
+    for v in ("UG_MODEL_STANDARD", "UG_MODEL_PREMIUM", "UG_MODEL_VIP", "UG_MODEL_FALLBACK"):
+        monkeypatch.delenv(v, raising=False)
+    with pytest.raises(RuntimeError):
+        route_for("Standard")
