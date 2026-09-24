@@ -218,6 +218,10 @@ def route_for(loyalty_tier: str) -> RoutingDecision: ...
   `_directives`; the **raw tier never reaches the LLM**.
 - If the routed model fails a live Responses+tools check, fall back to `UG_MODEL_FALLBACK` and surface the
   fallback in the Control pillar.
+- **Pluggable strategy (future-proofing):** `route_for` is the single routing seam. v1 ships a
+  `StaticTierStrategy` (the tier→model map above). A future **model-based strategy** — a served "decision
+  model" (see *Future extensions*) — drops in behind the same `RoutingDecision` contract without touching
+  the agent, tools, or UI.
 
 ## 12. Governance invariants (adapted from ReferenceApp §4 — DO NOT DILUTE)
 
@@ -337,6 +341,29 @@ def route_for(loyalty_tier: str) -> RoutingDecision: ...
 - Whether to ship the optional Genie aggregate reuse-proof in v1.
 - UI build tooling (pure-stdlib build vs light bundler) — decided with the impeccable/frontend pass.
 - Generator prompt design + how much record structure to synthesize per company.
+
+## Future extensions (post-v1)
+
+- **Model-based routing — a served "decision model" (e.g. *JEV*).** Replace `StaticTierStrategy` with a
+  governed served model that chooses the conversational model from richer features (loyalty tier + query
+  intent/complexity + cost/latency budget), returning the same `RoutingDecision`.
+  - **Design fit:** ReferenceApp already runs a **served UC model → deterministic decision** on the hot path
+    (flight-delay model → rules); the router revives that seam, pointed at model selection.
+  - **Governed & on-brand:** the router is itself a UAIG / Model-Serving-hosted model — another governed
+    model in the story, strengthening Choice + Control + Costs. Remains **app-side** routing (UAIG is not
+    claimed to do the classification itself — §positioning).
+  - **Invariant preserved:** the decision stays **outside the conversational LLM** and auditable; the
+    conversational LLM never sees the raw tier/signals.
+  - **Timing:** per-session at bind (drop-in to the v1 flow) first; **per-turn** dynamic routing later
+    (easy turns → cheap model, hard turns → strong — the "cascade" idea), which requires swapping the
+    session LLM mid-call and is materially more complex.
+  - **Traced + evaluated:** log the router's inputs / decision / confidence to the OTel/UC trace and
+    evaluate routing quality (cost saved vs quality held) with MLflow evals.
+  - **Fallback:** low confidence / router unavailable → fall back to `StaticTierStrategy` (already built),
+    so v1's policy is the safety net.
+- **Governed write action** (typed / reversible / idempotent / confirmed) — re-introduce ReferenceApp
+  invariants #5/#6.
+- **Phone / SIP dial-in**, local-language support, and the downstream Genie / dashboards loop (§2 non-goals).
 
 ## 21. Component map (new repo, patterns from ReferenceApp)
 
