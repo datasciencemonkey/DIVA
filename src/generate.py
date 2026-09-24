@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import json
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from src.policy.tiers import VALID_TIERS
@@ -70,9 +71,31 @@ def build_rows(spec: GenSpec, llm: dict) -> Rows:
     return Rows(documents=documents, customers=customers, records=records)
 
 
-async def generate_dataset(company: str, role: str, system_prompt: str, *, model: str, pool) -> str:
+async def generate_dataset(
+    company: str,
+    role: str,
+    system_prompt: str,
+    *,
+    model: str,
+    pool,
+    progress: Callable[[str, dict], None] | None = None,
+) -> str:
     """Draft (UAIG) -> build rows -> embed (FMAPI) -> write in one transaction ->
-    register. Transactional: a failure leaves datasets.status='failed', never partial."""
+    register. Transactional: a failure leaves datasets.status='failed', never partial.
+
+    ``progress`` is an optional narration hook invoked with (stage, detail) as the
+    run advances (stages: drafting, drafted, embedding, saving, ready, failed). It is
+    advisory only: every call is wrapped so a callback exception never breaks generation.
+    Default ``None`` keeps the function backward compatible (no narration)."""
+
+    def emit(stage: str, detail: dict) -> None:
+        if progress is None:
+            return
+        try:
+            progress(stage, detail)
+        except Exception:  # noqa: BLE001 — narration must never break generation
+            pass
+
     gid = uuid.uuid4().hex
     await _run_query(pool,
         f"INSERT INTO {SCHEMA}.datasets "
@@ -80,11 +103,17 @@ async def generate_dataset(company: str, role: str, system_prompt: str, *, model
         "VALUES (%(gid)s, %(c)s, %(r)s, %(sp)s, %(m)s, 'pending')",
         {"gid": gid, "c": company, "r": role, "sp": system_prompt, "m": model})
     try:
+        emit("drafting", {})
         llm = await asyncio.to_thread(complete_json, _GEN_SYSTEM,
                                       f"Company: {company}\nAssistant role: {role}\nGenerate the dataset now.",
                                       model)
         rows = build_rows(GenSpec(company, role, system_prompt, gid), llm)
+        emit("drafted", {"documents": len(rows.documents),
+                         "customers": len(rows.customers),
+                         "records": len(rows.records)})
+        emit("embedding", {"count": len(rows.documents)})
         vecs = await asyncio.to_thread(embed_texts, [d["chunk_text"] for d in rows.documents])
+        emit("saving", {})
         async with pool.connection() as conn:
             async with conn.cursor() as cur:
                 for d, v in zip(rows.documents, vecs):
@@ -113,8 +142,12 @@ async def generate_dataset(company: str, role: str, system_prompt: str, *, model
             f"UPDATE {SCHEMA}.datasets SET status='ready', doc_count=%(dc)s, customer_count=%(cc)s "
             "WHERE data_generation_id=%(gid)s",
             {"dc": len(rows.documents), "cc": len(rows.customers), "gid": gid})
+        emit("ready", {"data_generation_id": gid,
+                       "doc_count": len(rows.documents),
+                       "customer_count": len(rows.customers)})
         return gid
-    except Exception:
+    except Exception as exc:
+        emit("failed", {"error": str(exc)})
         await _run_query(pool,
             f"UPDATE {SCHEMA}.datasets SET status='failed' WHERE data_generation_id=%(gid)s",
             {"gid": gid})
