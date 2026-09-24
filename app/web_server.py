@@ -385,19 +385,11 @@ class Handler(SimpleHTTPRequestHandler):
             raw_name = (qs.get("name") or [""])[0]
             raw_dataset = (qs.get("dataset") or [""])[0]
             raw_customer = (qs.get("customer") or [""])[0]
-            body = json.dumps(
-                mint_token(
-                    clean_name(raw_name),
-                    clean_id(raw_dataset),
-                    clean_id(raw_customer),
-                )
-            ).encode()
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Cache-Control", "no-store")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
+            self._send_json(200, mint_token(
+                clean_name(raw_name),
+                clean_id(raw_dataset),
+                clean_id(raw_customer),
+            ))
             return
         super().do_GET()
 
