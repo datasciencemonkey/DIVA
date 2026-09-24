@@ -63,6 +63,8 @@ async def _run_query(pool, sql: str, params: dict | None = None) -> list[dict]:
                     cur = conn.cursor()
                     async with cur:
                         await cur.execute(sql, params)
+                        if cur.description is None:
+                            return []  # INSERT/UPDATE/DDL — no result set
                         cols = [d[0] for d in cur.description]
                         rows = await cur.fetchall()
                         return [dict(zip(cols, r)) for r in rows]

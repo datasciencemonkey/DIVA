@@ -12,7 +12,7 @@ class _FakeCursor:
             raise RuntimeError("connection reset")
     @property
     def description(self):
-        return [(c,) for c in self._cols]
+        return None if self._cols is None else [(c,) for c in self._cols]
     async def fetchall(self):
         return self._rows
 
@@ -39,3 +39,9 @@ async def test_run_query_raises_queryerror_after_retry():
     pool = _FakePool(_FakeCursor([], [], boom=True))
     with pytest.raises(QueryError):
         await _run_query(pool, "SELECT 1")
+
+
+async def test_run_query_returns_empty_for_no_result_statement():
+    # INSERT / UPDATE / DDL have no result set -> cur.description is None
+    pool = _FakePool(_FakeCursor([], None))
+    assert await _run_query(pool, "INSERT INTO t VALUES (1)") == []
