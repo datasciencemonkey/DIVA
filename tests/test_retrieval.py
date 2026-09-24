@@ -31,6 +31,18 @@ async def test_keyword_search_is_scoped_and_uses_bm25(monkeypatch):
     assert seen["params"]["gid"] == "G1"
 
 
+async def test_keyword_search_drops_non_matches(monkeypatch):
+    # BM25 scores matches negative, non-matches ~0. Only real matches must survive,
+    # so a sparse-match query can't pad results with irrelevant docs (governance §12.7).
+    async def fake(pool, sql, params=None):
+        return [{"doc_id": "d1", "score": -1.2},
+                {"doc_id": "d2", "score": 0.0},
+                {"doc_id": "d3", "score": -0.0}]
+    monkeypatch.setattr(r, "_run_query", fake)
+    out = await r.keyword_search(_Pool(), "G1", "returns", k=5)
+    assert [d["doc_id"] for d in out] == ["d1"]
+
+
 async def test_record_lookup_scoped_by_gid_and_optional_customer(monkeypatch):
     seen = {}
     async def fake(pool, sql, params=None):

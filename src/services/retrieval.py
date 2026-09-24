@@ -33,7 +33,11 @@ async def keyword_search(pool, data_generation_id, query: str, k: int = 5) -> li
         "WHERE data_generation_id = %(gid)s "
         "ORDER BY score ASC LIMIT %(k)s"
     )
-    return await _run_query(pool, sql, {"q": query, "gid": data_generation_id, "k": k})
+    rows = await _run_query(pool, sql, {"q": query, "gid": data_generation_id, "k": k})
+    # BM25 scores real matches negative and non-matches ~0. Keep only actual matches so
+    # a sparse-match query can never pad the result with irrelevant docs, regardless of
+    # whether the planner used the bm25 index or a seq scan (governance §12.7).
+    return [row for row in rows if row.get("score", 0) < 0]
 
 
 async def record_lookup(pool, data_generation_id, customer_id=None, kind=None) -> list[dict]:
