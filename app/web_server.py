@@ -263,6 +263,60 @@ def _datasets_payload() -> dict:
         return {"datasets": []}
 
 
+# --- Grounded example questions (Plan 4) ------------------------------------
+#
+# A caller facing a live mic needs prompts, or there's no context for what this
+# world answers. Derive read-aloud questions from the world's REAL generated data
+# (document titles + record kinds) so nothing is fabricated.
+
+_Q_TEMPLATES = ("What's your {}?", "How does {} work?", "Can you explain {}?", "Tell me about {}.")
+
+
+def _examples_from(titles, kinds) -> list:
+    """Map real document titles + record kinds to short read-aloud caller questions.
+    Every question traces to an actual generated document/record — no invention."""
+    out = []
+    clean_titles = [t.strip() for t in (titles or []) if t and str(t).strip()][:5]
+    for i, t in enumerate(clean_titles):
+        out.append(_Q_TEMPLATES[i % len(_Q_TEMPLATES)].format(t.rstrip(".").lower()))
+    for k in [k.strip() for k in (kinds or []) if k and str(k).strip()][:1]:
+        out.append(f"What's the status of my {k.lower()}?")
+    seen, deduped = set(), []
+    for q in out:
+        if q not in seen:
+            seen.add(q)
+            deduped.append(q)
+    return deduped[:6]
+
+
+async def _fetch_examples(data_generation_id: str) -> list:
+    pool = await create_pool()
+    try:
+        titles = await _run_query(
+            pool,
+            f"SELECT title FROM {SCHEMA}.documents WHERE data_generation_id=%(g)s "
+            "AND title IS NOT NULL ORDER BY doc_id LIMIT 5",
+            {"g": data_generation_id})
+        kinds = await _run_query(
+            pool,
+            f"SELECT DISTINCT kind FROM {SCHEMA}.records WHERE data_generation_id=%(g)s "
+            "AND kind IS NOT NULL LIMIT 2",
+            {"g": data_generation_id})
+        return _examples_from([r.get("title") for r in titles], [r.get("kind") for r in kinds])
+    finally:
+        await pool.close()
+
+
+def _examples_payload(data_generation_id: str) -> dict:
+    """Grounded example questions for a world. Fail-soft: no id / any error -> []."""
+    if not data_generation_id:
+        return {"questions": []}
+    try:
+        return {"questions": asyncio.run(_fetch_examples(data_generation_id))}
+    except Exception:  # noqa: BLE001 — never break the UI on a retrieval hiccup
+        return {"questions": []}
+
+
 class Handler(SimpleHTTPRequestHandler):
     def _send_json(self, status: int, payload: dict) -> None:
         body = json.dumps(payload).encode()
@@ -309,6 +363,11 @@ class Handler(SimpleHTTPRequestHandler):
             return
         if parsed.path == "/api/datasets":
             self._send_json(200, _datasets_payload())
+            return
+        if parsed.path == "/api/examples":
+            qs = parse_qs(parsed.query)
+            gid = clean_id((qs.get("dataset") or [""])[0])
+            self._send_json(200, _examples_payload(gid))
             return
         if parsed.path == "/api/token":
             qs = parse_qs(parsed.query)
