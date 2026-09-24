@@ -44,3 +44,16 @@ async def test_missing_dataset_uses_safe_default_prompt(monkeypatch):
     monkeypatch.setattr(sb, "read_loyalty_context", fake_loyalty)
     ctx = await bind_session(object(), "nope", "C1")
     assert ctx.system_prompt and ctx.company  # non-empty safe defaults, no crash
+
+
+async def test_read_dataset_returns_none_when_pool_is_none():
+    # Degraded mode (spec §17): no pool -> None, mirroring read_loyalty_context. Never raises.
+    assert await sb.read_dataset(None, "G1") is None
+
+
+async def test_bind_degrades_safely_when_pool_is_none():
+    # Whole fail-soft path with Lakebase down: safe default company/prompt + Standard tier,
+    # no crash (read_dataset None + read_loyalty_context's own pool-None guard -> Standard).
+    ctx = await bind_session(None, "G1", "C1")
+    assert ctx.company and ctx.system_prompt
+    assert ctx.tier == "Standard" and ctx.model == "m-std"

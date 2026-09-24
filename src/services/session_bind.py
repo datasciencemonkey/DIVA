@@ -24,6 +24,8 @@ class BindContext:
 
 
 async def read_dataset(pool, data_generation_id) -> dict | None:
+    if pool is None:  # degraded (spec §17): mirror read_loyalty_context, don't crash the bind
+        return None
     rows = await _run_query(
         pool,
         f"SELECT company_name, system_prompt FROM {SCHEMA}.datasets "

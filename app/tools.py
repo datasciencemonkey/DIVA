@@ -18,6 +18,8 @@ class SessionContext:
 
 
 async def _do_semantic_search(pool, data_generation_id, query, *, evidence_sink=None) -> dict:
+    if pool is None:  # degraded (spec §17): abstain — never embed or query, never raise
+        return {"results": []}
     qvec = (await asyncio.to_thread(embed_texts, [query]))[0]
     hits = await retrieval.semantic_search(pool, data_generation_id, qvec, k=5)
     result = {"results": [{"title": h.get("title"), "snippet": h["chunk_text"]} for h in hits]}
@@ -30,6 +32,11 @@ async def _do_semantic_search(pool, data_generation_id, query, *, evidence_sink=
 
 
 async def _do_record_lookup(pool, data_generation_id, customer_id, query=None, *, evidence_sink=None) -> dict:
+    # Abstain when degraded (pool None, §17) OR the caller is unidentified. An unknown
+    # caller must NEVER receive another customer's records: retrieval.record_lookup is
+    # unscoped when customer_id is None, so the tool — not the LLM — is the boundary (§12).
+    if pool is None or not customer_id:
+        return {"records": []}
     recs = await retrieval.record_lookup(pool, data_generation_id, customer_id=customer_id)
     result = {"records": [{"kind": r.get("kind"), "fields": r.get("fields"), "status": r.get("status")}
                           for r in recs]}

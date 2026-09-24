@@ -30,3 +30,31 @@ async def test_semantic_miss_returns_empty_results(monkeypatch):
     monkeypatch.setattr(tools.retrieval, "semantic_search", fake_sem)
     out = await tools._do_semantic_search(object(), "G1", "nonsense")
     assert out == {"results": []}
+
+
+async def test_record_lookup_abstains_for_unknown_caller(monkeypatch):
+    # An unidentified caller (no customer_id) must NEVER receive another customer's
+    # records: the tool abstains WITHOUT touching the unscoped query path (governance §12).
+    called = False
+    async def fake_rec(pool, gid, customer_id=None, kind=None):
+        nonlocal called
+        called = True
+        return [{"record_id": "r1", "kind": "order", "fields": {"x": 1}, "status": "shipped"}]
+    monkeypatch.setattr(tools.retrieval, "record_lookup", fake_rec)
+    out = await tools._do_record_lookup(object(), "G1", None)
+    assert out == {"records": []}
+    assert called is False  # never reached the (unscoped) DB lookup
+
+
+async def test_handlers_abstain_when_pool_is_none(monkeypatch):
+    # Degraded mode (spec §17): Lakebase unreachable -> pool is None. Tools must abstain
+    # (empty result), never raise into the voice loop, and never even embed.
+    def boom_embed(xs):
+        raise AssertionError("must not embed when pool is None")
+    async def boom(*a, **k):
+        raise AssertionError("must not query when pool is None")
+    monkeypatch.setattr(tools, "embed_texts", boom_embed)
+    monkeypatch.setattr(tools.retrieval, "semantic_search", boom)
+    monkeypatch.setattr(tools.retrieval, "record_lookup", boom)
+    assert await tools._do_semantic_search(None, "G1", "q") == {"results": []}
+    assert await tools._do_record_lookup(None, "G1", "C1") == {"records": []}
