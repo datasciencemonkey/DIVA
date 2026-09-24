@@ -1,0 +1,21 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Env / secrets
+.env
+.env.local
+.env.*.local
+
+# Databricks / OMC operational state
+.databricks/
+.omc/
+
+# OS
+.DS_Store
+
+# Runtime
+/tmp/
+node_modules/
