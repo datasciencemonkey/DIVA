@@ -13,6 +13,9 @@ __pycache__/
 .databricks/
 .omc/
 
+# Superpowers execution scratch (ledger, briefs, review packages)
+.superpowers/
+
 # OS
 .DS_Store
 
