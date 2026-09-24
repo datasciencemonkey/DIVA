@@ -18,13 +18,18 @@ from src.services.db import SCHEMA, create_pool  # noqa: E402
 
 
 async def main() -> None:
-    ddl = Path("infra/lakebase_schema.sql").read_text().replace("{schema}", SCHEMA)
+    root = Path(__file__).resolve().parent
+    schema_ddl = (root / "lakebase_schema.sql").read_text().replace("{schema}", SCHEMA)
+    index_ddl = (root / "lakebase_indexes.sql").read_text().replace("{schema}", SCHEMA)
     pool = await create_pool()
     try:
         async with pool.connection() as conn:
             async with conn.cursor() as cur:
-                await cur.execute(ddl)
-        print(f"[schema] applied to {SCHEMA}")
+                await cur.execute(schema_ddl)
+            print(f"[schema] applied to {SCHEMA}")
+            async with conn.cursor() as cur:
+                await cur.execute(index_ddl)
+            print("[indexes] applied")
     finally:
         await pool.close()
 

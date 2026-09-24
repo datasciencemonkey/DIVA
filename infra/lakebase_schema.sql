@@ -1,3 +1,8 @@
+-- Lakebase Search extensions (must exist before the documents.embedding vector column).
+CREATE EXTENSION IF NOT EXISTS lakebase_tokenizer CASCADE;
+CREATE EXTENSION IF NOT EXISTS lakebase_vector CASCADE;
+CREATE EXTENSION IF NOT EXISTS lakebase_text CASCADE;
+
 CREATE SCHEMA IF NOT EXISTS {schema};
 
 CREATE TABLE IF NOT EXISTS {schema}.datasets (
@@ -18,6 +23,8 @@ CREATE TABLE IF NOT EXISTS {schema}.documents (
     title              TEXT,
     chunk_text         TEXT NOT NULL,
     metadata           JSONB,
+    embedding          vector(1024),
+    content_tsv        tsvector,
     PRIMARY KEY (data_generation_id, doc_id)
 );
 
@@ -40,3 +47,8 @@ CREATE TABLE IF NOT EXISTS {schema}.records (
     status             TEXT,
     PRIMARY KEY (data_generation_id, record_id)
 );
+
+-- Idempotent migrations for existing installs: CREATE TABLE IF NOT EXISTS above
+-- does NOT add new columns to a documents table created by an earlier plan.
+ALTER TABLE {schema}.documents ADD COLUMN IF NOT EXISTS embedding vector(1024);
+ALTER TABLE {schema}.documents ADD COLUMN IF NOT EXISTS content_tsv tsvector;
