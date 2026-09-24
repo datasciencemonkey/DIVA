@@ -68,9 +68,6 @@ LIVEKIT_API_SECRET = os.environ.get("LIVEKIT_API_SECRET", "")
 AGENT_NAME = os.environ.get("AGENT_NAME", "ug-agent")
 PORT = int(os.environ.get("DATABRICKS_APP_PORT") or os.environ.get("PORT") or 8000)
 
-if not (LIVEKIT_URL and LIVEKIT_API_KEY and LIVEKIT_API_SECRET):
-    raise SystemExit("Missing LIVEKIT_URL / LIVEKIT_API_KEY / LIVEKIT_API_SECRET.")
-
 
 def _b64url(raw: bytes) -> bytes:
     return base64.urlsafe_b64encode(raw).rstrip(b"=")
@@ -169,7 +166,15 @@ def _new_job(job_id: str) -> None:
 
 
 def _store_progress(job_id: str, stage: str, detail: dict) -> None:
-    """Record a (stage, detail) narration tick from generate_dataset's callback."""
+    """Record a (stage, detail) narration tick from generate_dataset's callback.
+
+    generate_dataset emits a "ready" tick BEFORE the web tier attaches the customer
+    list; keep it non-terminal (map to "saving") so only _store_ready produces the
+    real terminal ready — otherwise a status poll landing in that gap strands the
+    fresh-world caller picker empty.
+    """
+    if stage == "ready":
+        stage = "saving"
     with _JOBS_LOCK:
         job = _JOBS.setdefault(job_id, {"done": False, "error": None})
         job["stage"] = stage
@@ -213,14 +218,19 @@ async def _generate_job_async(job_id: str, company: str, role: str, system_promp
         gid = await generate_dataset(
             company, role, system_prompt, model=GEN_MODEL, pool=pool,
             progress=lambda stage, detail: _store_progress(job_id, stage, detail))
-        # On ready, fetch the generated customers so the SPA can offer tier picks.
-        customers = await _run_query(
-            pool,
-            f"SELECT customer_id, display_name, loyalty_tier FROM {SCHEMA}.customers "
-            "WHERE data_generation_id=%(g)s ORDER BY loyalty_tier",
-            {"g": gid})
+        # The world is committed (status='ready'). Fetch its customers for the tier
+        # picker — but a transient read failure must NOT report an existing world as
+        # failed: degrade to an empty list (manual caller entry) and still mark ready.
+        try:
+            customers = await _run_query(
+                pool,
+                f"SELECT customer_id, display_name, loyalty_tier FROM {SCHEMA}.customers "
+                "WHERE data_generation_id=%(g)s ORDER BY loyalty_tier",
+                {"g": gid})
+        except Exception:  # noqa: BLE001 — world exists; fall back to manual caller entry
+            customers = []
         _store_ready(job_id, gid, customers)
-    except Exception as exc:  # noqa: BLE001 — surface any failure into the job store
+    except Exception as exc:  # noqa: BLE001 — generation failed before commit
         _store_error(job_id, str(exc))
     finally:
         if pool is not None:
@@ -401,6 +411,10 @@ class Handler(SimpleHTTPRequestHandler):
 
 
 def main() -> None:
+    # Fail fast only when actually serving: importing this module (for tests / as a
+    # library) must never exit — only running the server requires LiveKit creds.
+    if not (LIVEKIT_URL and LIVEKIT_API_KEY and LIVEKIT_API_SECRET):
+        raise SystemExit("Missing LIVEKIT_URL / LIVEKIT_API_KEY / LIVEKIT_API_SECRET.")
     handler = partial(Handler, directory=str(PUBLIC))
     server = ThreadingHTTPServer(("0.0.0.0", PORT), handler)
     print(

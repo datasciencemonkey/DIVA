@@ -411,7 +411,10 @@
 
     paintTimeline(stage, detail);
 
-    if (stage === "ready" || s.done) {
+    // Transition only when the job is truly done — _store_ready (customers attached)
+    // is the sole non-failed writer of done=true. A bare stage==="ready" tick can
+    // arrive one Lakebase round-trip before the customer list is ready.
+    if (s.done) {
       stopPolling();
       showSummary(s, detail);
     }
