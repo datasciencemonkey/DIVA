@@ -278,9 +278,10 @@ def _examples_from(titles, kinds) -> list:
     out = []
     clean_titles = [t.strip() for t in (titles or []) if t and str(t).strip()][:5]
     for i, t in enumerate(clean_titles):
-        out.append(_Q_TEMPLATES[i % len(_Q_TEMPLATES)].format(t.rstrip(".").lower()))
+        label = t.rstrip(".").replace("_", " ").lower()
+        out.append(_Q_TEMPLATES[i % len(_Q_TEMPLATES)].format(label))
     for k in [k.strip() for k in (kinds or []) if k and str(k).strip()][:1]:
-        out.append(f"What's the status of my {k.lower()}?")
+        out.append(f"What's the status of my {k.replace('_', ' ').lower()}?")
     seen, deduped = set(), []
     for q in out:
         if q not in seen:

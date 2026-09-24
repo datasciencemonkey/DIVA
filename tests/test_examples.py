@@ -13,6 +13,13 @@ def test_examples_from_derives_grounded_questions():
     assert len(qs) <= 6
 
 
+def test_examples_humanizes_underscores():
+    qs = ws._examples_from(["Data Add-on FAQ"], ["add_on_purchase"])
+    joined = " ".join(qs)
+    assert "add on purchase" in joined.lower()   # snake_case record kind reads naturally
+    assert "add_on_purchase" not in joined
+
+
 def test_examples_from_handles_empty():
     assert ws._examples_from([], []) == []
     assert ws._examples_from(None, None) == []

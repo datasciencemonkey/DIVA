@@ -26,6 +26,34 @@
     set(k, v) { try { localStorage.setItem(k, v); } catch { /* private mode */ } },
   };
 
+  /* ---- theme (dark is the default; a "light" choice is persisted) ------- */
+  const THEME_KEY = "ug_theme";
+  function currentTheme() {
+    return document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
+  }
+  function applyTheme(theme) {
+    const t = theme === "light" ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", t);
+    const btn = $("#themeToggle");
+    if (!btn) return;
+    const isLight = t === "light";
+    const label = isLight ? "Switch to dark theme" : "Switch to light theme";
+    btn.setAttribute("aria-pressed", String(isLight));
+    btn.setAttribute("aria-label", label);
+    btn.title = label;
+  }
+  function initTheme() {
+    // The <head> pre-paint script already set the attribute (no flash). Re-apply here
+    // to sync the toggle's aria state and to cover private-mode/blocked-storage loads.
+    applyTheme(store.get(THEME_KEY) === "light" ? "light" : "dark");
+    const btn = $("#themeToggle");
+    if (btn) btn.addEventListener("click", () => {
+      const next = currentTheme() === "light" ? "dark" : "light";
+      applyTheme(next);
+      store.set(THEME_KEY, next);
+    });
+  }
+
   /* ---- app state ------------------------------------------------------- */
   const state = {
     stage: "configure",
@@ -40,6 +68,7 @@
     boundModel: null,
     retrievals: 0,
     turns: new Map(),       // segment id -> DOM element
+    examples: [],           // grounded read-aloud prompts for the current world
   };
 
   /* =============================================================================
@@ -182,6 +211,17 @@
     const r = await fetch(`/api/token?${qs}`);
     if (!r.ok) throw new Error(`token failed (${r.status})`);
     return r.json();
+  }
+  /* grounded example prompts — fail-soft: any error or empty payload yields [] and the
+     "Try asking" panel simply stays hidden. Never throws. */
+  async function apiExamples(gid) {
+    try {
+      const r = await fetch(`/api/examples?dataset=${encodeURIComponent(gid || "")}`);
+      if (!r.ok) return [];
+      const data = await r.json();
+      const qs = data && Array.isArray(data.questions) ? data.questions : [];
+      return qs.filter((q) => typeof q === "string" && q.trim()).map((q) => q.trim());
+    } catch { return []; }
   }
 
   /* =============================================================================
@@ -327,6 +367,7 @@
       counts: { docs: d.doc_count, customers: d.customer_count },
       mode: "existing",
     };
+    loadExamples(d.data_generation_id);   // grounded prompts for the selected world
     prepareLive();
     goStage("live");
   }
@@ -427,6 +468,7 @@
     };
 
     $("#summaryCompany").textContent = state.world.company;
+    loadExamples(state.world.gid);   // grounded prompts for the freshly-generated world
 
     // stats
     const stats = $("#summaryStats");
@@ -509,6 +551,7 @@
     $("#callLive").hidden = true;
     buildCallerPicker();
     resetPillars();
+    renderExamples();   // reflect whatever examples were loaded for this world
   }
 
   function buildCallerPicker() {
@@ -939,6 +982,63 @@
   }
 
   /* =============================================================================
+     TRY ASKING — grounded read-aloud prompts (GET /api/examples)
+     ========================================================================== */
+  async function loadExamples(gid) {
+    state.examples = [];
+    renderExamples();                 // hide immediately so no stale chips flash
+    if (!gid) return;
+    const qs = await apiExamples(gid);
+    // a newer world may have been chosen while this was in flight — ignore if so
+    if (state.world && String(state.world.gid) === String(gid)) {
+      state.examples = qs;
+      renderExamples();
+    }
+  }
+
+  function renderExamples() {
+    const panel = $("#askPanel"), wrap = $("#askChips"), copied = $("#askCopied");
+    if (!panel || !wrap) return;
+    wrap.innerHTML = "";
+    if (copied) copied.textContent = "";
+    const qs = state.examples || [];
+    if (!qs.length) { panel.hidden = true; return; }
+    qs.forEach((q) => {
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "ask-chip";
+      chip.innerHTML =
+        `<svg class="ask-chip-ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 11.3a7.5 7.5 0 0 1-8 7.7 8.9 8.9 0 0 1-3.4-.7L4 19.5l1.3-4.4a7.5 7.5 0 1 1 15.2-3.8z"/></svg>` +
+        `<span class="ask-chip-t">${esc(q)}</span>`;
+      chip.addEventListener("click", () => copyExample(chip, q));
+      wrap.appendChild(chip);
+    });
+    panel.hidden = false;
+    if (HAS_GSAP) animIn($$(".ask-chip", wrap), { y: 8, stagger: 0.05, dur: 0.4 });
+  }
+
+  let copyTimer = null;
+  function copyExample(chip, text) {
+    // display-only by contract; copying is a nice-to-have and must never throw
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => flagCopied(chip)).catch(() => {});
+      }
+    } catch { /* clipboard unavailable — chips stay display-only */ }
+  }
+  function flagCopied(chip) {
+    $$("#askChips .ask-chip").forEach((c) => { c.dataset.copied = "false"; });
+    chip.dataset.copied = "true";
+    const c = $("#askCopied");
+    if (c) c.textContent = "Copied to clipboard";
+    clearTimeout(copyTimer);
+    copyTimer = setTimeout(() => {
+      chip.dataset.copied = "false";
+      if (c) c.textContent = "";
+    }, 1600);
+  }
+
+  /* =============================================================================
      UTILITIES
      ========================================================================== */
   function esc(s) {
@@ -956,6 +1056,7 @@
   function init() {
     document.body.dataset.stage = "configure";
     document.body.dataset.connected = "false";
+    initTheme();
     renderPresets();
     loadDraft();
     setStepper("configure");
