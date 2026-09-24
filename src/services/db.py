@@ -23,24 +23,32 @@ async def create_pool():
     """Warm AsyncConnectionPool over the UG schema. Fail-soft callers pass the
     result (or None) down; see spec §17 degraded mode.
 
-    NOTE: the exact WorkspaceClient().postgres.* surface is pinned by Task 5's
-    lakebase-search-contract.md and exercised live in Task 6.
+    Auth verified 2026-09-24 (docs/discovery/lakebase-search-contract.md):
+    LAKEBASE_ENDPOINT is the endpoint RESOURCE PATH
+    (projects/<p>/branches/<b>/endpoints/<e>); host lives at status.hosts.host;
+    generate_database_credential takes that path positionally and returns .token.
     """
+    import socket
+
     from databricks.sdk import WorkspaceClient
     from psycopg_pool import AsyncConnectionPool
 
-    w = WorkspaceClient()
-    endpoint = os.environ["LAKEBASE_ENDPOINT"]
+    w = WorkspaceClient()  # respects DATABRICKS_CONFIG_PROFILE / Apps-injected auth
+    ep_path = os.environ["LAKEBASE_ENDPOINT"]
     database = os.getenv("LAKEBASE_DATABASE", "databricks_postgres")
-    ep = w.postgres.get_endpoint(endpoint)
-    cred = w.postgres.generate_database_credential(
-        request_id=os.urandom(8).hex(), instance_names=[endpoint]
-    )
+    host = w.postgres.get_endpoint(ep_path).as_dict()["status"]["hosts"]["host"]
+    cred = w.postgres.generate_database_credential(ep_path)
+    token = getattr(cred, "token", None) or cred.as_dict().get("token")
     user = w.current_user.me().user_name
     conninfo = (
-        f"host={ep.read_write_dns} port=5432 dbname={database} "
-        f"user={user} password={cred.token} sslmode=require"
+        f"host={host} user={user} dbname={database} "
+        f"password={token} sslmode=require"
     )
+    # macOS long-hostname getaddrinfo workaround: pin hostaddr, keep host for TLS SNI.
+    try:
+        conninfo += f" hostaddr={socket.getaddrinfo(host, 5432)[0][4][0]}"
+    except Exception:  # noqa: BLE001
+        pass
     pool = AsyncConnectionPool(conninfo, min_size=1, max_size=4, open=False)
     await pool.open(timeout=15)
     return pool
