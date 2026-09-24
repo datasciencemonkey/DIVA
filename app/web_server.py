@@ -25,8 +25,17 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from src.generate import generate_dataset
-from src.services.db import SCHEMA, _run_query, create_pool
+# Make the repo root importable when this file is run as a script
+# (`python app/web_server.py`): the script dir (app/) is on sys.path, but the
+# src/ package lives one level up. Mirrors app/agent.py's bootstrap.
+import sys
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from src.generate import generate_dataset  # noqa: E402
+from src.services.db import SCHEMA, _run_query, create_pool  # noqa: E402
 
 ROOT = Path(__file__).parent
 PUBLIC = ROOT / "web" / "public"
