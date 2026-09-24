@@ -160,6 +160,22 @@ async def entrypoint(ctx: agents.JobContext):
     await evidence_sink({"bind": {"company": bind.company, "tier": bind.tier,
                                   "model": bind.model, "directives": bind.directives}})
 
+    # Costs pillar: publish cumulative LLM token usage (agent-reported, PII-free) after
+    # each LLM call; the client diffs cumulative totals into per-turn bars.
+    @session.on("session_usage_updated")
+    def _on_usage(ev) -> None:
+        try:
+            llm = [u for u in ev.usage.model_usage if getattr(u, "type", "") == "llm_usage"]
+            if not llm:
+                return
+            usage = {
+                "input_tokens": sum(int(u.input_tokens) for u in llm),
+                "output_tokens": sum(int(u.output_tokens) for u in llm),
+            }
+            asyncio.ensure_future(evidence_sink({"usage": usage}))
+        except Exception:
+            pass  # usage is cosmetic — never disrupt the voice pipeline
+
     await session.start(
         room=ctx.room,
         agent=Agent(instructions=build_instructions(bind.system_prompt, bind.directives, bind.courtesy_name)),

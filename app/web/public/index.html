@@ -96,6 +96,43 @@
           then drop into a live governed call, instrumented across four pillars.
         </p>
 
+        <!-- Focal motif: spoken voice enters, passes a governed checkpoint (shield),
+             and resolves into ONE chosen route among candidates. Authored inline SVG,
+             drawn on load (stroke-dashoffset) with a looping signal packet; renders
+             fully drawn if GSAP is absent or reduced motion is requested. -->
+        <div class="hero-motif" data-anim aria-hidden="true">
+          <svg class="draw-svg" viewBox="0 0 480 168" fill="none" stroke-linecap="round" stroke-linejoin="round">
+            <g class="hm-wave" stroke="currentColor" stroke-width="3">
+              <line x1="16"  y1="76" x2="16"  y2="92"/>
+              <line x1="28"  y1="67" x2="28"  y2="101"/>
+              <line x1="40"  y1="55" x2="40"  y2="113"/>
+              <line x1="52"  y1="63" x2="52"  y2="105"/>
+              <line x1="64"  y1="47" x2="64"  y2="121"/>
+              <line x1="76"  y1="57" x2="76"  y2="111"/>
+              <line x1="88"  y1="43" x2="88"  y2="125"/>
+              <line x1="100" y1="53" x2="100" y2="115"/>
+              <line x1="112" y1="49" x2="112" y2="119"/>
+              <line x1="124" y1="65" x2="124" y2="103"/>
+              <line x1="136" y1="72" x2="136" y2="96"/>
+              <line x1="148" y1="76" x2="148" y2="92"/>
+            </g>
+            <line class="hm-wave" x1="150" y1="84" x2="190" y2="84" stroke="currentColor" stroke-width="2"/>
+            <rect class="hm-gate-fill" x="192" y="54" width="34" height="60" rx="13" fill="currentColor"/>
+            <rect class="hm-gate" x="192" y="54" width="34" height="60" rx="13" stroke="currentColor" stroke-width="2"/>
+            <path class="hm-shield" d="M209 68 l9 3.5 v7 c0 7.5 -4.5 10.5 -9 12.5 c-4.5 -2 -9 -5 -9 -12.5 v-7 z" stroke="currentColor" stroke-width="2"/>
+            <path class="hm-shield" d="M205 85 l3 3 6 -7" stroke="currentColor" stroke-width="2"/>
+            <path class="hm-route" d="M226 84 C 320 84, 350 128, 414 128" stroke="currentColor" stroke-width="2"/>
+            <path class="hm-route" d="M226 84 L 414 84" stroke="currentColor" stroke-width="2"/>
+            <path class="hm-route--active" d="M226 84 C 320 84, 350 40, 414 40" stroke="currentColor" stroke-width="2.4"/>
+            <circle class="hm-node" cx="424" cy="128" r="10" fill="none" stroke="currentColor" stroke-width="2"/>
+            <circle class="hm-node" cx="424" cy="84" r="10" fill="none" stroke="currentColor" stroke-width="2"/>
+            <circle class="hm-node-fill" cx="424" cy="40" r="10" fill="currentColor"/>
+            <circle class="hm-node--active" cx="424" cy="40" r="10" fill="none" stroke="currentColor" stroke-width="2.4"/>
+            <circle class="hm-node--active" cx="424" cy="40" r="3.2" fill="currentColor"/>
+            <circle class="hm-flow" cx="0" cy="0" r="4" fill="currentColor"/>
+          </svg>
+        </div>
+
         <ul class="pillars-strip" data-anim>
           <li class="pillar-brand" style="--hue:var(--c-choice)">
             <span class="pillar-brand-ic" aria-hidden="true">
@@ -119,7 +156,7 @@
             <span class="pillar-brand-ic" aria-hidden="true">
               <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5"/><path d="M4 19h16"/><path d="M8 16l3.5-4 3 2.5L20 8"/></svg>
             </span>
-            <div><b>Costs</b><span>See the cost and latency behind every routing decision.</span></div>
+            <div><b>Costs</b><span>See the tokens and cost projection behind every routing decision.</span></div>
           </li>
         </ul>
       </div>
@@ -185,35 +222,50 @@
 
       <ol class="timeline" id="timeline" data-anim-g>
         <li class="tl-step" data-stage-key="drafting">
-          <span class="tl-node"><span class="tl-tick"></span></span>
+          <span class="tl-node">
+            <svg class="tl-ic draw-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l1-4L15.5 5.5a2 2 0 0 1 3 3L8 19z"/><path d="M13.5 7.5l3 3"/></svg>
+            <svg class="tl-done draw-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>
+          </span>
           <div class="tl-body">
             <b>Drafting policies &amp; FAQ</b>
             <span class="tl-detail" data-detail="drafting">Writing the brand's knowledge base…</span>
           </div>
         </li>
         <li class="tl-step" data-stage-key="drafted">
-          <span class="tl-node"><span class="tl-tick"></span></span>
+          <span class="tl-node">
+            <svg class="tl-ic draw-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8.5" r="3"/><path d="M3.5 20c0-3 2.4-5 5.5-5s5.5 2 5.5 5"/><path d="M16 6.2a2.6 2.6 0 0 1 0 5.1"/><path d="M17.6 14.4c2 .5 3.4 2.2 3.4 4.6"/></svg>
+            <svg class="tl-done draw-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>
+          </span>
           <div class="tl-body">
             <b>Casting customers</b>
             <span class="tl-detail" data-detail="drafted">Standard · Premium · VIP personas</span>
           </div>
         </li>
         <li class="tl-step" data-stage-key="embedding">
-          <span class="tl-node"><span class="tl-tick"></span></span>
+          <span class="tl-node">
+            <svg class="tl-ic draw-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7.4 7.8l3.4 3.7M16.6 7l-3.4 4M7.7 16.6l3-3M16.3 16.4l-3-2.9" opacity=".5"/><circle cx="6" cy="7" r="1.7" fill="currentColor" stroke="none"/><circle cx="18" cy="6" r="1.7" fill="currentColor" stroke="none"/><circle cx="12" cy="12.5" r="1.9" fill="currentColor" stroke="none"/><circle cx="6.5" cy="18" r="1.7" fill="currentColor" stroke="none"/><circle cx="17.5" cy="17.5" r="1.7" fill="currentColor" stroke="none"/></svg>
+            <svg class="tl-done draw-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>
+          </span>
           <div class="tl-body">
             <b>Embedding documents</b>
             <span class="tl-detail" data-detail="embedding">Indexing knowledge for retrieval…</span>
           </div>
         </li>
         <li class="tl-step" data-stage-key="saving">
-          <span class="tl-node"><span class="tl-tick"></span></span>
+          <span class="tl-node">
+            <svg class="tl-ic draw-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="7" ry="2.6"/><path d="M5 6v12c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6V6"/><path d="M5 12c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6"/></svg>
+            <svg class="tl-done draw-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>
+          </span>
           <div class="tl-body">
             <b>Saving the world</b>
             <span class="tl-detail" data-detail="saving">Committing to the governed store…</span>
           </div>
         </li>
         <li class="tl-step" data-stage-key="ready">
-          <span class="tl-node"><span class="tl-tick"></span></span>
+          <span class="tl-node">
+            <svg class="tl-ic draw-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5C12.5 8.5 13.5 9.5 18.5 12C13.5 14.5 12.5 15.5 12 20.5C11.5 15.5 10.5 14.5 5.5 12C10.5 9.5 11.5 8.5 12 3.5Z"/></svg>
+            <svg class="tl-done draw-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>
+          </span>
           <div class="tl-body">
             <b>Ready</b>
             <span class="tl-detail" data-detail="ready">World is live.</span>
@@ -288,6 +340,17 @@
             </div>
 
             <div class="mic-panel">
+              <div class="mic-signal" aria-hidden="true">
+                <svg class="draw-svg" viewBox="0 0 42 34" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect class="msg-core" x="17" y="4" width="8" height="14" rx="4"/>
+                  <path class="msg-core" d="M13 15a8 8 0 0 0 16 0"/>
+                  <path class="msg-core" d="M21 23v4M16.5 27h9"/>
+                  <path class="msg-arc" d="M11 9a11 11 0 0 0 0 16"/>
+                  <path class="msg-arc" d="M6 5a17 17 0 0 0 0 24"/>
+                  <path class="msg-arc" d="M31 9a11 11 0 0 1 0 16"/>
+                  <path class="msg-arc" d="M36 5a17 17 0 0 1 0 24"/>
+                </svg>
+              </div>
               <div class="mic-meter" id="micMeter" aria-hidden="true">
                 <span></span><span></span><span></span><span></span><span></span>
                 <span></span><span></span><span></span><span></span><span></span>
@@ -334,7 +397,17 @@
               <div class="choice-live" hidden>
                 <div class="route">
                   <div class="route-tier"><span class="k">Governed tier</span><span class="v" id="choiceTier">—</span></div>
-                  <div class="route-arrow" aria-hidden="true"><svg viewBox="0 0 40 24" width="40" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2 12h30"/><path d="M27 6l7 6-7 6"/></svg></div>
+                  <div class="route-arrow" aria-hidden="true">
+                    <svg class="route-lock draw-svg" viewBox="0 0 46 46" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                      <line class="rl-track" x1="5" y1="15" x2="41" y2="15" stroke="currentColor" stroke-width="2"/>
+                      <path class="rl-arrow" d="M6 15H35" stroke="currentColor" stroke-width="2.2"/>
+                      <path class="rl-arrow" d="M30 9l6 6-6 6" stroke="currentColor" stroke-width="2.2"/>
+                      <rect class="rl-lock-fill" x="15" y="31" width="16" height="11" rx="2.4" fill="currentColor"/>
+                      <path class="rl-lock rl-shackle" d="M18.5 31v-3.2a4.5 4.5 0 0 1 9 0V31" stroke="currentColor" stroke-width="2"/>
+                      <rect class="rl-lock" x="15" y="31" width="16" height="11" rx="2.4" stroke="currentColor" stroke-width="2"/>
+                      <circle class="rl-lock" cx="23" cy="36.4" r="1.4" fill="currentColor" stroke="none"/>
+                    </svg>
+                  </div>
                   <div class="route-model"><span class="k">Routed model</span><span class="v mono" id="choiceModel">—</span></div>
                 </div>
                 <p class="pillar-foot" id="choiceCompany"></p>
@@ -367,6 +440,13 @@
               <span class="pillar-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H18a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6.5A2.5 2.5 0 0 1 4 18.5z"/><path d="M8 7h7"/><path d="M8 11h5"/></svg></span>
               <h3>Context</h3>
               <span class="pillar-tag">Retrieval</span>
+              <span class="ctx-pulse" id="retrievalPulse" aria-hidden="true">
+                <svg class="draw-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+                  <circle class="cp-doc" cx="12" cy="12" r="2" fill="currentColor" stroke="none"/>
+                  <circle class="cp-wave" cx="12" cy="12" r="6"/>
+                  <circle class="cp-wave" cx="12" cy="12" r="10"/>
+                </svg>
+              </span>
               <span class="pillar-count" id="retrievalCount" aria-label="retrieval events">0</span>
             </header>
             <div class="pillar-body">
@@ -386,21 +466,26 @@
             <div class="pillar-body costs-body">
               <div class="cost-index">
                 <span class="k">Cost index</span>
+                <svg class="cost-meter" viewBox="0 0 100 6" preserveAspectRatio="none" aria-hidden="true">
+                  <line class="cm-track" x1="2" y1="3" x2="98" y2="3" stroke="currentColor" stroke-width="4" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+                  <line class="cm-fill" id="costFill" x1="2" y1="3" x2="98" y2="3" stroke="currentColor" stroke-width="4" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+                </svg>
                 <div class="cost-bars" id="costBars" data-level="0">
                   <span data-tier="Low">Low</span>
                   <span data-tier="Medium">Med</span>
                   <span data-tier="High">High</span>
                 </div>
               </div>
-              <div class="latency">
-                <span class="k">Last turn latency</span>
-                <span class="latency-val"><b id="latencyVal">—</b><small>ms</small></span>
+              <div class="tokens">
+                <span class="k">Total tokens</span>
+                <span class="tokens-val"><b id="tokensVal">—</b></span>
               </div>
-              <div class="latency-history">
-                <span class="k">Recent turns</span>
-                <div class="spark" id="latencySpark" aria-hidden="true"></div>
+              <div class="cost-projection">
+                <span class="k">Projected cost</span>
+                <span class="proj-val"><b id="costProj">—</b><small id="costRate"></small></span>
+                <div class="spark" id="turnSpark" aria-hidden="true"></div>
               </div>
-              <p class="pillar-foot">Cost tier and latency are indicative, client-measured.</p>
+              <p class="pillar-foot">Tokens are agent-reported; tier and projection are indicative.</p>
             </div>
           </article>
         </div>

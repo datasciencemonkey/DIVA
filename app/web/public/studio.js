@@ -124,9 +124,9 @@
 
   /* Model -> indicative cost tier (client-derived; labelled indicative in UI). */
   const COST = {
-    "system.ai.gpt-6-sol":  { label: "High",   tierHint: "VIP",      level: 3 },
-    "system.ai.gpt-5-5":    { label: "Medium", tierHint: "Premium",  level: 2 },
-    "system.ai.gpt-5-nano": { label: "Low",    tierHint: "Standard", level: 1 },
+    "system.ai.gpt-6-sol":  { label: "High",   tierHint: "VIP",      level: 3, rate: 10.0 },
+    "system.ai.gpt-5-5":    { label: "Medium", tierHint: "Premium",  level: 2, rate: 2.5 },
+    "system.ai.gpt-5-nano": { label: "Low",    tierHint: "Standard", level: 1, rate: 0.4 },
   };
 
   /* =============================================================================
@@ -147,6 +147,56 @@
     const obj = { n: parseFloat((el.textContent || "0").replace(/[^\d.]/g, "")) || 0 };
     g.to(obj, { n: v, duration: 0.6, ease: "power2.out",
       onUpdate: () => { el.textContent = Math.round(obj.n) + suffix; } });
+  }
+
+  /* Authored-SVG draw-on: strokes render fully drawn by default (CSS), so this
+     only ADDS the entrance when GSAP is live. No GSAP / reduced motion => no-op,
+     and the finished frame stands. The signal packet (.hm-flow) is never drawn. */
+  function pathLen(el) { try { return (el.getTotalLength && el.getTotalLength()) || 0; } catch { return 0; } }
+  function drawIn(target, { dur = 0.7, stagger = 0.06, delay = 0, ease = "power3.out" } = {}) {
+    if (!HAS_GSAP || !target) return;
+    let nodes = (target instanceof Element)
+      ? $$("path,line,polyline,polygon,circle,rect,ellipse", target)
+      : Array.from(target).filter(Boolean);
+    nodes = nodes.filter((n) => n && !n.classList.contains("hm-flow") && pathLen(n) > 0.5);
+    if (!nodes.length) return;
+    g.set(nodes, { strokeDasharray: (i, el) => pathLen(el), strokeDashoffset: (i, el) => pathLen(el) });
+    g.to(nodes, { strokeDashoffset: 0, duration: dur, stagger, delay, ease,
+      clearProps: "strokeDasharray,strokeDashoffset" });
+  }
+
+  /* Ping a set of SVG elements out from a shared origin — feedback for a real event. */
+  function pulse(nodes, { from = 0.5, dur = 0.6, stagger = 0.07, origin } = {}) {
+    if (!HAS_GSAP) return;
+    nodes = Array.from(nodes || []).filter(Boolean);
+    if (!nodes.length) return;
+    const to = { scale: 1, opacity: 1, duration: dur, stagger, ease: "power3.out", clearProps: "transform,opacity" };
+    if (origin) to.svgOrigin = origin;
+    g.fromTo(nodes, { scale: from, opacity: 0.85 }, to);
+  }
+
+  /* Loopable timelines we pause when their stage is off-screen (cheap when idle). */
+  const motion = { hero: null, mic: null };
+
+  /* HERO MOTIF — the focal moment. Draw the figure on (one-shot), then loop a
+     signal packet from the spoken waveform, through the governed gate, to the
+     one chosen route. Transform-only loop; paused whenever we leave Configure. */
+  function startHeroMotif() {
+    const motif = $(".hero-motif svg");
+    if (!motif) return;
+    drawIn(motif, { dur: 0.6, stagger: 0.03, delay: 0.35, ease: "power3.out" });
+    if (!HAS_GSAP) return;
+    const pk = $(".hm-flow", motif);
+    if (!pk) return;
+    if (motion.hero) { motion.hero.kill(); motion.hero = null; }
+    const tl = g.timeline({ repeat: -1, repeatDelay: 0.5, delay: 1.1 });
+    tl.set(pk, { opacity: 0, x: 40, y: 84 })
+      .to(pk, { opacity: 1, duration: 0.25, ease: "power1.out" })
+      .to(pk, { x: 208, y: 84, duration: 1.1, ease: "sine.inOut" })
+      .to(pk, { x: 340, y: 52, duration: 0.7, ease: "sine.inOut" })
+      .to(pk, { x: 424, y: 40, duration: 0.6, ease: "power1.in" })
+      .to(pk, { opacity: 0, duration: 0.3 }, "-=0.05");
+    motion.hero = tl;
   }
 
   /* =============================================================================
@@ -179,6 +229,8 @@
       document.body.dataset.stage = name;
       setStepper(name);
       animIn($$(STAGES[name].anim, to));
+      // the hero signal loop is only visible on Configure — pause it elsewhere
+      if (motion.hero) { if (name === "configure") motion.hero.play(); else motion.hero.pause(); }
       window.scrollTo({ top: 0, behavior: REDUCED ? "auto" : "smooth" });
     };
     if (!HAS_GSAP) { finish(); return; }
@@ -430,11 +482,15 @@
     TL_ORDER.forEach((key, i) => {
       const step = $(`.tl-step[data-stage-key="${key}"]`);
       if (!step) return;
-      if (stage === "ready") step.dataset.state = "done";
-      else if (curIdx === -1) step.dataset.state = (i === 0 ? "active" : "pending");
-      else if (i < curIdx) step.dataset.state = "done";
-      else if (i === curIdx) step.dataset.state = "active";
-      else step.dataset.state = "pending";
+      let ns;
+      if (stage === "ready") ns = "done";
+      else if (curIdx === -1) ns = (i === 0 ? "active" : "pending");
+      else if (i < curIdx) ns = "done";
+      else if (i === curIdx) ns = "active";
+      else ns = "pending";
+      const prev = step.dataset.state;
+      step.dataset.state = ns;
+      if (ns !== prev) animateStep(step, ns);   // draw only on the transition, not every poll
     });
 
     // enrich detail lines with real counts as they arrive
@@ -452,6 +508,22 @@
   function setDetail(key, text) {
     const el = $(`.tl-detail[data-detail="${key}"]`);
     if (el) el.textContent = text;
+  }
+
+  /* Draw a timeline node's authored icon as it becomes active; draw the check —
+     the celebratory one on "ready" — as it completes. Skipped without GSAP;
+     CSS state changes still carry the meaning. */
+  function animateStep(step, ns) {
+    if (!HAS_GSAP) return;
+    if (ns === "active") {
+      drawIn($(".tl-ic", step), { dur: 0.5, stagger: 0.05, ease: "power3.out" });
+    } else if (ns === "done") {
+      const isReady = step.dataset.stageKey === "ready";
+      drawIn($(".tl-done", step), { dur: isReady ? 0.7 : 0.45, ease: "power3.out" });
+      const node = $(".tl-node", step);
+      if (node) g.fromTo(node, { scale: isReady ? 0.82 : 0.9 },
+        { scale: 1, duration: isReady ? 0.6 : 0.4, ease: "back.out(2)", clearProps: "transform" });
+    }
   }
 
   function showSummary(s, detail) {
@@ -657,6 +729,7 @@
     if (!state.caller) return;
     connectError.hidden = true;
     btnConnect.disabled = true;
+    btnConnect.classList.add("is-connecting");   // "reaching out" pulse on the CTA
     setConn("connecting", "Connecting…");
     try {
       const t = await apiToken(state.world.gid, state.caller.id, $("#fName").value.trim());
@@ -691,6 +764,7 @@
       startMicMeter();
     } catch (err) {
       setConn("failed", "Connection failed");
+      btnConnect.classList.remove("is-connecting");
       connectError.textContent = errMsg(err);
       connectError.hidden = false;
       btnConnect.disabled = false;
@@ -701,6 +775,7 @@
   function enterCallUI(token) {
     $("#callerSetup").hidden = true;
     $("#callLive").hidden = false;
+    btnConnect.classList.remove("is-connecting");
     document.body.dataset.connected = "true";
     setConn("connected", "Connected · live");
 
@@ -713,6 +788,7 @@
       : "Governed tier resolves on connect";
 
     if (HAS_GSAP) animIn([$("#callLive")], { y: 12, dur: 0.5 });
+    startMicSignal();   // broadcast arcs draw on, then breathe while live
   }
 
   function endCall(toSetup) {
@@ -725,10 +801,12 @@
   function resetCallUI() {
     document.body.dataset.connected = "false";
     setConn("idle", "Not connected");
+    btnConnect.classList.remove("is-connecting");
     $("#callLive").hidden = true;
     $("#callerSetup").hidden = false;
     btnConnect.disabled = !state.caller;
     onSpeakers([]);
+    stopMicSignal();
   }
 
   function setConn(stateName, label) {
@@ -763,6 +841,7 @@
     if (!obj || obj.type !== "ug_evidence") return;
     if (obj.bind) applyBind(obj.bind);
     if (obj.retrieval) applyRetrieval(obj.retrieval);
+    if (obj.usage) applyUsage(obj.usage);
   }
 
   function applyBind(bind) {
@@ -772,8 +851,17 @@
     if (bind.tier) $("#choiceTier").textContent = canonTier(bind.tier);
     if (bind.model) $("#choiceModel").textContent = bind.model;
     if (bind.company) $("#choiceCompany").textContent = `Bound for ${bind.company}`;
-    if (HAS_GSAP) g.fromTo($(".route", $("#pChoice")), { scale: 0.96, opacity: 0.4 },
-      { scale: 1, opacity: 1, duration: 0.5, ease: "back.out(1.6)", clearProps: "transform" });
+    if (HAS_GSAP) {
+      g.fromTo($(".route", $("#pChoice")), { scale: 0.96, opacity: 0.4 },
+        { scale: 1, opacity: 1, duration: 0.5, ease: "back.out(1.6)", clearProps: "transform" });
+      // the route locks in: the connector draws left→right and the shackle closes
+      const lock = $(".route-lock");
+      if (lock) {
+        drawIn($$(".rl-arrow, .rl-shackle", lock), { dur: 0.55, stagger: 0.14, delay: 0.08, ease: "power3.out" });
+        g.fromTo($$(".rl-lock-fill", lock), { opacity: 0 },
+          { opacity: 1, duration: 0.5, delay: 0.12, ease: "power2.out", clearProps: "opacity" });
+      }
+    }
 
     // CONTROL: render governed directives
     if (bind.directives) renderDirectives(bind.directives);
@@ -822,6 +910,11 @@
     const bars = $("#costBars");
     bars.dataset.level = info ? String(info.level) : "0";
     bars.title = info ? `${info.label} cost · typical for ${info.tierHint}` : "Cost tier unmapped for this model";
+    // COST METER: fill length = indicative level (dashoffset 96=empty, 0=full).
+    // The CSS transition animates it smoothly with or without GSAP.
+    const fill = $("#costFill");
+    if (fill) fill.style.strokeDashoffset = String(Math.round(96 * (1 - (info ? info.level : 0) / 3)));
+    renderProjection();
   }
 
   function applyRetrieval(r) {
@@ -831,6 +924,12 @@
 
     state.retrievals += 1;
     $("#retrievalCount").textContent = String(state.retrievals);
+    // CONTEXT: each real retrieval pings the scan motif + pops the count
+    if (HAS_GSAP) {
+      const pl = $("#retrievalPulse");
+      if (pl) pulse($$(".cp-wave", pl), { from: 0.4, dur: 0.7, stagger: 0.1, origin: "12 12" });
+      g.fromTo($("#retrievalCount"), { scale: 1.35 }, { scale: 1, duration: 0.45, ease: "back.out(2)", clearProps: "transform" });
+    }
 
     const kind = (r.kind === "record") ? "record" : "semantic";
     const item = document.createElement("div");
@@ -844,8 +943,9 @@
     }
     item.innerHTML = html;
     feed.prepend(item);
-    if (HAS_GSAP) g.fromTo(item, { opacity: 0, y: -10, height: 0 },
-      { opacity: 1, y: 0, height: "auto", duration: 0.45, ease: "power3.out", clearProps: "height,transform" });
+    // transform/opacity only — never animate layout height (no reflow jank)
+    if (HAS_GSAP) g.fromTo(item, { opacity: 0, y: -8 },
+      { opacity: 1, y: 0, duration: 0.45, ease: "power3.out", clearProps: "transform" });
   }
 
   function hitCount(hits) {
@@ -864,7 +964,7 @@
   }
 
   /* =============================================================================
-     TRANSCRIPT + per-turn latency (client measurement)
+     TRANSCRIPT
      ========================================================================== */
   function handleTranscription(segments, participant) {
     const isAgent = !!(participant && participant.isAgent);
@@ -888,39 +988,67 @@
       }
       $(".turn-text", el).textContent = seg.text || "";
       el.dataset.interim = seg.final === false ? "true" : "false";
-
-      // --- latency: from caller's FINAL segment to first agent segment of the reply ---
-      if (!isAgent && seg.final === true) {
-        state.metrics.t0 = performance.now();
-        state.metrics.awaiting = true;
-      } else if (isAgent && state.metrics.awaiting && state.metrics.t0 != null) {
-        recordLatency(performance.now() - state.metrics.t0);
-        state.metrics.awaiting = false;
-        state.metrics.t0 = null;
-      }
     });
 
     if (nearBottom) feed.scrollTop = feed.scrollHeight;
   }
 
-  function recordLatency(ms) {
-    const v = Math.max(0, Math.round(ms));
-    state.metrics.latencies.push(v);
-    if (state.metrics.latencies.length > 24) state.metrics.latencies.shift();
-    countTo($("#latencyVal"), v);
-    renderSpark();
+  function applyUsage(u) {
+    const inTok = Math.max(0, Math.round(u.input_tokens || 0));
+    const outTok = Math.max(0, Math.round(u.output_tokens || 0));
+    const total = inTok + outTok;
+    const prev = (state.metrics.inTok || 0) + (state.metrics.outTok || 0);
+    state.metrics.inTok = inTok;
+    state.metrics.outTok = outTok;
+    state.metrics.perTurn.push(Math.max(0, total - prev));
+    if (state.metrics.perTurn.length > 24) state.metrics.perTurn.shift();
+    countTo($("#tokensVal"), total);
+    renderTurnSpark();
+    renderProjection();
   }
 
-  function renderSpark() {
-    const spark = $("#latencySpark");
-    const arr = state.metrics.latencies;
-    const max = Math.max(...arr, 1);
-    spark.innerHTML = "";
-    arr.forEach((v) => {
-      const b = document.createElement("span");
-      b.style.transform = `scaleY(${Math.max(0.08, v / max)})`;
-      spark.appendChild(b);
+  function renderProjection() {
+    const el = $("#costProj"), rateEl = $("#costRate");
+    if (!el) return;
+    const total = (state.metrics.inTok || 0) + (state.metrics.outTok || 0);
+    const info = COST[state.boundModel];
+    if (!total) { el.textContent = "—"; rateEl.textContent = ""; return; }
+    const rate = info ? info.rate : null;
+    const cost = rate ? (total / 1e6) * rate : null;
+    el.textContent = cost == null ? "n/a" : cost < 1 ? `$${cost.toFixed(4)}` : `$${cost.toFixed(2)}`;
+    rateEl.textContent = rate ? `@ $${rate}/1M tok` : "";
+  }
+
+  /* Per-turn token trace as an authored SVG sparkline (area + line + newest dot).
+     Built to measured pixel dims so the dot stays round and the stroke crisp;
+     the line draws on once, later turns pop the latest point. Real data only. */
+  function renderTurnSpark() {
+    const spark = $("#turnSpark");
+    if (!spark) return;
+    const arr = state.metrics.perTurn || [];
+    if (!arr.length) { spark.innerHTML = ""; state.metrics.sparkSeen = false; return; }
+    const W = Math.max(60, Math.round(spark.clientWidth || 160));
+    const H = Math.max(24, Math.round(spark.clientHeight || 44));
+    const pad = 3, max = Math.max(...arr, 1), n = arr.length;
+    const xy = arr.map((v, i) => {
+      const x = n === 1 ? W - pad : pad + (i / (n - 1)) * (W - pad * 2);
+      const y = H - pad - (v / max) * (H - pad * 2);
+      return [Math.round(x * 10) / 10, Math.round(y * 10) / 10];
     });
+    const line = xy.map((p) => p.join(",")).join(" ");
+    const area = `${xy[0][0]},${H} ${line} ${xy[n - 1][0]},${H}`;
+    const lx = xy[n - 1][0], ly = xy[n - 1][1];
+    spark.innerHTML =
+      `<svg class="draw-svg" viewBox="0 0 ${W} ${H}" width="100%" height="100%" aria-hidden="true">` +
+        `<polygon class="sp-area" points="${area}" fill="currentColor" stroke="none"/>` +
+        `<polyline class="sp-line" points="${line}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>` +
+        `<circle class="sp-dot" cx="${lx}" cy="${ly}" r="2.8" fill="currentColor" stroke="none"/>` +
+      `</svg>`;
+    if (!HAS_GSAP) return;
+    const lineEl = $(".sp-line", spark), dot = $(".sp-dot", spark), areaEl = $(".sp-area", spark);
+    if (!state.metrics.sparkSeen) { drawIn([lineEl], { dur: 0.6, ease: "power2.out" }); state.metrics.sparkSeen = true; }
+    if (areaEl) g.fromTo(areaEl, { opacity: 0 }, { opacity: 0.14, duration: 0.5, ease: "power2.out", clearProps: "opacity" });
+    if (dot) g.fromTo(dot, { scale: 0 }, { scale: 1, duration: 0.45, ease: "back.out(2.4)", svgOrigin: `${lx} ${ly}`, clearProps: "transform" });
   }
 
   /* =============================================================================
@@ -963,6 +1091,26 @@
     state.audio.raf = null;
     if (state.audio.ctx) { try { state.audio.ctx.close(); } catch { /* noop */ } state.audio.ctx = null; }
     $$("#micMeter span").forEach((b) => { b.style.transform = "scaleY(0.14)"; b.style.opacity = "0.35"; });
+    stopMicSignal();
+  }
+
+  /* Broadcast motif: draws its arcs on connect, then breathes while live —
+     a "connected, listening" companion to the input meter. Transform/opacity
+     only, killed on disconnect; static (drawn) under reduced motion / no GSAP. */
+  function startMicSignal() {
+    stopMicSignal();
+    const sig = $(".mic-signal svg");
+    if (!sig) return;
+    drawIn($$(".msg-arc", sig), { dur: 0.5, stagger: 0.08, ease: "power3.out" });
+    if (!HAS_GSAP) return;
+    const arcs = $$(".msg-arc", sig);
+    if (arcs.length) motion.mic = g.to(arcs,
+      { opacity: 0.4, duration: 1.4, repeat: -1, yoyo: true, ease: "sine.inOut", stagger: 0.15 });
+  }
+  function stopMicSignal() {
+    if (motion.mic) { motion.mic.kill(); motion.mic = null; }
+    const arcs = $$(".mic-signal .msg-arc");
+    if (HAS_GSAP && arcs.length) g.set(arcs, { opacity: 1, clearProps: "opacity" });
   }
 
   /* ---- pillar reset between calls -------------------------------------- */
@@ -976,10 +1124,13 @@
     $("#retrievalFeed").innerHTML = `<div class="await">No retrievals yet. Ask the assistant a question.</div>`;
     $("#retrievalCount").textContent = "0";
     $("#costBars").dataset.level = "0";
-    $("#latencyVal").textContent = "—";
-    $("#latencySpark").innerHTML = "";
+    const cf = $("#costFill"); if (cf) cf.style.strokeDashoffset = "96";   // meter back to empty
+    $("#tokensVal").textContent = "—";
+    $("#costProj").textContent = "—";
+    $("#costRate").textContent = "";
+    $("#turnSpark").innerHTML = "";
     state.retrievals = 0;
-    state.metrics = { t0: null, awaiting: false, latencies: [] };
+    state.metrics = { inTok: 0, outTok: 0, perTurn: [] };
     state.turns.clear();
     $("#transcript").innerHTML = `<div class="await">The conversation will appear here once you connect.</div>`;
   }
@@ -1069,6 +1220,7 @@
       g.to(".bg-aurora--a", { xPercent: 8, yPercent: 6, duration: 18, repeat: -1, yoyo: true, ease: "sine.inOut" });
       g.to(".bg-aurora--b", { xPercent: -6, yPercent: -8, duration: 22, repeat: -1, yoyo: true, ease: "sine.inOut" });
     }
+    startHeroMotif();   // draws the governed-voice motif, then loops its signal packet
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
