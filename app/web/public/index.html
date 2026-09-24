@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>UG Voice Studio — test harness</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 15px/1.5 system-ui, sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; }
+  h1 { font-size: 1.1rem; }
+  label { display: block; margin: .5rem 0 .15rem; font-size: .85rem; opacity: .8; }
+  input { width: 100%; padding: .5rem; box-sizing: border-box; }
+  button { margin-top: 1rem; padding: .6rem 1rem; font-size: 1rem; cursor: pointer; }
+  #status { margin: 1rem 0; font-weight: 600; }
+  .panel { border: 1px solid #8884; border-radius: 8px; padding: .75rem; margin-top: 1rem; }
+  .panel h2 { font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; opacity: .6; margin: 0 0 .5rem; }
+  pre { white-space: pre-wrap; word-break: break-word; margin: 0; font-size: .85rem; }
+</style>
+</head>
+<body>
+<h1>UG Voice Studio — throwaway test harness</h1>
+<p style="opacity:.7">Connect, talk, and watch the routing/retrieval evidence. The real four-C's UI is Plan 4.</p>
+
+<label>data_generation_id</label><input id="dataset" placeholder="e.g. 6953c0c7…" />
+<label>customer_id (a generated customer — drives the loyalty tier)</label><input id="customer" placeholder="e.g. 6953…-C3" />
+<label>your name (courtesy only)</label><input id="name" placeholder="Sam" />
+<button id="go">Connect &amp; talk</button>
+
+<div id="status">idle</div>
+
+<div class="panel"><h2>Evidence (Choice / Control / Context)</h2><pre id="evidence">—</pre></div>
+<div class="panel"><h2>Transcript</h2><pre id="transcript">—</pre></div>
+
+<script src="https://cdn.jsdelivr.net/npm/livekit-client@2/dist/livekit-client.umd.min.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+const setStatus = (s) => { $("status").textContent = s; };
+let room;
+
+$("go").addEventListener("click", async () => {
+  try {
+    $("go").disabled = true;
+    setStatus("minting token…");
+    const qs = new URLSearchParams({
+      dataset: $("dataset").value.trim(),
+      customer: $("customer").value.trim(),
+      name: $("name").value.trim(),
+    });
+    const res = await fetch(`/api/token?${qs}`);
+    const t = await res.json();
+
+    setStatus("connecting…");
+    const LK = window.LivekitClient;
+    room = new LK.Room();
+
+    room.on(LK.RoomEvent.TrackSubscribed, (track) => {
+      if (track.kind === "audio") { const el = track.attach(); el.autoplay = true; document.body.appendChild(el); }
+    });
+    room.on(LK.RoomEvent.DataReceived, (payload) => {
+      try { $("evidence").textContent = JSON.stringify(JSON.parse(new TextDecoder().decode(payload)), null, 2); }
+      catch (e) { /* ignore non-JSON */ }
+    });
+    room.on(LK.RoomEvent.TranscriptionReceived, (segments, participant) => {
+      const who = participant && participant.isAgent ? "agent" : "you";
+      const line = segments.map((s) => s.text).join(" ");
+      $("transcript").textContent = (`${who}: ${line}\n` + $("transcript").textContent).slice(0, 4000);
+    });
+
+    await room.connect(t.serverUrl, t.token);
+    await room.localParticipant.setMicrophoneEnabled(true);
+    setStatus("connected — speak now (mic is live)");
+  } catch (err) {
+    setStatus("error: " + (err && err.message ? err.message : String(err)));
+    $("go").disabled = false;
+  }
+});
+</script>
+</body>
+</html>
