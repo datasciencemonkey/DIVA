@@ -1,7 +1,12 @@
 """Generic read-only voice-agent tools (spec §13), scoped to the session's
 data_generation_id. Handlers are pure of livekit so they unit-test without it;
-build_tools wraps them as function_tools. Tools NEVER return the loyalty tier."""
-from __future__ import annotations
+build_tools wraps them as function_tools. Tools NEVER return the loyalty tier.
+
+NOTE: no `from __future__ import annotations` here on purpose — build_tools' function_tool
+signatures annotate `context: RunContext` (imported inside build_tools), and LiveKit resolves
+those via typing.get_type_hints() at session start. Deferred (string) annotations can't see the
+build_tools-local RunContext and raise NameError on every LLM turn. Eager annotations bind the
+real class object, so get_type_hints succeeds. The module still imports no livekit at top level."""
 
 import asyncio
 from dataclasses import dataclass

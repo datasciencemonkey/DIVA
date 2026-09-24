@@ -46,6 +46,18 @@ async def test_record_lookup_abstains_for_unknown_caller(monkeypatch):
     assert called is False  # never reached the (unscoped) DB lookup
 
 
+def test_build_tools_schema_builds_without_nameerror():
+    # Regression (Task 8 live): LiveKit builds each tool's arg schema at session start via
+    # typing.get_type_hints(). With `from __future__ import annotations` + a build_tools-local
+    # `RunContext` import, get_type_hints can't resolve 'RunContext' and raises NameError on
+    # EVERY LLM turn (agent never replies). The tool annotations must resolve.
+    from livekit.agents.llm.utils import build_legacy_openai_schema
+
+    built = tools.build_tools(object(), tools.SessionContext("G1", "C1"))
+    for t in built:
+        build_legacy_openai_schema(t, internally_tagged=True)  # must not raise NameError
+
+
 async def test_handlers_abstain_when_pool_is_none(monkeypatch):
     # Degraded mode (spec §17): Lakebase unreachable -> pool is None. Tools must abstain
     # (empty result), never raise into the voice loop, and never even embed.
