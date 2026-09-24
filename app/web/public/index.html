@@ -2,78 +2,398 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>UG Voice Studio — test harness</title>
-<style>
-  :root { color-scheme: light dark; }
-  body { font: 15px/1.5 system-ui, sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; }
-  h1 { font-size: 1.1rem; }
-  label { display: block; margin: .5rem 0 .15rem; font-size: .85rem; opacity: .8; }
-  input { width: 100%; padding: .5rem; box-sizing: border-box; }
-  button { margin-top: 1rem; padding: .6rem 1rem; font-size: 1rem; cursor: pointer; }
-  #status { margin: 1rem 0; font-weight: 600; }
-  .panel { border: 1px solid #8884; border-radius: 8px; padding: .75rem; margin-top: 1rem; }
-  .panel h2 { font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; opacity: .6; margin: 0 0 .5rem; }
-  pre { white-space: pre-wrap; word-break: break-word; margin: 0; font-size: .85rem; }
-</style>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="dark" />
+<title>UAIG Voice Studio</title>
+<meta name="description" content="Governed voice AI, generated live: a Choice / Control / Context / Costs operator console." />
+
+<!-- One distinctive Google Font (Bricolage Grotesque) with a tuned system fallback so the
+     demo still renders instantly if the network font can't load. Data readouts use the
+     system monospace stack (see studio.css). GSAP + livekit-client are the only CDN libs. -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300;12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&display=swap" />
+
+<link rel="stylesheet" href="studio.css" />
 </head>
-<body>
-<h1>UG Voice Studio — throwaway test harness</h1>
-<p style="opacity:.7">Connect, talk, and watch the routing/retrieval evidence. The real four-C's UI is Plan 4.</p>
+<body data-stage="configure">
 
-<label>data_generation_id</label><input id="dataset" placeholder="e.g. 6953c0c7…" />
-<label>customer_id (a generated customer — drives the loyalty tier)</label><input id="customer" placeholder="e.g. 6953…-C3" />
-<label>your name (courtesy only)</label><input id="name" placeholder="Sam" />
-<button id="go">Connect &amp; talk</button>
+<!-- ambient background: fixed aurora + hairline grid, purely decorative -->
+<div class="bg" aria-hidden="true">
+  <div class="bg-aurora bg-aurora--a"></div>
+  <div class="bg-aurora bg-aurora--b"></div>
+  <div class="bg-grid"></div>
+  <div class="bg-vignette"></div>
+</div>
 
-<div id="status">idle</div>
+<!-- ================= TOP BAR ================= -->
+<header class="topbar">
+  <a class="brand" href="#" aria-label="UAIG Voice Studio home">
+    <span class="brand-mark" aria-hidden="true">
+      <svg viewBox="0 0 32 32" width="26" height="26" fill="none">
+        <rect x="1.2" y="1.2" width="29.6" height="29.6" rx="8.5" stroke="currentColor" stroke-width="1.4" opacity=".55"/>
+        <g stroke="currentColor" stroke-width="2.1" stroke-linecap="round">
+          <line x1="9" y1="13" x2="9" y2="19"/>
+          <line x1="13.4" y1="9.5" x2="13.4" y2="22.5"/>
+          <line x1="18" y1="7" x2="18" y2="25"/>
+          <line x1="22.6" y1="11.5" x2="22.6" y2="20.5"/>
+        </g>
+      </svg>
+    </span>
+    <span class="brand-word">UAIG<span class="brand-dim"> Voice Studio</span></span>
+  </a>
 
-<div class="panel"><h2>Evidence (Choice / Control / Context)</h2><pre id="evidence">—</pre></div>
-<div class="panel"><h2>Transcript</h2><pre id="transcript">—</pre></div>
+  <nav class="stepper" aria-label="Studio progress">
+    <ol>
+      <li class="step" data-step="configure" aria-current="step"><span class="step-l">Configure</span></li>
+      <li class="step" data-step="generate"><span class="step-l">Generate</span></li>
+      <li class="step" data-step="live"><span class="step-l">Live</span></li>
+    </ol>
+  </nav>
 
+  <div class="topbar-right">
+    <span class="conn-chip" id="connChip" data-state="idle" role="status" aria-live="polite">
+      <span class="conn-dot"></span><span class="conn-label">Not connected</span>
+    </span>
+  </div>
+</header>
+
+<main class="stage-wrap">
+
+  <!-- ============================================================= -->
+  <!-- STAGE 1 — CONFIGURE                                           -->
+  <!-- ============================================================= -->
+  <section class="stage stage--configure is-active" id="stage-configure" aria-label="Configure">
+    <div class="configure-grid">
+
+      <div class="hero">
+        <h1 class="hero-title" data-anim>
+          Give any brand a voice<br/>that answers <em>only</em> from what it knows.
+        </h1>
+        <p class="hero-sub" data-anim>
+          Configure an assistant, generate its world of policies, customers and knowledge,
+          then drop into a live governed call, instrumented across four pillars.
+        </p>
+
+        <ul class="pillars-strip" data-anim>
+          <li class="pillar-brand" style="--hue:var(--c-choice)">
+            <span class="pillar-brand-ic" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h9"/><path d="M4 17h5"/><circle cx="16" cy="7" r="3"/><circle cx="12" cy="17" r="3"/><path d="M20 7h0"/></svg>
+            </span>
+            <div><b>Choice</b><span>Every call routes to the right model for its governed tier.</span></div>
+          </li>
+          <li class="pillar-brand" style="--hue:var(--c-control)">
+            <span class="pillar-brand-ic" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+            </span>
+            <div><b>Control</b><span>Tier comes from a governed lookup, never from the conversation.</span></div>
+          </li>
+          <li class="pillar-brand" style="--hue:var(--c-context)">
+            <span class="pillar-brand-ic" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H18a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6.5A2.5 2.5 0 0 1 4 18.5z"/><path d="M8 7h7"/><path d="M8 11h7"/></svg>
+            </span>
+            <div><b>Context</b><span>Answers are grounded in retrieved, read-only knowledge.</span></div>
+          </li>
+          <li class="pillar-brand" style="--hue:var(--c-costs)">
+            <span class="pillar-brand-ic" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5"/><path d="M4 19h16"/><path d="M8 16l3.5-4 3 2.5L20 8"/></svg>
+            </span>
+            <div><b>Costs</b><span>See the cost and latency behind every routing decision.</span></div>
+          </li>
+        </ul>
+      </div>
+
+      <div class="config-card" data-anim>
+        <div class="config-card-head">
+          <h2>Design the assistant</h2>
+          <p>Pick a starting point, then edit anything.</p>
+        </div>
+
+        <div class="presets" id="presets" role="group" aria-label="Preset assistants"></div>
+
+        <form class="config-form" id="configForm" autocomplete="off" novalidate>
+          <div class="field">
+            <label for="fCompany">Company</label>
+            <input id="fCompany" name="company" type="text" placeholder="e.g. Cascade Airlines" required />
+          </div>
+          <div class="field">
+            <label for="fRole">Assistant role</label>
+            <input id="fRole" name="role" type="text" placeholder="e.g. Airline support agent" required />
+          </div>
+          <div class="field">
+            <label for="fPrompt">System prompt <span class="field-hint">voice-friendly · answers only from tools</span></label>
+            <textarea id="fPrompt" name="system_prompt" rows="5" placeholder="Describe how the assistant should behave on a call…" required></textarea>
+          </div>
+
+          <div class="config-actions">
+            <button type="submit" class="btn btn--primary" id="btnGenerate">
+              <span>Generate the world</span>
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
+            </button>
+            <button type="button" class="btn btn--ghost" id="btnExisting" aria-expanded="false" aria-controls="datasetPanel">
+              Use an existing world
+            </button>
+          </div>
+          <p class="form-error" id="configError" role="alert" hidden></p>
+        </form>
+
+        <!-- existing-world drawer -->
+        <div class="dataset-panel" id="datasetPanel" hidden>
+          <div class="dataset-panel-head">
+            <h3>Ready worlds</h3>
+            <button type="button" class="icon-btn" id="datasetRefresh" aria-label="Refresh worlds">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 0 1 13.7-5.7L20 8"/><path d="M20 4v4h-4"/><path d="M20 12a8 8 0 0 1-13.7 5.7L4 16"/><path d="M4 20v-4h4"/></svg>
+            </button>
+          </div>
+          <div class="dataset-list" id="datasetList" role="list" aria-live="polite"></div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ============================================================= -->
+  <!-- STAGE 2 — GENERATE                                            -->
+  <!-- ============================================================= -->
+  <section class="stage stage--generate" id="stage-generate" aria-label="Generating world" hidden>
+    <div class="generate-grid">
+      <div class="generate-head">
+        <h2 class="generate-title" data-anim-g id="genTitle">Generating <span id="genCompany">the world</span></h2>
+        <p class="generate-sub" data-anim-g id="genSub">Drafting knowledge, casting customers, and embedding documents.</p>
+      </div>
+
+      <ol class="timeline" id="timeline" data-anim-g>
+        <li class="tl-step" data-stage-key="drafting">
+          <span class="tl-node"><span class="tl-tick"></span></span>
+          <div class="tl-body">
+            <b>Drafting policies &amp; FAQ</b>
+            <span class="tl-detail" data-detail="drafting">Writing the brand's knowledge base…</span>
+          </div>
+        </li>
+        <li class="tl-step" data-stage-key="drafted">
+          <span class="tl-node"><span class="tl-tick"></span></span>
+          <div class="tl-body">
+            <b>Casting customers</b>
+            <span class="tl-detail" data-detail="drafted">Standard · Premium · VIP personas</span>
+          </div>
+        </li>
+        <li class="tl-step" data-stage-key="embedding">
+          <span class="tl-node"><span class="tl-tick"></span></span>
+          <div class="tl-body">
+            <b>Embedding documents</b>
+            <span class="tl-detail" data-detail="embedding">Indexing knowledge for retrieval…</span>
+          </div>
+        </li>
+        <li class="tl-step" data-stage-key="saving">
+          <span class="tl-node"><span class="tl-tick"></span></span>
+          <div class="tl-body">
+            <b>Saving the world</b>
+            <span class="tl-detail" data-detail="saving">Committing to the governed store…</span>
+          </div>
+        </li>
+        <li class="tl-step" data-stage-key="ready">
+          <span class="tl-node"><span class="tl-tick"></span></span>
+          <div class="tl-body">
+            <b>Ready</b>
+            <span class="tl-detail" data-detail="ready">World is live.</span>
+          </div>
+        </li>
+      </ol>
+
+      <!-- summary appears on ready -->
+      <div class="summary-card" id="summaryCard" hidden>
+        <div class="summary-head">
+          <span class="summary-badge">World ready</span>
+          <h3 id="summaryCompany">—</h3>
+        </div>
+        <div class="summary-stats" id="summaryStats"></div>
+        <div class="summary-tiers" id="summaryTiers"></div>
+        <button type="button" class="btn btn--primary" id="btnEnterCall">
+          <span>Enter the call</span>
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
+        </button>
+      </div>
+
+      <!-- failure appears on failed -->
+      <div class="fail-card" id="failCard" hidden role="alert">
+        <span class="fail-badge">Generation failed</span>
+        <p id="failMessage">Something went wrong.</p>
+        <div class="fail-actions">
+          <button type="button" class="btn btn--primary" id="btnRetry">Try again</button>
+          <button type="button" class="btn btn--ghost" id="btnBackConfig">Back to configure</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================= -->
+  <!-- STAGE 3 — LIVE                                                -->
+  <!-- ============================================================= -->
+  <section class="stage stage--live" id="stage-live" aria-label="Live call console" hidden>
+    <div class="live-grid">
+
+      <!-- LEFT RAIL: caller + call control -->
+      <aside class="rail" aria-label="Call controls">
+        <div class="rail-card call-card" data-anim-l>
+          <div class="rail-head">
+            <h2 id="liveCompany">Live call</h2>
+          </div>
+
+          <!-- pre-connect: caller picker -->
+          <div id="callerSetup">
+            <p class="rail-note" id="callerNote">Choose who's calling. The tier drives the routing you'll see.</p>
+            <div class="callers" id="callerPicker" role="radiogroup" aria-label="Select caller"></div>
+
+            <div class="field field--tight">
+              <label for="fName">Courtesy name <span class="field-hint">optional</span></label>
+              <input id="fName" type="text" placeholder="e.g. Sam" autocomplete="off" />
+            </div>
+
+            <button type="button" class="btn btn--primary btn--block" id="btnConnect" disabled>
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15.5 3.5a5 5 0 0 1 5 5"/><path d="M14.5 7a2.5 2.5 0 0 1 2.5 2.5"/><path d="M4.5 5.5C4.5 14 10 19.5 18.5 19.5l.9-2.7a1.4 1.4 0 0 0-.8-1.7l-2.7-1.1a1.4 1.4 0 0 0-1.6.4l-.8 1a11 11 0 0 1-4.5-4.5l1-.8a1.4 1.4 0 0 0 .4-1.6L9 5.9a1.4 1.4 0 0 0-1.7-.8z"/></svg>
+              <span>Connect &amp; talk</span>
+            </button>
+            <p class="form-error" id="connectError" role="alert" hidden></p>
+          </div>
+
+          <!-- during-connect: live call state -->
+          <div id="callLive" hidden>
+            <div class="caller-live" id="callerLive">
+              <span class="caller-live-avatar" id="callerAvatar">A</span>
+              <div>
+                <b id="callerLiveName">Anonymous caller</b>
+                <span class="caller-live-tier" id="callerLiveTier">Governed tier resolves on connect</span>
+              </div>
+            </div>
+
+            <div class="mic-panel">
+              <div class="mic-meter" id="micMeter" aria-hidden="true">
+                <span></span><span></span><span></span><span></span><span></span>
+                <span></span><span></span><span></span><span></span><span></span>
+              </div>
+              <div class="mic-legend">
+                <span class="spk" id="spkYou" data-active="false"><i></i>Caller</span>
+                <span class="spk" id="spkAgent" data-active="false"><i></i>Agent</span>
+              </div>
+            </div>
+
+            <button type="button" class="btn btn--danger btn--block" id="btnEnd">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 5l14 14"/><path d="M4.5 5.5C4.5 14 10 19.5 18.5 19.5l.9-2.7a1.4 1.4 0 0 0-.8-1.7l-2.7-1.1a1.4 1.4 0 0 0-1.6.4l-.8 1a11 11 0 0 1-4.5-4.5l1-.8a1.4 1.4 0 0 0 .4-1.6L9 5.9a1.4 1.4 0 0 0-1.7-.8z"/></svg>
+              <span>End call</span>
+            </button>
+          </div>
+
+          <button type="button" class="link-back" id="btnLiveBack">← New world</button>
+        </div>
+      </aside>
+
+      <!-- MAIN: four pillars + transcript -->
+      <div class="console">
+        <div class="pillars" id="pillars">
+
+          <!-- CHOICE -->
+          <article class="pillar" data-pillar="choice" style="--hue:var(--c-choice)" data-anim-l aria-live="polite">
+            <header class="pillar-head">
+              <span class="pillar-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h9"/><path d="M4 17h5"/><circle cx="16" cy="7" r="3"/><circle cx="12" cy="17" r="3"/></svg></span>
+              <h3>Choice</h3>
+              <span class="pillar-tag">Routing</span>
+            </header>
+            <div class="pillar-body" id="pChoice">
+              <div class="await" id="choiceAwait">Awaiting first evidence…</div>
+              <div class="choice-live" hidden>
+                <div class="route">
+                  <div class="route-tier"><span class="k">Governed tier</span><span class="v" id="choiceTier">—</span></div>
+                  <div class="route-arrow" aria-hidden="true"><svg viewBox="0 0 40 24" width="40" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2 12h30"/><path d="M27 6l7 6-7 6"/></svg></div>
+                  <div class="route-model"><span class="k">Routed model</span><span class="v mono" id="choiceModel">—</span></div>
+                </div>
+                <p class="pillar-foot" id="choiceCompany"></p>
+              </div>
+            </div>
+          </article>
+
+          <!-- CONTROL -->
+          <article class="pillar" data-pillar="control" style="--hue:var(--c-control)" data-anim-l aria-live="polite">
+            <header class="pillar-head">
+              <span class="pillar-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></span>
+              <h3>Control</h3>
+              <span class="pillar-tag">Governance</span>
+            </header>
+            <div class="pillar-body" id="pControl">
+              <ul class="guarantees">
+                <li><span class="g-ic" aria-hidden="true">✓</span> Tier from a governed Lakebase lookup, not the conversation</li>
+                <li><span class="g-ic" aria-hidden="true">✓</span> Caller-stated status is ignored</li>
+                <li><span class="g-ic" aria-hidden="true">✓</span> Tools are read-only</li>
+              </ul>
+              <div class="directives" id="directives">
+                <p class="directives-await">Directives resolve on connect…</p>
+              </div>
+            </div>
+          </article>
+
+          <!-- CONTEXT -->
+          <article class="pillar pillar--wide" data-pillar="context" style="--hue:var(--c-context)" data-anim-l>
+            <header class="pillar-head">
+              <span class="pillar-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H18a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6.5A2.5 2.5 0 0 1 4 18.5z"/><path d="M8 7h7"/><path d="M8 11h5"/></svg></span>
+              <h3>Context</h3>
+              <span class="pillar-tag">Retrieval</span>
+              <span class="pillar-count" id="retrievalCount" aria-label="retrieval events">0</span>
+            </header>
+            <div class="pillar-body">
+              <div class="retrieval-feed" id="retrievalFeed" role="log" aria-live="polite" aria-label="Live retrieval events">
+                <div class="await">No retrievals yet. Ask the assistant a question.</div>
+              </div>
+            </div>
+          </article>
+
+          <!-- COSTS -->
+          <article class="pillar pillar--wide" data-pillar="costs" style="--hue:var(--c-costs)" data-anim-l aria-live="polite">
+            <header class="pillar-head">
+              <span class="pillar-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5"/><path d="M4 19h16"/><path d="M8 16l3.5-4 3 2.5L20 8"/></svg></span>
+              <h3>Costs</h3>
+              <span class="pillar-tag">Indicative</span>
+            </header>
+            <div class="pillar-body costs-body">
+              <div class="cost-index">
+                <span class="k">Cost index</span>
+                <div class="cost-bars" id="costBars" data-level="0">
+                  <span data-tier="Low">Low</span>
+                  <span data-tier="Medium">Med</span>
+                  <span data-tier="High">High</span>
+                </div>
+              </div>
+              <div class="latency">
+                <span class="k">Last turn latency</span>
+                <span class="latency-val"><b id="latencyVal">—</b><small>ms</small></span>
+              </div>
+              <div class="latency-history">
+                <span class="k">Recent turns</span>
+                <div class="spark" id="latencySpark" aria-hidden="true"></div>
+              </div>
+              <p class="pillar-foot">Cost tier and latency are indicative, client-measured.</p>
+            </div>
+          </article>
+        </div>
+
+        <!-- TRANSCRIPT -->
+        <section class="transcript-card" data-anim-l aria-label="Live transcript">
+          <header class="transcript-head">
+            <h3>Transcript</h3>
+            <span class="transcript-live" id="transcriptLive"><span class="conn-dot"></span>live</span>
+          </header>
+          <div class="transcript" id="transcript" role="log" aria-live="polite">
+            <div class="await">The conversation will appear here once you connect.</div>
+          </div>
+        </section>
+      </div>
+
+    </div>
+  </section>
+
+</main>
+
+<!-- CDN libs: livekit-client (jsdelivr, unchanged) + GSAP (cdnjs). Then app logic. -->
 <script src="https://cdn.jsdelivr.net/npm/livekit-client@2/dist/livekit-client.umd.min.js"></script>
-<script>
-const $ = (id) => document.getElementById(id);
-const setStatus = (s) => { $("status").textContent = s; };
-let room;
-
-$("go").addEventListener("click", async () => {
-  try {
-    $("go").disabled = true;
-    setStatus("minting token…");
-    const qs = new URLSearchParams({
-      dataset: $("dataset").value.trim(),
-      customer: $("customer").value.trim(),
-      name: $("name").value.trim(),
-    });
-    const res = await fetch(`/api/token?${qs}`);
-    const t = await res.json();
-
-    setStatus("connecting…");
-    const LK = window.LivekitClient;
-    room = new LK.Room();
-
-    room.on(LK.RoomEvent.TrackSubscribed, (track) => {
-      if (track.kind === "audio") { const el = track.attach(); el.autoplay = true; document.body.appendChild(el); }
-    });
-    room.on(LK.RoomEvent.DataReceived, (payload) => {
-      try { $("evidence").textContent = JSON.stringify(JSON.parse(new TextDecoder().decode(payload)), null, 2); }
-      catch (e) { /* ignore non-JSON */ }
-    });
-    room.on(LK.RoomEvent.TranscriptionReceived, (segments, participant) => {
-      const who = participant && participant.isAgent ? "agent" : "you";
-      const line = segments.map((s) => s.text).join(" ");
-      $("transcript").textContent = (`${who}: ${line}\n` + $("transcript").textContent).slice(0, 4000);
-    });
-
-    await room.connect(t.serverUrl, t.token);
-    await room.localParticipant.setMicrophoneEnabled(true);
-    setStatus("connected — speak now (mic is live)");
-  } catch (err) {
-    setStatus("error: " + (err && err.message ? err.message : String(err)));
-    $("go").disabled = false;
-  }
-});
-</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script src="studio.js"></script>
 </body>
 </html>
