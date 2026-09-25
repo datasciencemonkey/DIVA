@@ -76,49 +76,49 @@
      ========================================================================== */
   const PRESETS = [
     {
-      id: "cascade", company: "Cascade Airlines", domain: "Airline support",
+      id: "cascade", company: "Cascade Airlines", domain: "Airline",
       role: "Airline support agent",
       system_prompt:
         "You are the voice assistant for Cascade Airlines. Answer only from your tools and " +
-        "retrieved policies — never invent fares, schedules, baggage rules, or account details. " +
+        "retrieved policies — never invent fares, schedules, baggage rules, or booking details. " +
         "If a tool returns nothing, offer to connect a human agent. Reply in one or two brief, " +
         "calm spoken sentences. Never state or guess a caller's loyalty tier or status.",
     },
     {
-      id: "northwind", company: "Northwind Outfitters", domain: "Outdoor gear",
-      role: "Outdoor gear support agent",
+      id: "wayfarer", company: "Wayfarer Voyages", domain: "Cruise line",
+      role: "Cruise guest support agent",
       system_prompt:
-        "You are the voice assistant for Northwind Outfitters, an outdoor gear retailer. Answer " +
-        "only from your tools and product knowledge — never invent specs, prices, stock, or return " +
-        "terms. If you can't find it, offer to connect a specialist. Keep replies to one or two " +
-        "short spoken sentences, friendly and practical. Never mention a caller's loyalty tier.",
+        "You are the voice assistant for Wayfarer Voyages, a cruise line. Answer only from your " +
+        "tools and retrieved policies — never invent itineraries, cabin availability, excursion " +
+        "details, or booking records. If a tool returns nothing, offer to connect guest services. " +
+        "Reply in one or two brief, calm spoken sentences. Never state or guess a caller's loyalty tier or status.",
     },
     {
-      id: "meridian", company: "Meridian Bank", domain: "Retail banking",
-      role: "Retail banking assistant",
+      id: "harborstone", company: "Harborstone Hotels", domain: "Hotels & resorts",
+      role: "Guest services agent",
       system_prompt:
-        "You are the voice assistant for Meridian Bank. Answer only from your tools and retrieved " +
-        "policies — never invent rates, fees, balances, or account details. For anything sensitive " +
-        "or unavailable, offer to connect a banker. Reply in one or two brief, precise spoken " +
-        "sentences. Never state or guess a caller's tier, eligibility, or account status.",
+        "You are the voice assistant for Harborstone Hotels & Resorts. Answer only from your tools " +
+        "and retrieved policies — never invent rates, room availability, amenities, or reservation " +
+        "details. If a tool returns nothing, offer to connect the front desk. Reply in one or two " +
+        "brief, warm spoken sentences. Never state or guess a caller's loyalty tier or status.",
     },
     {
-      id: "lumen", company: "Lumen Mobile", domain: "Telecom",
-      role: "Mobile support agent",
+      id: "nestly", company: "Nestly Stays", domain: "Vacation rentals",
+      role: "Host & guest support agent",
       system_prompt:
-        "You are the voice assistant for Lumen Mobile. Answer only from your tools and retrieved " +
-        "plans and policies — never invent prices, data allowances, coverage, or account details. " +
-        "If a tool has no answer, offer to connect support. Keep replies to one or two short spoken " +
-        "sentences, clear and upbeat. Never mention a caller's loyalty tier or account status.",
+        "You are the voice assistant for Nestly Stays, a vacation-rental platform. Answer only from " +
+        "your tools and retrieved policies — never invent property details, house rules, prices, or " +
+        "booking records. If a tool returns nothing, offer to connect a support specialist. Keep " +
+        "replies to one or two short, friendly spoken sentences. Never state or guess a caller's tier or status.",
     },
     {
-      id: "forge", company: "Forge Analytics", domain: "B2B SaaS",
-      role: "Customer support engineer",
+      id: "brightwok", company: "Brightwok Kitchen", domain: "Quick-service",
+      role: "Order & rewards support agent",
       system_prompt:
-        "You are the voice assistant for Forge Analytics, a B2B analytics platform. Answer only " +
-        "from your tools and product documentation — never invent features, limits, pricing, or " +
-        "account details. If it isn't documented, offer to connect a support engineer. Reply in one " +
-        "or two brief spoken sentences, professional and concise. Never state or guess a customer's plan tier.",
+        "You are the voice assistant for Brightwok Kitchen, a quick-service restaurant. Answer only " +
+        "from your tools and retrieved menu and policies — never invent menu items, prices, order " +
+        "status, or rewards balances. If a tool returns nothing, offer to connect a team member. " +
+        "Keep replies to one or two short, friendly spoken sentences. Never state or guess a caller's rewards tier or status.",
     },
   ];
 
@@ -184,17 +184,46 @@
   function startHeroMotif() {
     const motif = $(".hero-motif svg");
     if (!motif) return;
-    drawIn(motif, { dur: 0.6, stagger: 0.03, delay: 0.35, ease: "power3.out" });
-    if (!HAS_GSAP) return;
+    if (!HAS_GSAP) return;   // CSS renders the finished frame (reduced-motion / no-GSAP)
+
+    // Narrative draw-in: the caller speaks -> the signal reaches the governed gate ->
+    // candidate routes fan out -> the ONE chosen route + node lock in. Ordered so the
+    // eye reads the story left-to-right instead of everything appearing at once.
+    const bars     = $$("g.hm-wave line", motif);         // spoken waveform
+    const conn     = $$("line.hm-wave", motif);           // line into the gate
+    const gateStr  = $$(".hm-gate, .hm-shield", motif);   // gate outline + shield
+    const gateFill = $$(".hm-gate-fill", motif);          // gate pill (fill)
+    const cand     = $$(".hm-route", motif);              // candidate routes
+    const candNode = $$(".hm-node", motif);               // candidate nodes
+    const active   = $$(".hm-route--active", motif);      // the chosen route
+    const chosen   = $$(".hm-node-fill, .hm-node--active", motif);  // the chosen node
+
+    // fills would otherwise be visible at t=0 (drawIn only strokes) — enter them in step
+    g.set([...gateFill, ...chosen], { opacity: 0 });
+
+    drawIn(bars,     { delay: 0.30, dur: 0.50, stagger: 0.035 });
+    drawIn(conn,     { delay: 0.85, dur: 0.30 });
+    g.to(gateFill,   { opacity: 1, duration: 0.35, delay: 1.05, ease: "power2.out" });
+    drawIn(gateStr,  { delay: 1.10, dur: 0.50, stagger: 0.08 });
+    drawIn(cand,     { delay: 1.60, dur: 0.50, stagger: 0.14 });
+    drawIn(candNode, { delay: 1.85, dur: 0.40, stagger: 0.10 });
+    drawIn(active,   { delay: 2.10, dur: 0.55 });
+    // the chosen node "locks in" — the reserved back.out confirmation accent
+    g.fromTo(chosen, { opacity: 0, scale: 0.3 },
+      { opacity: 1, scale: 1, duration: 0.5, delay: 2.55, ease: "back.out(2)",
+        svgOrigin: "424 40", clearProps: "transform,opacity" });
+
+    // Then a calm signal packet loops: voice -> gate -> chosen node.
     const pk = $(".hm-flow", motif);
     if (!pk) return;
     if (motion.hero) { motion.hero.kill(); motion.hero = null; }
-    const tl = g.timeline({ repeat: -1, repeatDelay: 0.5, delay: 1.1 });
+    const tl = g.timeline({ repeat: -1, repeatDelay: 0.8, delay: 3.2 });
     tl.set(pk, { opacity: 0, x: 40, y: 84 })
       .to(pk, { opacity: 1, duration: 0.25, ease: "power1.out" })
-      .to(pk, { x: 208, y: 84, duration: 1.1, ease: "sine.inOut" })
-      .to(pk, { x: 340, y: 52, duration: 0.7, ease: "sine.inOut" })
-      .to(pk, { x: 424, y: 40, duration: 0.6, ease: "power1.in" })
+      .to(pk, { x: 190, y: 84, duration: 0.90, ease: "sine.inOut" })   // through the waveform
+      .to(pk, { x: 226, y: 84, duration: 0.35, ease: "sine.inOut" })   // out of the gate
+      .to(pk, { x: 340, y: 56, duration: 0.55, ease: "sine.inOut" })   // onto the chosen route
+      .to(pk, { x: 424, y: 40, duration: 0.55, ease: "power1.in" })    // arrive at the chosen node
       .to(pk, { opacity: 0, duration: 0.3 }, "-=0.05");
     motion.hero = tl;
   }
