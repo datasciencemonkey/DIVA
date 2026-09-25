@@ -8,30 +8,35 @@
 :root {
   color-scheme: dark;
 
-  /* ---- ink + surfaces ---- */
-  --ink:        #070A0F;
-  --ink-2:      #0A0E15;
-  --surface:    #10151E;
-  --surface-2:  #161C28;
-  --surface-3:  #1D2532;
+  /* ---- ink + surfaces (Databricks Navy family) ---- */
+  --ink:        #0B2026;   /* Navy 900 — page */
+  --ink-2:      #0E252C;   /* inputs / insets / card-gradient base */
+  --surface:    #112C34;   /* card top */
+  --surface-2:  #1B3139;   /* Navy 800 — resting controls */
+  --surface-3:  #203C45;   /* hover / pressed controls */
   --hairline:        rgba(150,166,190,.12);
   --hairline-strong: rgba(150,166,190,.22);
-  --topbar-bg: linear-gradient(to bottom, rgba(8,11,16,.86), rgba(8,11,16,.62));
+  --topbar-bg: linear-gradient(to bottom, rgba(11,32,38,.86), rgba(11,32,38,.60));
 
   /* ---- text ---- */
-  --text-hi:  #EAEFF7;
-  --text-mid: #9BA8BD;
-  --text-lo:  #7E8A9E;   /* AA (>=4.5:1) on the card surfaces */
+  --text-hi:  #EAF0EE;
+  --text-mid: #A7B4B9;   /* AA (>=5.5:1) on every card surface incl. hover surface-3 */
+  --text-lo:  #99A6AF;   /* AA (>=4.7:1) on every card surface incl. hover surface-3 */
 
-  /* ---- signal + pillar hues ---- */
-  --accent:      #3FE0C5;   /* signature "live" mint */
-  --accent-deep: #16b79c;
-  --accent-ink:  #04120E;
-  --c-choice:  #5BA8FF;
-  --c-control: #F2C14E;
-  --c-context: #3FE0C5;
-  --c-costs:   #FF8168;
-  --danger:    #FF6B6B;
+  /* ---- signal + pillar hues (Databricks Lava + data-viz set) ----
+     Lava is the ONE signature. It stays bright #FF3621 for fills/CTA/focus/connected/hero;
+     accent-as-TEXT uses Databricks Coral (a Lava sibling) so small text clears AA on navy.
+     Pillars are the data-viz set, BRIGHTENED for navy and kept distinct from Lava:
+     Choice=indigo, Control=amber, Context=mint-green, Costs=purple. */
+  --accent:      #FF3621;   /* Databricks Lava — CTA/focus/connected/"live"/hero fills */
+  --accent-deep: #FB3A25;   /* button gradient base (kept in the bright-Lava band so the Navy label clears AA on BOTH stops: 4.65 / 4.59) */
+  --accent-ink:  #0B2026;   /* Navy label on the Lava button (4.65:1 top, 4.59:1 base) */
+  --accent-text: #FF7054;   /* Databricks Coral — Lava sibling for accent-as-TEXT (AA on navy) */
+  --c-choice:  #A6ABEA;     /* indigo (data-viz #4E5185), brightened for navy */
+  --c-control: #FFA600;     /* data-viz amber */
+  --c-context: #99DDB4;     /* data-viz mint-green */
+  --c-costs:   #D493CE;     /* purple (data-viz #995495), brightened for navy */
+  --danger:    #FF6E78;     /* rose-red (functional) — kept distinct from Coral accent */
 
   /* ---- type ---- */
   --font: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
@@ -68,30 +73,32 @@
 :root[data-theme="light"] {
   color-scheme: light;
 
-  /* surfaces: page "desk" -> white cards, with light insets that still read recessed */
-  --ink:        #E3E9F1;   /* page desk */
-  --ink-2:      #EEF2F8;   /* insets, inputs, card-gradient base */
-  --surface:    #FFFFFF;   /* card top */
-  --surface-2:  #F5F8FC;   /* resting controls: chips, ghost buttons, caller rows, bubbles */
-  --surface-3:  #E7EDF5;   /* hover / pressed controls, neutral badge */
+  /* surfaces: Databricks Oat "desk" -> white cards, with oat insets that still read recessed */
+  --ink:        #F9F7F4;   /* Oat Light — page desk */
+  --ink-2:      #EEEDE9;   /* Oat Medium — insets, inputs, card-gradient base */
+  --surface:    #FFFFFF;   /* white card top */
+  --surface-2:  #F4F2EE;   /* resting controls: chips, ghost buttons, caller rows, bubbles */
+  --surface-3:  #E7E4DE;   /* hover / pressed controls, neutral badge */
   --hairline:        rgba(20,30,52,.10);
   --hairline-strong: rgba(20,30,52,.17);
-  --topbar-bg: linear-gradient(to bottom, rgba(247,249,252,.9), rgba(247,249,252,.64));
+  --topbar-bg: linear-gradient(to bottom, rgba(249,247,244,.9), rgba(249,247,244,.62));
 
-  /* text: slate ink — all AA on white AND on the light insets */
-  --text-hi:  #11151D;   /* ~15.5:1 */
-  --text-mid: #414C5B;   /* ~7.4:1  */
-  --text-lo:  #586474;   /* ~4.9:1  */
+  /* text: Databricks Navy ink — all AA on white AND on the oat insets */
+  --text-hi:  #0B2026;   /* Navy 900 — ~16.8:1 on white */
+  --text-mid: #3A4A50;   /* navy-grey — >=7.2:1 on all light surfaces */
+  --text-lo:  #4E5A60;   /* navy-grey — >=5.6:1 on all light surfaces */
 
-  /* signal + pillar hues: deep, saturated, AA at their real tint alphas on light */
-  --accent:      #077061;  /* signature "live" mint, darkened for AA (6.0:1 on white) */
-  --accent-deep: #065D50;  /* primary-button gradient base */
-  --accent-ink:  #FFFFFF;  /* white label on the teal button (6.0:1) */
-  --c-choice:  #1D5AB8;    /* deep royal blue    */
-  --c-control: #6E5C0F;    /* deep antique gold  */
-  --c-context: #077061;    /* mint pillar shares the live signal */
-  --c-costs:   #A83A22;    /* deep burnt sienna  */
-  --danger:    #B62E2E;    /* deep red           */
+  /* signal + pillar hues: Lava + data-viz set, DARKENED so each clears AA on oat/white.
+     Bright Lava as text fails on oat (~3.4:1); accent + accent-text carry darkened Lava. */
+  --accent:      #C4260F;  /* Databricks Lava darkened — CTA/focus/connected/hero (white label 5.8:1) */
+  --accent-deep: #A81F0C;  /* primary-button gradient base */
+  --accent-ink:  #FFFFFF;  /* white label on the Lava button (5.8:1) */
+  --accent-text: #A82409;  /* deeper Lava for accent-as-TEXT (AA on oat tints) */
+  --c-choice:  #3B3F70;    /* deep indigo (data-viz #4E5185)   */
+  --c-control: #6F5700;    /* deep amber/gold (data-viz #FFA600) */
+  --c-context: #145F3B;    /* deep mint-green (data-viz #99DDB4) */
+  --c-costs:   #7E3A7A;    /* deep purple (data-viz #995495)    */
+  --danger:    #B62E2E;    /* deep red (functional)             */
 
   --shadow: 0 1px 2px rgba(0,0,0,.04), 0 16px 40px -20px rgba(0,0,0,.13);
 }
@@ -99,11 +106,11 @@
 /* --- light-only component retunes (things that can't reduce to a single token) --- */
 
 /* ambient background: soften + retint so white never looks muddy */
-:root[data-theme="light"] .bg-aurora     { opacity: .32; filter: blur(100px); }
-:root[data-theme="light"] .bg-aurora--a  { background: radial-gradient(circle, rgba(16,150,128,.16), transparent 60%); }
-:root[data-theme="light"] .bg-aurora--b  { background: radial-gradient(circle, rgba(52,116,214,.13), transparent 60%); }
-:root[data-theme="light"] .bg-grid       { opacity: .55; }
-:root[data-theme="light"] .bg-vignette   { background: radial-gradient(ellipse 100% 62% at 50% -12%, rgba(255,255,255,.65), transparent 62%); }
+:root[data-theme="light"] .bg-aurora     { opacity: .30; filter: blur(100px); }
+:root[data-theme="light"] .bg-aurora--a  { background: radial-gradient(circle, rgba(255,54,33,.10), transparent 60%); }   /* faint Lava warmth */
+:root[data-theme="light"] .bg-aurora--b  { background: radial-gradient(circle, rgba(78,81,133,.12), transparent 60%); }  /* faint indigo cool */
+:root[data-theme="light"] .bg-grid       { opacity: .5; }
+:root[data-theme="light"] .bg-vignette   { background: radial-gradient(ellipse 100% 62% at 50% -12%, rgba(255,255,255,.6), transparent 62%); }
 
 /* primary button: keep the drop shadow NEUTRAL on light (no colored glow) */
 :root[data-theme="light"] .btn--primary        { box-shadow: 0 8px 20px -12px rgba(0,0,0,.2), inset 0 1px 0 rgba(255,255,255,.3); }
@@ -113,12 +120,7 @@
 :root[data-theme="light"] .btn--danger        { background: color-mix(in srgb, var(--danger) 12%, var(--surface)); color: var(--danger); border-color: color-mix(in srgb, var(--danger) 34%, transparent); }
 :root[data-theme="light"] .btn--danger:hover  { background: color-mix(in srgb, var(--danger) 18%, var(--surface)); }
 
-/* cost index "Low" tile: retune the hard-coded greens to a deep AA green on light */
-:root[data-theme="light"] .cost-bars[data-level="1"] span[data-tier="Low"] {
-  color: #0A7048;
-  background: color-mix(in srgb, #0A7048 15%, var(--ink-2));
-  border-color: color-mix(in srgb, #0A7048 42%, transparent);
-}
+/* (cost "Low" tile now flows through --c-context in both themes — no light override needed) */
 
 * { box-sizing: border-box; }
 
@@ -141,7 +143,7 @@ body {
 
 h1, h2, h3 { margin: 0; font-weight: 700; letter-spacing: -0.028em; line-height: 1.05; }
 p { margin: 0; }
-em { font-style: italic; color: var(--accent); font-weight: 500; }
+em { font-style: italic; color: var(--accent-text); font-weight: 500; }
 button { font-family: inherit; }
 .mono { font-family: var(--mono); font-feature-settings: "tnum" 1; letter-spacing: -0.02em; }
 
@@ -162,11 +164,11 @@ button { font-family: inherit; }
 }
 .bg-aurora--a {
   width: 62vw; height: 62vw; top: -22vw; left: -14vw;
-  background: radial-gradient(circle, rgba(63,224,197,.22), transparent 62%);
+  background: radial-gradient(circle, rgba(255,54,33,.16), transparent 62%);   /* Lava warmth */
 }
 .bg-aurora--b {
   width: 55vw; height: 55vw; bottom: -24vw; right: -12vw;
-  background: radial-gradient(circle, rgba(91,168,255,.2), transparent 62%);
+  background: radial-gradient(circle, rgba(78,81,133,.30), transparent 62%);   /* indigo depth */
 }
 .bg-grid {
   position: absolute; inset: 0;
@@ -329,7 +331,7 @@ button { font-family: inherit; }
   border-color: color-mix(in srgb, var(--accent) 55%, transparent);
   background: color-mix(in srgb, var(--accent) 12%, var(--surface-2));
 }
-.preset[aria-pressed="true"] b { color: var(--accent); }
+.preset[aria-pressed="true"] b { color: var(--accent-text); }
 
 /* form */
 .field { margin-bottom: 15px; }
@@ -390,10 +392,10 @@ textarea#fPrompt { font-size: .9rem; min-height: 110px; }
   border-color: var(--hairline-strong);
 }
 .btn--ghost:hover { background: var(--surface-3); transform: translateY(-1px); }
-.btn--ghost[aria-expanded="true"] { border-color: color-mix(in srgb, var(--accent) 45%, transparent); color: var(--accent); }
+.btn--ghost[aria-expanded="true"] { border-color: color-mix(in srgb, var(--accent) 45%, transparent); color: var(--accent-text); }
 .btn--danger {
   background: color-mix(in srgb, var(--danger) 16%, var(--surface-2));
-  color: #ffd7d7; border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+  color: color-mix(in srgb, var(--danger) 42%, var(--text-hi)); border-color: color-mix(in srgb, var(--danger) 40%, transparent);
 }
 .btn--danger:hover { background: color-mix(in srgb, var(--danger) 26%, var(--surface-2)); transform: translateY(-1px); }
 .btn:disabled { opacity: .45; cursor: not-allowed; transform: none; box-shadow: none; }
@@ -429,7 +431,7 @@ textarea#fPrompt { font-size: .9rem; min-height: 110px; }
 .dataset-item-main span { font-size: .74rem; color: var(--text-lo); font-family: var(--mono); }
 .dataset-item-counts { display: flex; gap: 12px; flex: 0 0 auto; }
 .dataset-item-counts .dc { text-align: right; }
-.dataset-item-counts .dc b { font-family: var(--mono); font-size: .95rem; color: var(--accent); }
+.dataset-item-counts .dc b { font-family: var(--mono); font-size: .95rem; color: var(--accent-text); }
 .dataset-item-counts .dc span { display: block; font-size: .62rem; text-transform: uppercase; letter-spacing: .08em; color: var(--text-lo); }
 .dataset-empty, .dataset-loading { color: var(--text-lo); font-size: .86rem; padding: 14px 4px; text-align: center; }
 
@@ -494,7 +496,7 @@ textarea#fPrompt { font-size: .9rem; min-height: 110px; }
 .summary-badge, .fail-badge {
   font-size: .74rem; text-transform: uppercase; letter-spacing: .09em; font-weight: 600;
   padding: 5px 11px; border-radius: 999px;
-  color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent-text); background: color-mix(in srgb, var(--accent) 14%, transparent);
   border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
 }
 .summary-head h3 { font-size: 1.4rem; }
@@ -580,7 +582,7 @@ textarea#fPrompt { font-size: .9rem; min-height: 110px; }
 
 /* live caller identity */
 .caller-live { display: flex; align-items: center; gap: 12px; padding: 14px; border-radius: var(--r-md); background: var(--ink-2); border: 1px solid var(--hairline); margin-bottom: 16px; }
-.caller-live-avatar { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); flex: 0 0 auto; }
+.caller-live-avatar { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; color: var(--accent-text); background: color-mix(in srgb, var(--accent) 16%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); flex: 0 0 auto; }
 .caller-live b { display: block; font-size: .95rem; }
 .caller-live-tier { font-size: .74rem; color: var(--text-lo); font-family: var(--mono); }
 
@@ -625,7 +627,7 @@ textarea#fPrompt { font-size: .9rem; min-height: 110px; }
   border-color: color-mix(in srgb, var(--accent) 55%, transparent);
   background: color-mix(in srgb, var(--accent) 12%, var(--surface-2));
 }
-.ask-copied { min-height: 1.05em; margin-top: 9px; font-size: .74rem; color: var(--accent); }
+.ask-copied { min-height: 1.05em; margin-top: 9px; font-size: .74rem; color: var(--accent-text); }
 
 /* console: pillars */
 .console { min-width: 0; }
@@ -669,7 +671,7 @@ textarea#fPrompt { font-size: .9rem; min-height: 110px; }
 }
 .directive .dk { display: block; font-size: .62rem; text-transform: uppercase; letter-spacing: .06em; color: var(--text-lo); }
 .directive .dv { font-size: .84rem; font-weight: 600; color: var(--text-hi); font-family: var(--mono); }
-.directive .dv[data-bool="true"]  { color: var(--accent); }
+.directive .dv[data-bool="true"]  { color: var(--accent-text); }
 .directive .dv[data-bool="false"] { color: var(--text-lo); }
 
 /* context feed */
@@ -699,7 +701,7 @@ textarea#fPrompt { font-size: .9rem; min-height: 110px; }
   background: var(--ink-2); border: 1px solid var(--hairline);
   transition: all .35s ease;
 }
-.cost-bars[data-level="1"] span[data-tier="Low"]    { color: #8be6b0; background: color-mix(in srgb, #6ee7a8 18%, var(--ink-2)); border-color: color-mix(in srgb, #6ee7a8 40%, transparent); }
+.cost-bars[data-level="1"] span[data-tier="Low"]    { color: var(--c-context); background: color-mix(in srgb, var(--c-context) 18%, var(--ink-2)); border-color: color-mix(in srgb, var(--c-context) 40%, transparent); }
 .cost-bars[data-level="2"] span[data-tier="Medium"] { color: var(--c-control); background: color-mix(in srgb, var(--c-control) 18%, var(--ink-2)); border-color: color-mix(in srgb, var(--c-control) 40%, transparent); }
 .cost-bars[data-level="3"] span[data-tier="High"]   { color: var(--c-costs); background: color-mix(in srgb, var(--c-costs) 18%, var(--ink-2)); border-color: color-mix(in srgb, var(--c-costs) 40%, transparent); }
 .tokens-val { display: flex; align-items: baseline; gap: 5px; }
@@ -723,14 +725,14 @@ textarea#fPrompt { font-size: .9rem; min-height: 110px; }
 .transcript-head h3 { font-size: 1.05rem; }
 .transcript-live { display: inline-flex; align-items: center; gap: 7px; font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; color: var(--text-lo); }
 .transcript-live .conn-dot { background: var(--text-lo); }
-body[data-connected="true"] .transcript-live { color: var(--accent); }
+body[data-connected="true"] .transcript-live { color: var(--accent-text); }
 body[data-connected="true"] .transcript-live .conn-dot { background: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); animation: pulse 2s infinite; }
 .transcript { max-height: 340px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding-right: 4px; }
 .turn { display: flex; flex-direction: column; gap: 3px; max-width: 84%; }
 .turn[data-who="agent"] { align-self: flex-start; }
 .turn[data-who="you"] { align-self: flex-end; align-items: flex-end; }
 .turn-who { font-size: .64rem; text-transform: uppercase; letter-spacing: .1em; color: var(--text-lo); padding: 0 4px; }
-.turn[data-who="agent"] .turn-who { color: var(--accent); }
+.turn[data-who="agent"] .turn-who { color: var(--accent-text); }
 .turn[data-who="you"] .turn-who { color: var(--c-choice); }
 .turn-text {
   padding: 10px 14px; border-radius: 14px; font-size: .9rem; line-height: 1.45;

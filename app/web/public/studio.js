@@ -307,7 +307,7 @@
     $$(".preset").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.id === id)));
     saveDraft();
     if (HAS_GSAP) g.fromTo([fCompany, fRole, fPrompt],
-      { backgroundColor: "rgba(63,224,197,.10)" },
+      { backgroundColor: "rgba(255,54,33,.10)" },
       { backgroundColor: "rgba(0,0,0,0)", duration: 0.9, stagger: 0.06, ease: "power2.out", clearProps: "backgroundColor" });
   }
 
