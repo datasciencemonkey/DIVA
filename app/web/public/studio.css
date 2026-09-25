@@ -364,6 +364,28 @@ button { font-family: inherit; }
 .btn-draft:disabled { opacity: .5; cursor: not-allowed; }
 .btn-draft-ic { flex: 0 0 auto; }
 .btn-draft.is-loading .btn-draft-ic { animation: pulse 1s ease-in-out infinite; }
+
+/* topbar nav tab — Studio <-> Architecture (shared by both pages via studio.css) */
+.topbar-tabs { display: inline-flex; align-items: center; gap: 8px; }
+.topbar-link {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 7px 12px; border-radius: var(--r-sm);
+  font-size: .82rem; font-weight: 600; letter-spacing: -0.01em;
+  color: var(--text-mid); text-decoration: none;
+  border: 1px solid var(--hairline); background: var(--surface);
+  transition: color var(--dur-2) var(--ease-signature), background var(--dur-2) var(--ease-signature),
+              border-color var(--dur-2) var(--ease-signature), transform var(--dur-1) var(--ease-signature);
+}
+.topbar-link:hover { color: var(--text-hi); background: var(--surface-2); border-color: var(--hairline-strong); transform: translateY(-1px); }
+.topbar-link svg { flex: 0 0 auto; }
+.topbar-link[aria-current="page"] {
+  color: var(--accent-text);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+@media (max-width: 560px) {
+  .topbar-link .tl-label { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+}
 .field input, .field textarea, .config-form input, .config-form textarea {
   width: 100%; padding: 12px 14px;
   background: var(--ink-2); color: var(--text-hi);
