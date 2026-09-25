@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="color-scheme" content="dark light" />
 <title>Studio Architecture</title>
-<meta name="description" content="How UAIG Voice Studio governs a single voice call end to end — LiveKit transport, a governed agent, and two read-only tools behind MCP." />
+<meta name="description" content="How UAIG Voice Studio governs a single voice call end to end — LiveKit transport, a governed agent, the Unity AI Gateway (which exposes MCP), and a read-only Lakebase." />
 
 <!-- Apply the persisted theme before first paint so returning presenters never see a flash.
      Dark is the default; only a stored "light" preference flips the attribute. Shares the
@@ -24,7 +24,7 @@
      data readouts, inherited from studio.css. GSAP is the only CDN lib here (no livekit-client). -->
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400..800;1,9..40,400..800&display=swap" />
 
 <link rel="stylesheet" href="studio.css" />
 
@@ -182,8 +182,16 @@
   .tool-tag--ctx { fill: color-mix(in srgb, var(--c-context) 16%, transparent); stroke: color-mix(in srgb, var(--c-context) 42%, transparent); }
   .tool-tag-tx { font-size: 12px; font-weight: 700; letter-spacing: 0.12em; }
 
-  /* travelling signal packet — the one looping motion; hidden until GSAP drives it */
-  .d-packet { fill: var(--accent); opacity: 0; }
+  /* travelling signal packet — the one looping motion; hidden until GSAP drives it.
+     A soft accent glow reads as a live signal rather than a stray dot. */
+  .d-packet {
+    fill: var(--accent); opacity: 0;
+    filter: drop-shadow(0 0 5px color-mix(in srgb, var(--accent) 65%, transparent));
+  }
+
+  /* stacked expansion under the MCP title — horizontal words fit the narrow band;
+     rotated text at this width either clipped or shrank below legibility */
+  .d-mcp-word { fill: var(--text-lo); font-size: 10.5px; font-weight: 600; letter-spacing: .055em; }
 
   /* generation-lane panel */
   .gen-panel { fill: color-mix(in srgb, var(--text-lo) 5%, var(--ink-2)); stroke: var(--hairline); stroke-width: 1; }
@@ -305,8 +313,8 @@
     <h1 class="arch-title" data-anim>One call, <em>governed</em> from first word to last.</h1>
     <p class="arch-lede" data-anim>
       Every voice turn walks the same path: the caller's browser into a LiveKit room, an agent that
-      listens and speaks, then two governed tools behind <b>Model Context Protocol</b>. One is the
-      <b>Unity AI Gateway</b>, which routes each turn to the model a caller's tier has earned; the
+      listens and speaks, then two governed tools. One is the <b>Unity AI Gateway</b> — which exposes
+      <b>Model Context Protocol</b> and routes each turn to the model a caller's tier has earned; the
       other is <b>Lakebase</b>, the read-only store the assistant is allowed to know.
     </p>
     <ul class="arch-legend" data-anim aria-label="Pillar colour key">
@@ -324,7 +332,7 @@
       <!-- viewBox 1200 wide; min-width 1040 keeps rendered text >=11px even when scrolled on a phone.
            Strokes render fully drawn by default (CSS); GSAP only ADDS the entrance when it's live. -->
       <svg class="arch-svg draw-svg" viewBox="0 0 1200 880" role="img"
-           aria-label="Left to right: a caller in the browser reaches the Studio web tier, which mints a short-TTL LiveKit token carrying PII-free metadata and serves the SPA. The browser joins a LiveKit Cloud room whose token dispatch summons the agent worker. The agent runs Deepgram speech-to-text (nova-3), an LLM turn, and Deepgram text-to-speech (aura-2). The LLM turn calls the Unity AI Gateway through a Model Context Protocol band; the gateway governs and routes to one of three models by the caller's governed tier. Two read-only tools reach Lakebase: read_loyalty_context returns the governed tier, and semantic_search retrieves knowledge with pgvector ANN and BM25. Token usage is metered as costs. Separately, one time per world, the studio drafts synthetic data through the gateway and embeds it into Lakebase.">
+           aria-label="Left to right: a caller in the browser reaches the Studio web tier, which mints a short-TTL LiveKit token carrying PII-free metadata and serves the SPA. The browser joins a LiveKit Cloud room whose token dispatch summons the agent worker. The agent runs Deepgram speech-to-text (nova-3), an LLM turn, and Deepgram text-to-speech (aura-2). The LLM turn calls the Unity AI Gateway, which exposes a Model Context Protocol interface, and routes to one of three models by the caller's governed tier. Two read-only tools reach Lakebase: read_loyalty_context returns the governed tier, and semantic_search retrieves knowledge with pgvector ANN and BM25. Token usage is metered as costs. Separately, one time per world, the studio drafts synthetic data through the gateway and embeds it into Lakebase.">
 
         <!-- ============ EDGES (behind nodes) ============ -->
         <g>
@@ -334,31 +342,30 @@
           <!-- Studio -> LiveKit (JWT + dispatch + metadata) -->
           <path class="d-edge" d="M436 288 L470 288"/>
           <path class="d-edge" d="M462 282 L470 288 L462 294"/>
-          <!-- LiveKit -> Agent : audio in (up into STT) -->
-          <path class="d-edge e-lava" d="M638 274 C 662 244, 672 214, 690 202"/>
-          <path class="d-edge e-lava" d="M683 196 L690 202 L682 208"/>
-          <!-- Agent -> LiveKit : audio out (down from TTS, back to the caller) -->
-          <path class="d-edge e-lava" d="M690 452 C 668 448, 648 336, 638 306"/>
-          <path class="d-edge e-lava" d="M632 314 L638 306 L645 312"/>
+          <!-- LiveKit -> Agent : audio in (arcs up, lands on the STT top edge) -->
+          <path class="d-edge e-lava" d="M638 262 C 660 240, 676 222, 706 222"/>
+          <path class="d-edge e-lava" d="M698 215 L706 222 L698 229"/>
+          <!-- Agent -> LiveKit : audio out (leaves the TTS left edge, back to the caller) -->
+          <path class="d-edge e-lava" d="M700 434 C 664 432, 646 356, 638 310"/>
+          <path class="d-edge e-lava" d="M631 317 L638 310 L645 317"/>
           <!-- STT -> LLM -> TTS (inside the agent) -->
           <path class="d-edge" d="M786 246 L786 268"/>
           <path class="d-edge" d="M780 262 L786 268 L792 262"/>
           <path class="d-edge" d="M786 360 L786 382"/>
           <path class="d-edge" d="M780 376 L786 382 L792 376"/>
-          <!-- LLM turn -> MCP band -> Unity AI Gateway (the inference call) -->
-          <path class="d-edge e-lava" d="M878 311 L912 311"/>
-          <path class="d-edge e-lava" d="M974 300 C 986 288, 992 262, 1000 250"/>
-          <path class="d-edge e-lava" d="M994 258 L1000 250 L1006 257"/>
+          <!-- LLM turn -> Unity AI Gateway : the inference call lands at the gateway's MCP interface -->
+          <path class="d-edge e-lava" d="M872 311 L926 311"/>
+          <path class="d-edge e-lava" d="M920 305 L926 311 L920 317"/>
           <!-- governed tier -> model : Lakebase feeds the gateway's routing decision (Control -> Choice) -->
           <path class="d-edge e-control" d="M1176 430 L1176 372"/>
           <path class="d-edge e-control" d="M1170 380 L1176 372 L1182 380"/>
           <!-- read-only tool calls : agent -> Lakebase -->
           <path class="d-edge e-context" d="M872 378 C 910 440, 955 468, 1000 474"/>
           <path class="d-edge e-context" d="M992 468 L1000 474 L995 482"/>
-          <path class="d-edge e-control" d="M888 470 C 938 502, 968 544, 1000 560"/>
+          <path class="d-edge e-control" d="M900 484 C 940 508, 968 546, 1000 560"/>
           <path class="d-edge e-control" d="M992 554 L1000 560 L995 568"/>
           <!-- session usage -> Costs -->
-          <path class="d-edge e-costs" d="M786 502 L786 522"/>
+          <path class="d-edge e-costs" d="M786 494 L786 522"/>
           <path class="d-edge e-costs" d="M780 516 L786 522 L792 516"/>
         </g>
 
@@ -413,7 +420,7 @@
 
         <!-- Agent worker (tall shell grouping STT / LLM / TTS) -->
         <g class="d-reveal">
-          <rect class="d-agent-shell" x="672" y="150" width="228" height="366" rx="18"/>
+          <rect class="d-agent-shell" x="672" y="150" width="228" height="344" rx="18"/>
           <g class="d-ic ic-choice" transform="translate(692,170)">
             <rect x="0" y="3" width="18" height="13" rx="3"/>
             <path d="M6 3V1.5M12 3V1.5M4 8h2M12 8h2M4 12h6"/>
@@ -448,20 +455,19 @@
           <text class="d-mono t-lava" x="742" y="454">aura-2</text>
         </g>
 
-        <!-- MCP band — the governed access layer fronting the gateway -->
+        <!-- Unity AI Gateway — BIG governed Tool. It EXPOSES a Model Context Protocol
+             interface (inner panel, left) and routes each turn to the model the caller's
+             governed tier has earned. MCP lives INSIDE the gateway, not as a separate hop. -->
         <g class="d-reveal">
-          <rect class="d-node--mcp" x="912" y="228" width="62" height="166" rx="14"/>
-          <text class="d-title t-lava" x="943" y="262" text-anchor="middle">MCP</text>
-          <g class="d-ic ic-lava" transform="translate(933,278)">
-            <rect x="0" y="4.5" width="20" height="14" rx="2.4" transform="translate(-10,0)"/>
-            <path d="M-4 4.5V2a4 4 0 0 1 8 0v2.5"/>
-          </g>
-          <text class="d-tag t-lava" x="943" y="316" text-anchor="middle" transform="rotate(90 943 316)">MODEL CONTEXT PROTOCOL</text>
-        </g>
+          <rect class="d-node--uaig" x="926" y="140" width="258" height="232" rx="18"/>
 
-        <!-- Unity AI Gateway — BIG governed Tool (Choice / routing) -->
-        <g class="d-reveal">
-          <rect class="d-node--uaig" x="1000" y="140" width="184" height="232" rx="18"/>
+          <!-- MCP — the gateway's Model Context Protocol interface, inside the gateway -->
+          <rect class="d-node--mcp" x="938" y="192" width="68" height="140" rx="12"/>
+          <text class="d-title t-lava" x="972" y="228" text-anchor="middle" style="font-size:15px">MCP</text>
+          <text class="d-mcp-word" x="972" y="256" text-anchor="middle">MODEL</text>
+          <text class="d-mcp-word" x="972" y="274" text-anchor="middle">CONTEXT</text>
+          <text class="d-mcp-word" x="972" y="292" text-anchor="middle">PROTOCOL</text>
+
           <!-- TOOL tag -->
           <rect class="tool-tag" x="1120" y="152" width="52" height="22" rx="11"/>
           <text class="tool-tag-tx t-lava" x="1146" y="167" text-anchor="middle">TOOL</text>
@@ -556,7 +562,12 @@
           <path class="d-genedge" d="M816 784 L900 784"/>
         </g>
 
-        <!-- travelling signal packet — one looping motion along the live call spine -->
+        <!-- the live-call spine: an invisible authored path threading caller -> studio ->
+             LiveKit -> (audio in) STT -> LLM -> MCP -> the governed route. The signal packet
+             rides it via MotionPathPlugin so the loop tracks the drawn topology exactly. -->
+        <path id="spinePath" aria-hidden="true" fill="none" stroke="none"
+              d="M118 288 L554 288 C616 288 648 258 668 240 C682 228 692 222 706 222 C738 222 772 240 786 257 L786 350 C828 350 846 311 872 311 L943 311 C972 311 984 290 998 254 C1022 246 1062 246 1088 254"/>
+        <!-- travelling signal packet — one looping motion along the spine above -->
         <circle class="d-packet" id="flowPacket" cx="0" cy="0" r="6"/>
       </svg>
      </div>
@@ -631,14 +642,17 @@
 
 </main>
 
-<!-- CDN lib: GSAP only (cdnjs, same as the studio). No livekit-client here. Then page logic inline. -->
+<!-- CDN libs (cdnjs, same origin as the studio's GSAP): core + MotionPathPlugin, which the
+     signal packet needs to ride the authored spine. No livekit-client here. -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/MotionPathPlugin.min.js"></script>
 <script>
 /* =============================================================================
    Studio Architecture — page logic. Mirrors the studio's motion language:
    one exponential ease-out (power3.out), draws that resolve from the already-drawn
-   default frame, and a single looping signal packet. Degrades to the finished,
-   legible frame with no GSAP and honours prefers-reduced-motion.
+   default frame, and a single looping signal packet that rides the authored spine.
+   Degrades to the finished, legible frame with no GSAP and honours
+   prefers-reduced-motion.
    ========================================================================== */
 (() => {
   "use strict";
@@ -725,26 +739,22 @@
   }
 
   /* One looping signal packet down the live call spine: caller -> studio -> LiveKit ->
-     agent -> MCP -> gateway. Discrete waypoints, no motion-path plugin needed. */
+     STT -> LLM -> MCP -> gateway. Rides the authored #spinePath via MotionPathPlugin so
+     the motion tracks the drawn edges instead of cutting across the boxes. */
   function startFlowPacket() {
-    if (!HAS_GSAP) return;
+    if (!HAS_GSAP || !window.MotionPathPlugin) return;
     const pk = $("#flowPacket");
-    if (!pk) return;
-    const stops = [
-      { x: 118, y: 288 },              // caller
-      { x: 330, y: 288, d: 0.55 },     // studio
-      { x: 554, y: 288, d: 0.55 },     // LiveKit
-      { x: 786, y: 336, d: 0.60 },     // agent / LLM turn
-      { x: 943, y: 311, d: 0.45 },     // MCP band
-      { x: 1060, y: 255, d: 0.55 },    // gateway (chosen route)
-    ];
-    const tl = g.timeline({ repeat: -1, repeatDelay: 0.9, delay: 1.5 });
-    tl.set(pk, { x: stops[0].x, y: stops[0].y, opacity: 0 });
-    tl.to(pk, { opacity: 1, duration: 0.25, ease: "power1.out" });
-    for (let i = 1; i < stops.length; i++) {
-      tl.to(pk, { x: stops[i].x, y: stops[i].y, duration: stops[i].d || 0.55, ease: "sine.inOut" });
-    }
-    tl.to(pk, { opacity: 0, duration: 0.3 }, "-=0.05");
+    const spine = $("#spinePath");
+    if (!pk || !spine) return;
+    g.registerPlugin(window.MotionPathPlugin);
+    const tl = g.timeline({ repeat: -1, repeatDelay: 1.15, delay: 1.7 });
+    tl.set(pk, { opacity: 0 });
+    tl.to(pk, { opacity: 1, duration: 0.3, ease: "power1.out" });
+    tl.to(pk, {
+      motionPath: { path: spine, alignOrigin: [0.5, 0.5] },
+      duration: 4.6, ease: "power1.inOut",
+    }, 0.05);
+    tl.to(pk, { opacity: 0, duration: 0.35, ease: "power1.in" }, "-=0.45");
   }
 
   function boot() {
