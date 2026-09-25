@@ -36,6 +36,7 @@ if str(_REPO_ROOT) not in sys.path:
 
 from src.generate import generate_dataset  # noqa: E402
 from src.services.db import SCHEMA, _run_query, create_pool  # noqa: E402
+from src.services.uaig_chat import complete_json  # noqa: E402
 
 ROOT = Path(__file__).parent
 PUBLIC = ROOT / "web" / "public"
@@ -273,6 +274,70 @@ def _datasets_payload() -> dict:
         return {"datasets": []}
 
 
+# --- AI-drafted system prompt (Plan 4, feature 2) ---------------------------
+#
+# A caller-facing demo wants "type the company, get a tailored prompt" — but the
+# loyalty-tier ban is a governance invariant, not a suggestion. Draft via the gateway,
+# then GUARANTEE the ban server-side so an LLM draft can never violate it.
+
+_TIER_GUARDRAIL = "Never state or guess a caller's loyalty/rewards tier or status."
+
+_PROMPT_SYSTEM = (
+    "You write concise, voice-friendly system prompts for a phone support agent. "
+    "The agent answers ONLY from governed tools (account lookups, policy/FAQ retrieval) "
+    "and abstains when it lacks data — it never invents facts. Write in short, spoken-style "
+    "sentences the agent can follow on a live call. Do NOT include any instruction that "
+    "reveals, states, or guesses a caller's loyalty or rewards tier or status. "
+    'Return ONLY a JSON object of the form {"system_prompt": "..."}.'
+)
+
+
+def _fallback_prompt(company: str, role: str) -> str:
+    """Deterministic, governance-safe prompt used when the gateway is unavailable."""
+    who = (company or "").strip() or "the company"
+    return (
+        f"You are a friendly, professional voice support agent for {who}. "
+        "Answer callers using only the account and policy tools available to you; "
+        "if the tools do not have an answer, say so plainly rather than guessing. "
+        "Keep replies short and natural for a phone call, and confirm key details back "
+        f"to the caller when it helps. {_TIER_GUARDRAIL}"
+    )
+
+
+def _ensure_guardrail(prompt: str) -> str:
+    """Guarantee the loyalty-tier ban: append the canonical sentence unless the draft
+    already forbids revealing a caller's tier/status."""
+    p = (prompt or "").strip()
+    if not p:
+        return ""
+    low = p.lower()
+    covers_tier = "loyalty" in low and ("tier" in low or "status" in low)
+    negated = any(neg in low for neg in ("never", "not", "n't"))
+    if covers_tier and negated:
+        return p
+    sep = " " if p.endswith((".", "!", "?")) else ". "
+    return p + sep + _TIER_GUARDRAIL
+
+
+def _draft_system_prompt(company: str, role: str) -> str:
+    """Draft a company-tailored voice-agent system prompt via UAIG, governance-enforced.
+    Fail-soft: any gateway error or empty draft falls back to a deterministic template."""
+    try:
+        resp = complete_json(
+            _PROMPT_SYSTEM,
+            f"Company: {(company or '').strip() or 'a consumer brand'}\n"
+            f"Assistant role: {(role or '').strip() or 'customer support voice agent'}\n"
+            "Write the system prompt now.",
+            GEN_MODEL,
+        )
+        drafted = str(resp.get("system_prompt", "")).strip()
+    except Exception:  # noqa: BLE001 — gateway hiccup -> deterministic template
+        drafted = ""
+    if not drafted:
+        return _fallback_prompt(company, role)
+    return _ensure_guardrail(drafted)
+
+
 # --- Grounded example questions (Plan 4) ------------------------------------
 #
 # A caller facing a live mic needs prompts, or there's no context for what this
@@ -358,6 +423,17 @@ class Handler(SimpleHTTPRequestHandler):
                 daemon=True,
             ).start()
             self._send_json(202, {"job_id": job_id})
+            return
+        if parsed.path == "/api/generate-prompt":
+            length = int(self.headers.get("Content-Length") or 0)
+            raw = self.rfile.read(length) if length > 0 else b""
+            try:
+                data = json.loads(raw or b"{}")
+            except (ValueError, TypeError):
+                data = {}
+            prompt = _draft_system_prompt(
+                str(data.get("company", "")), str(data.get("role", "")))
+            self._send_json(200, {"system_prompt": prompt})
             return
         self.send_error(404, "Not Found")
 

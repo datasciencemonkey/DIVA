@@ -34,6 +34,7 @@
 <div class="bg" aria-hidden="true">
   <div class="bg-aurora bg-aurora--a"></div>
   <div class="bg-aurora bg-aurora--b"></div>
+  <div class="bg-aurora bg-aurora--c"></div>
   <div class="bg-grid"></div>
   <div class="bg-vignette"></div>
 </div>
@@ -179,7 +180,16 @@
             <input id="fRole" name="role" type="text" placeholder="e.g. Airline support agent" required />
           </div>
           <div class="field">
-            <label for="fPrompt">System prompt <span class="field-hint">voice-friendly · answers only from tools</span></label>
+            <div class="field-labelrow">
+              <label for="fPrompt">System prompt <span class="field-hint">voice-friendly · answers only from tools</span></label>
+              <button type="button" class="btn-draft" id="btnDraftPrompt" disabled aria-label="Draft the system prompt with AI from the company name" title="Enter a company name first">
+                <svg class="btn-draft-ic" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M12 3.2l1.7 4.9 4.9 1.7-4.9 1.7L12 16.4l-1.7-4.9L5.4 9.8l4.9-1.7z"/>
+                  <path d="M18.5 15.2l.7 2.1 2.1.7-2.1.7-.7 2.1-.7-2.1-2.1-.7 2.1-.7z"/>
+                </svg>
+                <span class="btn-draft-label">Draft with AI</span>
+              </button>
+            </div>
             <textarea id="fPrompt" name="system_prompt" rows="5" placeholder="Describe how the assistant should behave on a call…" required></textarea>
           </div>
 

@@ -335,6 +335,7 @@
     fPrompt.value = p.system_prompt;
     $$(".preset").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.id === id)));
     saveDraft();
+    syncDraftBtn();
     if (HAS_GSAP) g.fromTo([fCompany, fRole, fPrompt],
       { backgroundColor: "rgba(255,54,33,.10)" },
       { backgroundColor: "rgba(0,0,0,0)", duration: 0.9, stagger: 0.06, ease: "power2.out", clearProps: "backgroundColor" });
@@ -369,7 +370,54 @@
       $$(".preset").forEach((b) => b.setAttribute("aria-pressed", "false"));
     }
     saveDraft();
+    syncDraftBtn();
   }));
+
+  /* ---- draft the system prompt with AI (governed: server enforces the tier ban) ---- */
+  const btnDraft = $("#btnDraftPrompt");
+  function syncDraftBtn() {
+    if (!btnDraft) return;
+    const ready = !!fCompany.value.trim();
+    btnDraft.disabled = !ready || btnDraft.classList.contains("is-loading");
+    btnDraft.title = ready ? "Draft a starting prompt from the company name"
+                           : "Enter a company name first";
+  }
+  if (btnDraft) {
+    btnDraft.addEventListener("click", async () => {
+      const company = fCompany.value.trim();
+      if (!company) return;
+      const label = btnDraft.querySelector(".btn-draft-label");
+      const prev = label ? label.textContent : "";
+      btnDraft.classList.add("is-loading");
+      btnDraft.disabled = true;
+      if (label) label.textContent = "Drafting…";
+      try {
+        const r = await fetch("/api/generate-prompt", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ company, role: fRole.value.trim() }),
+        });
+        const data = r.ok ? await r.json() : null;
+        const sp = data && typeof data.system_prompt === "string" ? data.system_prompt.trim() : "";
+        if (sp) {
+          fPrompt.value = sp;
+          if (state.presetId) {
+            state.presetId = null;
+            $$(".preset").forEach((b) => b.setAttribute("aria-pressed", "false"));
+          }
+          saveDraft();
+          if (HAS_GSAP) g.fromTo(fPrompt,
+            { backgroundColor: "rgba(255,54,33,.10)" },
+            { backgroundColor: "rgba(0,0,0,0)", duration: 0.9, ease: "power2.out", clearProps: "backgroundColor" });
+        }
+      } catch { /* offline / network — leave the field for manual entry */ }
+      finally {
+        if (label) label.textContent = prev;
+        btnDraft.classList.remove("is-loading");
+        syncDraftBtn();
+      }
+    });
+  }
 
   $("#configForm").addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -1242,12 +1290,16 @@
     initTheme();
     renderPresets();
     loadDraft();
+    syncDraftBtn();
     setStepper("configure");
     // intro reveal
     animIn($$("[data-anim]"), { y: 22, stagger: 0.08, dur: 0.7, delay: 0.05 });
     if (HAS_GSAP) {
-      g.to(".bg-aurora--a", { xPercent: 8, yPercent: 6, duration: 18, repeat: -1, yoyo: true, ease: "sine.inOut" });
-      g.to(".bg-aurora--b", { xPercent: -6, yPercent: -8, duration: 22, repeat: -1, yoyo: true, ease: "sine.inOut" });
+      // slow, de-synced orb drift (coprime-ish durations never resync) + a gentle
+      // scale breath — "slight but alive"; transform/opacity only, reduced-motion opts out
+      g.to(".bg-aurora--a", { xPercent: 13, yPercent: 9, scale: 1.06, duration: 17, repeat: -1, yoyo: true, ease: "sine.inOut" });
+      g.to(".bg-aurora--b", { xPercent: -11, yPercent: -8, scale: 1.08, duration: 23, repeat: -1, yoyo: true, ease: "sine.inOut" });
+      g.to(".bg-aurora--c", { xPercent: 9, yPercent: -12, scale: 1.10, duration: 29, repeat: -1, yoyo: true, ease: "sine.inOut" });
     }
     startHeroMotif();   // draws the governed-voice motif, then loops its signal packet
   }

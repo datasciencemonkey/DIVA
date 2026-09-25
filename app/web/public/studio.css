@@ -109,6 +109,7 @@
 :root[data-theme="light"] .bg-aurora     { opacity: .30; filter: blur(100px); }
 :root[data-theme="light"] .bg-aurora--a  { background: radial-gradient(circle, rgba(255,54,33,.10), transparent 60%); }   /* faint Lava warmth */
 :root[data-theme="light"] .bg-aurora--b  { background: radial-gradient(circle, rgba(78,81,133,.12), transparent 60%); }  /* faint indigo cool */
+:root[data-theme="light"] .bg-aurora--c  { background: radial-gradient(circle, rgba(20,95,59,.08), transparent 60%); }   /* faint mint */
 :root[data-theme="light"] .bg-grid       { opacity: .5; }
 :root[data-theme="light"] .bg-vignette   { background: radial-gradient(ellipse 100% 62% at 50% -12%, rgba(255,255,255,.6), transparent 62%); }
 
@@ -169,6 +170,10 @@ button { font-family: inherit; }
 .bg-aurora--b {
   width: 55vw; height: 55vw; bottom: -24vw; right: -12vw;
   background: radial-gradient(circle, rgba(78,81,133,.30), transparent 62%);   /* indigo depth */
+}
+.bg-aurora--c {
+  width: 46vw; height: 46vw; top: 26vh; left: 39vw;
+  background: radial-gradient(circle, rgba(153,221,180,.14), transparent 62%);   /* mint depth (Context) */
 }
 .bg-grid {
   position: absolute; inset: 0;
@@ -341,6 +346,24 @@ button { font-family: inherit; }
   margin-bottom: 7px;
 }
 .field-hint { color: var(--text-lo); font-weight: 400; font-size: .72rem; margin-left: 6px; }
+
+/* label row: field label + inline "Draft with AI" action (server enforces the tier ban) */
+.field-labelrow { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 7px; }
+.field-labelrow label { margin-bottom: 0; }
+.btn-draft {
+  display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto;
+  padding: 5px 11px; border-radius: var(--r-sm);
+  font-family: inherit; font-size: .72rem; font-weight: 600; letter-spacing: -0.01em;
+  color: var(--accent-text);
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface-2));
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, transparent);
+  cursor: pointer;
+  transition: background var(--dur-2) var(--ease-signature), transform var(--dur-1) var(--ease-signature), opacity var(--dur-2) ease;
+}
+.btn-draft:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 17%, var(--surface-2)); transform: translateY(-1px); }
+.btn-draft:disabled { opacity: .5; cursor: not-allowed; }
+.btn-draft-ic { flex: 0 0 auto; }
+.btn-draft.is-loading .btn-draft-ic { animation: pulse 1s ease-in-out infinite; }
 .field input, .field textarea, .config-form input, .config-form textarea {
   width: 100%; padding: 12px 14px;
   background: var(--ink-2); color: var(--text-hi);
