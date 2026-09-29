@@ -1,0 +1,26 @@
+# Direct dependencies for the LiveKit agent worker (installed into /tmp/agent-venv).
+# DO NOT hand this to the platform as requirements.txt, and DO NOT `uv export` a
+# lock resolved for Python 3.12 — the Apps runtime is Python 3.11 and a 3.12 lock
+# pins numpy 2.5.x (requires py>=3.12), which fails to install.
+#
+# Compile PINNED, 3.11-valid output before deploying:
+#   uv pip compile agent-requirements.in --python-version 3.11 -o agent-requirements.txt
+#
+# Swap the plugin set (deepgram/openai/silero) for your STT/LLM/TTS providers.
+
+livekit
+livekit-agents
+livekit-api
+livekit-plugins-openai       # LLM over an OpenAI-compatible endpoint (the AI Gateway)
+livekit-plugins-deepgram     # STT + TTS
+livekit-plugins-silero       # VAD
+# Databricks + data
+databricks-sdk
+psycopg[binary]              # Lakebase (Postgres) driver
+psycopg-pool
+python-dotenv
+requests
+httpx
+# MLflow / OTel tracing export
+opentelemetry-sdk
+opentelemetry-exporter-otlp-proto-http
