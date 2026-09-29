@@ -64,10 +64,11 @@
     caller: null,           // { kind, id, name, tier }
     room: null,
     audio: { ctx: null, raf: null, els: [] },
-    metrics: { t0: null, awaiting: false, latencies: [] },
+    metrics: { inTok: 0, outTok: 0, perTurn: [] },
     boundModel: null,
     retrievals: 0,
     turns: new Map(),       // segment id -> DOM element
+    callStart: null,        // first transcript segment's timestamp (elapsed mm:ss base)
     examples: [],           // grounded read-aloud prompts for the current world
   };
 
@@ -78,6 +79,7 @@
     {
       id: "cascade", company: "Cascade Airlines", domain: "Airline",
       role: "Airline support agent",
+      icon: '<path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/>',
       system_prompt:
         "You are the voice assistant for Cascade Airlines. Answer only from your tools and " +
         "retrieved policies — never invent fares, schedules, baggage rules, or booking details. " +
@@ -87,6 +89,7 @@
     {
       id: "wayfarer", company: "Wayfarer Voyages", domain: "Cruise line",
       role: "Cruise guest support agent",
+      icon: '<path d="M12 3v7"/><path d="M7 10h10l2.5 5H4.5L7 10z"/><path d="M3 19c2 1.4 4 1.4 6 0s4-1.4 6 0 4 1.4 6 0"/>',
       system_prompt:
         "You are the voice assistant for Wayfarer Voyages, a cruise line. Answer only from your " +
         "tools and retrieved policies — never invent itineraries, cabin availability, excursion " +
@@ -96,6 +99,7 @@
     {
       id: "harborstone", company: "Harborstone Hotels", domain: "Hotels & resorts",
       role: "Guest services agent",
+      icon: '<path d="M5 21V4h14v17"/><path d="M8.5 8h2M13.5 8h2M8.5 12h2M13.5 12h2"/><path d="M11 21v-3h2v3"/>',
       system_prompt:
         "You are the voice assistant for Harborstone Hotels & Resorts. Answer only from your tools " +
         "and retrieved policies — never invent rates, room availability, amenities, or reservation " +
@@ -105,6 +109,7 @@
     {
       id: "nestly", company: "Nestly Stays", domain: "Vacation rentals",
       role: "Host & guest support agent",
+      icon: '<path d="M4 11l8-7 8 7"/><path d="M6 9.5V20h12V9.5"/><path d="M10.5 20v-5h3v5"/>',
       system_prompt:
         "You are the voice assistant for Nestly Stays, a vacation-rental platform. Answer only from " +
         "your tools and retrieved policies — never invent property details, house rules, prices, or " +
@@ -114,6 +119,7 @@
     {
       id: "brightwok", company: "Brightwok Kitchen", domain: "Quick-service",
       role: "Order & rewards support agent",
+      icon: '<path d="M4 9a8 5 0 0 1 16 0z"/><path d="M4 14h16"/><path d="M4 18h16a8 3 0 0 1-16 0z"/>',
       system_prompt:
         "You are the voice assistant for Brightwok Kitchen, a quick-service restaurant. Answer only " +
         "from your tools and retrieved menu and policies — never invent menu items, prices, order " +
@@ -320,7 +326,9 @@
       b.className = "preset";
       b.setAttribute("aria-pressed", "false");
       b.dataset.id = p.id;
-      b.innerHTML = `<b>${p.company}</b><span>${p.domain}</span>`;
+      b.innerHTML =
+        `<span class="preset-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${p.icon}</svg></span>` +
+        `<span class="preset-t"><b>${p.company}</b><span>${p.domain}</span></span>`;
       b.addEventListener("click", () => applyPreset(p.id));
       wrap.appendChild(b);
     });
@@ -475,7 +483,7 @@
         item.setAttribute("role", "listitem");
         item.innerHTML =
           `<div class="dataset-item-main"><b>${esc(d.company_name || "Untitled world")}</b>` +
-          `<span>${esc(String(d.data_generation_id || "").slice(0, 18))}…</span></div>` +
+          `<span>${esc(shortId(d.data_generation_id))}</span></div>` +
           `<div class="dataset-item-counts">` +
             `<div class="dc"><b>${num(d.doc_count)}</b><span>docs</span></div>` +
             `<div class="dc"><b>${num(d.customer_count)}</b><span>callers</span></div>` +
@@ -800,6 +808,27 @@
   /* ---- connect / call lifecycle --------------------------------------- */
   btnConnect.addEventListener("click", connect);
   $("#btnEnd").addEventListener("click", () => endCall(true));
+
+  /* ---- microphone mute (LocalParticipant.setMicrophoneEnabled) ---- */
+  const btnMute = $("#btnMute");
+  function setMuteUI(muted) {
+    btnMute.setAttribute("aria-pressed", String(muted));
+    $("#muteLabel").textContent = muted ? "Unmute" : "Mute";
+    btnMute.title = muted ? "Unmute the microphone" : "Mute the microphone";
+  }
+  btnMute.addEventListener("click", async () => {
+    if (!state.room) return;
+    const muted = btnMute.getAttribute("aria-pressed") !== "true";
+    try {
+      // setMicrophoneEnabled is the LiveKit client API this app already uses in
+      // connect() and is guaranteed present in the vendored client (enabled = !muted).
+      // The old setMicrophoneMuted() path was a silent no-op: that method does not
+      // exist on LocalParticipant, and the getTrackPublication fallback threw when
+      // LK.Track was undefined — both errors were swallowed, so the button did nothing.
+      await state.room.localParticipant.setMicrophoneEnabled(!muted);
+      setMuteUI(muted);
+    } catch (err) { console.error("[mute] toggle failed", err); }
+  });
   $("#btnLiveBack").addEventListener("click", () => { endCall(false); goStage("configure"); });
 
   async function connect() {
@@ -872,6 +901,7 @@
     try { if (state.room) state.room.disconnect(); } catch { /* noop */ }
     state.room = null;
     stopMicMeter();
+    setMuteUI(false);
     if (toSetup) resetCallUI();
   }
 
@@ -884,6 +914,7 @@
     btnConnect.disabled = !state.caller;
     onSpeakers([]);
     stopMicSignal();
+    setMuteUI(false);
   }
 
   function setConn(stateName, label) {
@@ -1059,7 +1090,10 @@
         el = document.createElement("div");
         el.className = "turn";
         el.dataset.who = who;
-        el.innerHTML = `<span class="turn-who">${who === "agent" ? "Agent" : "Caller"}</span><span class="turn-text"></span>`;
+        const start = seg.startTime || Date.now();
+        state.callStart = state.callStart || start;
+        const elapsed = Math.max(0, Math.round((start - state.callStart) / 1000));
+        el.innerHTML = `<span class="turn-who">${who === "agent" ? "Agent" : "Caller"}<i class="turn-time">${fmtElapsed(elapsed)}</i></span><span class="turn-text"></span>`;
         feed.appendChild(el);
         state.turns.set(id, el);
       }
@@ -1208,6 +1242,7 @@
     $("#turnSpark").innerHTML = "";
     state.retrievals = 0;
     state.metrics = { inTok: 0, outTok: 0, perTurn: [] };
+    state.callStart = null;
     state.turns.clear();
     $("#transcript").innerHTML = `<div class="await">The conversation will appear here once you connect.</div>`;
   }
@@ -1278,6 +1313,8 @@
       .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
   function num(v) { return (v == null || isNaN(v)) ? "—" : String(v); }
+  function shortId(s, n = 18) { const t = String(s || "").trim(); return t.length > n ? t.slice(0, n) + "…" : t; }
+  function fmtElapsed(s) { return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; }
   function pretty(k) { return String(k).replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()); }
   function errMsg(e) { return (e && e.message) ? e.message : String(e); }
 
@@ -1294,6 +1331,7 @@
     setStepper("configure");
     // intro reveal
     animIn($$("[data-anim]"), { y: 22, stagger: 0.08, dur: 0.7, delay: 0.05 });
+    drawIn($$(".hero-title em svg"), { dur: 0.7, delay: 0.55, ease: "power3.out" });   // the "only" underline draws with the hero
     if (HAS_GSAP) {
       // slow, de-synced orb drift (coprime-ish durations never resync) + a gentle
       // scale breath — "slight but alive"; transform/opacity only, reduced-motion opts out

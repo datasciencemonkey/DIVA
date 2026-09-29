@@ -24,7 +24,7 @@
      system monospace stack (see studio.css). GSAP + livekit-client are the only CDN libs. -->
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400..800;1,9..40,400..800&display=swap" />
 
 <link rel="stylesheet" href="studio.css" />
 </head>
@@ -58,9 +58,9 @@
 
   <nav class="stepper" aria-label="Studio progress">
     <ol>
-      <li class="step" data-step="configure" aria-current="step"><span class="step-l">Configure</span></li>
-      <li class="step" data-step="generate"><span class="step-l">Generate</span></li>
-      <li class="step" data-step="live"><span class="step-l">Live</span></li>
+      <li class="step" data-step="configure" aria-current="step"><span class="step-l">Configure</span><svg class="step-check" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg></li>
+      <li class="step" data-step="generate"><span class="step-l">Generate</span><svg class="step-check" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg></li>
+      <li class="step" data-step="live"><span class="step-l">Live</span><svg class="step-check" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg></li>
     </ol>
   </nav>
 
@@ -94,7 +94,7 @@
 
       <div class="hero">
         <h1 class="hero-title" data-anim>
-          Give any brand a voice<br/>that answers <em>only</em> from what it knows.
+          Give any brand a voice<br/>that answers <em>only<svg class="em-line draw-svg" viewBox="0 0 100 12" preserveAspectRatio="none" aria-hidden="true"><path d="M3 8.5C28 3.5 72 3.5 97 8.5" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/></svg></em> from what it knows.
         </h1>
         <p class="hero-sub" data-anim>
           Configure an assistant, generate its world of policies, customers and knowledge,
@@ -375,10 +375,17 @@
               </div>
             </div>
 
-            <button type="button" class="btn btn--danger btn--block" id="btnEnd">
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 5l14 14"/><path d="M4.5 5.5C4.5 14 10 19.5 18.5 19.5l.9-2.7a1.4 1.4 0 0 0-.8-1.7l-2.7-1.1a1.4 1.4 0 0 0-1.6.4l-.8 1a11 11 0 0 1-4.5-4.5l1-.8a1.4 1.4 0 0 0 .4-1.6L9 5.9a1.4 1.4 0 0 0-1.7-.8z"/></svg>
-              <span>End call</span>
-            </button>
+            <div class="call-actions">
+              <button type="button" class="btn btn--ghost btn--block" id="btnMute" aria-pressed="false" title="Mute the microphone">
+                <svg class="ic-mic" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0"/><path d="M12 18v3"/><path d="M8.5 21h7"/></svg>
+                <svg class="ic-mic-off" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0"/><path d="M12 18v3"/><path d="M8.5 21h7"/><path d="M4 4l16 16"/></svg>
+                <span id="muteLabel">Mute</span>
+              </button>
+              <button type="button" class="btn btn--danger btn--block" id="btnEnd">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 5l14 14"/><path d="M4.5 5.5C4.5 14 10 19.5 18.5 19.5l.9-2.7a1.4 1.4 0 0 0-.8-1.7l-2.7-1.1a1.4 1.4 0 0 0-1.6.4l-.8 1a11 11 0 0 1-4.5-4.5l1-.8a1.4 1.4 0 0 0 .4-1.6L9 5.9a1.4 1.4 0 0 0-1.7-.8z"/></svg>
+                <span>End call</span>
+              </button>
+            </div>
           </div>
 
           <!-- grounded example prompts (GET /api/examples). Read-aloud suggestions for the
