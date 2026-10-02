@@ -64,6 +64,18 @@ Legend: ✅ verified against installed source/repo this session · 📄 from ven
 - **Two `SPOOKY_TAGS` are undocumented** (`nervously`, `inhales deeply`); ElevenLabs documents `[whispers]`/`[laughs]`/`[sighs]`/`[exhales]`/`[mischievously]`, and v3 sometimes *speaks* a tag aloud — test each tag per voice/model (Task 1).
 - **Low R13 risk:** the plugin adds no new transitive deps beyond numpy (`av` is already a core dep).
 
+## LiveKit 1.8.3 re-verification (supersedes the stale 1.5.6 §4 anchors)
+
+Re-verified against installed 1.8.3 (2026-10-02). C3–C13 + text-transform/PUA behavior all HOLD (new file:lines in the SDD ledger table); only C1 & C2 changed behavior, plus a new native subsystem:
+
+- **NEW native `expressive` subsystem — keep it OFF (`expressive=False`).** 1.8.3 adds an `expressive: bool|ExpressiveOptions` kwarg (default False) on `AgentSession`/`Agent`/`update_options` that injects an LLM markup instruction, converts `<expression>/<sound>` XML tags → `[...]`, and strips them from transcripts — but ONLY for providers `cartesia/inworld/xai/fishaudio/gemini`. **ElevenLabs and OpenAI are NOT covered.** ⇒ (a) our hand-rolled `[whispers]` tags + `tts_text_transforms` encode/decode + `transcription_node` stripping are STILL REQUIRED for ElevenLabs; (b) **leave `expressive=False`** so the framework doesn't inject a competing markup block; (c) if the Halloween voice ever becomes one of those 5 providers, prefer the native pipeline.
+- **`eleven_v3_conversational` (a "dialogue" model) honors only `stability`** among voice settings — `similarity_boost`/`style`/`speed` are dropped (plugin warns), as are `chunk_length_schedule`/`streaming_latency`/`enable_ssml_parsing`. ⇒ Task 5 `build_tts` sets only `stability` (= `UG_HALLOWEEN_STABILITY`). Routing: `is_dialogue_model(m) = m.startswith("eleven_v3")` → text-to-dialogue WS (tags performed + streamed). No `eleven_v4*` exists at 1.8.3.
+- **C1 OBSOLETE:** `Agent.update_options(tts=...)` now EXISTS (live per-agent TTS swap via `_update_models`). Our `tts_node` override stays the approach (per-utterance profile routing, no agent mutation); session-level `tts` is still getter-only.
+- **C2 OBSOLETE:** Deepgram `update_options` now takes model/encoding/sample_rate/bit_rate AND invalidates the pooled WS — an in-place model change now takes effect.
+- **§7.8 tag filter integration:** TTS-branch filtering is now a configurable `text_transforms` list (applied in `generation.py`) and plain callables are accepted — the encode/decode transforms plug in there. **Confirm the exact `AgentSession` kwarg name (`tts_text_transforms` vs `text_transforms`) when wiring Task 10.** Transcript stripping still needs `transcription_node`.
+- **C6:** `preemptive_generation=` is deprecated → set via `turn_handling=TurnHandlingOptions(...)`; default behavior unchanged (ON).
+- **C3 nuance:** `on_user_turn_completed` exceptions are now caught (raise → drop turn + log, no session crash); "never raise / time-box" is still good practice but soft now.
+
 ## Databricks platform
 
 - **No native TTS, and no realtime STT.** 📄 FMAPI is chat/reasoning/embedding/image only; the AI Gateway exposes no
