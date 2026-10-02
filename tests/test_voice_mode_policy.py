@@ -182,6 +182,26 @@ ENTER_REQUESTS = [
     "switch to halloween",
     "can you switch to halloween please",
     "give me spooky vibes",
+    "from now on do a spooky voice",                           # "from" only blocks an enter as a source
+]
+
+# Exit requests that name BOTH voices: the spooky one is what is being left, the normal one is where to.
+# With the engine down these are the only thing that gets the caller out of Halloween (G12).
+EXITS_NAMING_BOTH_VOICES = [
+    "switch from the spooky voice to the normal voice",
+    "change from the scary voice to your regular voice",
+    "go from spooky to your normal voice",
+    "go from the spooky voice to the normal voice",
+    "replace the spooky voice with the normal voice",
+    "swap the spooky voice for your normal voice",
+    "trade the ghost voice for the normal voice",
+    "exchange the spooky voice for the usual voice",
+    "change the spooky voice into your normal voice",
+    "move from the spooky voice to your normal voice",
+    "come from the spooky voice back to the normal voice",
+    "I prefer the normal voice to the spooky voice",
+    "I prefer the normal voice over the spooky voice",
+    "use the normal voice instead of the spooky voice",
 ]
 
 EXIT_REQUESTS = [
@@ -210,6 +230,7 @@ EXIT_REQUESTS = [
     "the regular voice please",
     "I'd like the normal voice back",
     "can we go back to your normal voice",
+    *EXITS_NAMING_BOTH_VOICES,
 ]
 
 NOT_COMMANDS = [
@@ -293,8 +314,8 @@ def test_every_explicit_command_is_also_a_cue():
 
 # --------------------------------------------------------------------------------------
 # Topic look-alikes and mentions of the normal voice. The explicit rule is the only mechanism while the
-# engine is unavailable, and an exit rule beats the engine, so a wrong rule is either a surprise flip into
-# Halloween or a false exit that nothing can correct.
+# engine is unavailable, and an exit rule beats the engine, so a wrong rule is either a surprise flip
+# into Halloween or a false exit that nothing can correct.
 # --------------------------------------------------------------------------------------
 
 # Halloween / spooky TOPICS worded with the same verbs and nouns as a voice request.
@@ -352,6 +373,8 @@ NOT_EXIT_REQUESTS = [
     "I prefer my regular voice when I call",
     "how do you sound in your normal voice",                             # a question, not a request
     "I want to know about your normal voice",
+    "swap my voice plan for a regular voice plan",                      # the move frame skips "my"
+    "replace the spooky voice with my normal voice",
     "does this sound normal",
     "cancel the halloween things I ordered",
     "cancel the scary stuff I ordered",
@@ -367,8 +390,13 @@ def test_a_mention_of_the_normal_voice_is_not_an_exit(text):
     assert verdict is None or verdict.intent != "exit"
 
 
-def test_a_request_that_contrasts_with_the_normal_voice_still_enters():
-    assert explicit_command("can you do a spooky voice instead of your normal voice").intent == "enter"
+@pytest.mark.parametrize("text", [
+    "can you do a spooky voice instead of your normal voice",
+    "use a spooky voice rather than your normal voice",
+    "make it spooky instead of the normal voice",
+])
+def test_a_request_that_sets_the_normal_voice_aside_still_enters(text):
+    assert explicit_command(text).intent == "enter"
 
 
 @pytest.mark.parametrize("text", [
@@ -389,6 +417,44 @@ def test_an_engine_enter_is_not_lost_to_a_mention_of_the_normal_voice(text):
 def test_no_false_exit_can_be_forced_in_halloween_mode(text):
     verdict = resolve_verdict(_v("none", 0.9), explicit_command(text))
     assert decide_mode(HALLOWEEN, verdict).mode_after == HALLOWEEN
+
+
+# Wanting the normal voice must never read as an enter, however the sentence names the spooky one.
+# Checking only "not an exit" would let a reversed ENTER through (the caller is stranded in Halloween).
+PREFERS_THE_NORMAL_VOICE = [
+    "I'd rather have the normal voice than the spooky voice",
+    "the normal voice is better than the spooky voice",
+    "I like the normal voice more than the spooky voice",
+    "the normal voice sounds nicer than the halloween voice",
+    "the normal voice and the spooky voice are both fine",     # names both voices; no verb or marker
+    "your regular voice and your usual halloween voice are both fine",
+    "replace the spooky voice with a normal one",              # "a normal one" names no voice: verb guards
+    "swap the spooky voice for a regular one",
+    "trade the scary voice for a usual one",
+    "exchange the spooky voice for a normal one",
+    "switch from the spooky voice to a normal one",
+    "a regular one is better than the spooky voice",
+    *EXITS_NAMING_BOTH_VOICES,
+]
+
+
+@pytest.mark.parametrize("text", PREFERS_THE_NORMAL_VOICE)
+def test_wanting_the_normal_voice_is_never_an_enter(text):
+    verdict = explicit_command(text)
+    assert verdict is None or verdict.intent != "enter"
+
+
+@pytest.mark.parametrize("text", PREFERS_THE_NORMAL_VOICE)
+def test_wanting_the_normal_voice_never_flips_a_standard_call_into_halloween(text):
+    rule = explicit_command(text)
+    verdict = resolve_verdict(IntentVerdict("none", 0.0, "error"), rule)   # engine down: only the rule
+    assert decide_mode(STANDARD, verdict).mode_after == STANDARD
+
+
+@pytest.mark.parametrize("text", EXITS_NAMING_BOTH_VOICES)
+def test_an_exit_naming_both_voices_gets_the_caller_out_when_the_engine_is_down(text):
+    verdict = resolve_verdict(IntentVerdict("none", 0.0, "error"), explicit_command(text))
+    assert decide_mode(HALLOWEEN, verdict).mode_after == STANDARD
 
 
 def test_voice_mode_module_is_pure():

@@ -83,11 +83,16 @@ _ASK = (r"(?:go|going|come|coming|get|getting|switch|switching|change|changing|t
         r"return|returning|back|use|using|want|need|prefer|give|bring|put|try|"
         r"(?:i'?d|we'?d|would)\s+(?:like|love|prefer))")
 # A word that may sit between that verb and the mention, unless it turns the request into something else:
-# a contrast ("instead of your normal voice"), somebody else's voice ("my normal voice"), or a question
-# about it ("I want to know about your normal voice").
-_NOT_CONTRAST = (r"(?!(?:instead|rather|than|different|other|unlike|over|from|away|"
+# a contrast ("instead of your normal voice"), leaving the normal voice ("switch from your normal voice";
+# a bare "from" is fine: "switch from the spooky voice to the normal voice"), somebody else's voice
+# ("my normal voice"), or a question about it ("I want to know about your normal voice").
+_NOT_CONTRAST = (r"(?!(?:instead|rather|than|different|other|unlike|over|away|"
                  r"my|his|her|their|our|mine|"
-                 r"know|about|ask|tell|learn|wonder|why|what|how|whether|if|when|where|who)\b)")
+                 r"know|about|ask|tell|learn|wonder|why|what|how|whether|if|when|where|who)\b"
+                 rf"|from\s+(?:(?:the|a|an)\s+)?{_NORMAL_VOICE}\b)")
+# Verbs that move the caller from one voice to another: "switch from X to Y", "replace X with Y".
+_MOVE = (r"(?:switch|switching|change|changing|go|going|move|moving|replace|replacing|"
+         r"swap|swapping|trade|trading|exchange|exchanging)")
 # Exit verbs. Not "cancel": in a support call that means an order ("cancel the scary stuff I ordered").
 _STOP = (r"(?:stop|stopping|quit|quitting|cease|end|drop|dropping|cut|cutting|ditch|kill|skip|lose|"
          r"disable)")
@@ -133,6 +138,11 @@ _EXIT = _frames(
     # "go back to your normal voice", "I want your regular voice back", "use the normal voice": a request
     # verb at most 4 words before the mention, with no contrast ("instead of", "than", "from") in between
     rf"\b{_ASK}\b(?:\s+{_NOT_CONTRAST}{_WORD}){{0,4}}?\s+{_NORMAL_VOICE}\b",
+    # "switch from the spooky voice to the normal voice", "replace the spooky voice with the normal
+    # voice", "swap it for your regular voice": the normal voice is where the caller is being moved to,
+    # however much of the sentence is spent naming the voice being left
+    rf"\b{_MOVE}\b(?:\s+{_NOT_CONTRAST}{_WORD}){{0,6}}?"
+    rf"\s+(?:to|for|with)\s+(?:(?:the|a|an)\s+)?{_NORMAL_VOICE}\b",
     # "can you talk in your normal voice", "be your normal self" (these verbs also report, as in
     # "how do you sound in your normal voice", so they need the request lead-in)
     rf"{_LEAD}(?P<core>(?:be|being|sound|sounding|talk|talking|speak|speaking)\b"
@@ -161,11 +171,19 @@ _VOICE_STRONG_WORD = re.compile(rf"\b{_VOICE_STRONG}\b")
 
 # A negation earlier in the same clause cancels an ENTER ("don't make it spooky", "no spooky voice").
 # The stop verbs count too: when the exit rule has not already claimed the phrase ("stop pretending to
-# have a spooky voice", "cancel the spooky voice"), it is still not an enter. Precision over recall: a
-# missed enter falls back to the engine.
+# have a spooky voice", "cancel the spooky voice"), it is still not an enter. So do the words that put
+# the spooky voice on the losing side of a comparison or a swap ("better than the spooky voice",
+# "switch from the spooky voice", "replace the spooky voice with a normal one"); "from now on" is not
+# one of those. Precision over recall: a missed enter falls back to the engine.
 _NEG_ENTER = re.compile(
     rf"\b(?:don'?t|do\s+not|dont|never|not|non|no|without|won'?t|wouldn'?t|shouldn'?t|instead\s+of|"
-    rf"enough|cancel|{_STOP})\b")
+    rf"enough|cancel|than|from(?!\s+(?:now|here|then|today|tomorrow|this)\b)|"
+    rf"replac(?:e|ing)|swap(?:ping)?|trad(?:e|ing)|exchang(?:e|ing)|{_STOP})\b")
+# A clause that names the normal voice is not an enter either ("the normal voice and the spooky voice
+# are both fine"), unless the normal voice is named only to be set aside ("a spooky voice instead of
+# your normal voice").
+_NORMAL_MENTION = re.compile(rf"\b{_NORMAL_VOICE}\b")
+_SET_ASIDE = re.compile(rf"\b(?:instead\s+of|rather\s+than)\s+(?:(?:the|a|an)\s+)?{_NORMAL_VOICE}\b")
 # A narrower set cancels an EXIT ("don't go back to your normal voice", "instead of going back to it"); a
 # bare "no" must not, so that an unpunctuated "no stop the spooky voice" still exits.
 _NEG_EXIT = re.compile(
@@ -194,6 +212,10 @@ def _is_live(clause: str, frames: tuple[re.Pattern[str], ...], negation: re.Patt
     return neg is None or min(starts) <= neg.start()
 
 
+def _names_normal_voice(clause: str) -> bool:
+    return _NORMAL_MENTION.search(_SET_ASIDE.sub(" ", clause)) is not None
+
+
 def has_cue(text: str) -> bool:
     """Is this turn about the assistant's voice (either direction), so worth waiting for the verdict?
 
@@ -217,12 +239,14 @@ def explicit_command(text: str) -> IntentVerdict | None:
     """Safety net for when the engine fails: a verdict only for a clear, un-negated command, else None.
 
     Exit is checked first and wins (G12). A negated request is not a command either way: "don't make it
-    spooky" is not an enter, and "don't go back to your normal voice" is not an exit.
+    spooky" is not an enter, and "don't go back to your normal voice" is not an exit. A sentence that
+    also names the normal voice ("the normal voice is better than the spooky voice") is not an enter, so
+    a caller who wants out is never read as wanting in.
     """
     clauses = _clauses(text)
     if any(_is_live(c, _EXIT, _NEG_EXIT) for c in clauses):
         return IntentVerdict("exit", 1.0, "rule")
-    if any(_is_live(c, _ENTER, _NEG_ENTER) for c in clauses):
+    if any(_is_live(c, _ENTER, _NEG_ENTER) and not _names_normal_voice(c) for c in clauses):
         return IntentVerdict("enter", 1.0, "rule")
     return None
 
