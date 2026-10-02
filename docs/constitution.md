@@ -6,6 +6,7 @@
 ## 1. Start with the why, and clear every assumption
 - Always check our assumptions and **start with the why**.
 - Clarify **every single assumption** we are making — and "clarify" means **use research to clear it**, not guess.
+- **We update every assumption at planning and design time, NOT at implementation time.** Implementation executes a settled plan; it does not re-open assumptions. Front-load the research (e.g. catching the ElevenLabs streaming limit *before* building on it) so implementation can run heads-down.
 - Only once the assumptions are cleared do we move on to building.
 
 ## 2. Always use superpowers
@@ -28,6 +29,10 @@
 - Keep momentum and keep getting things done.
 - **Checkpoint the code** (commit) whenever a piece builds locally and passes verification.
 - **Only interrupt the owner for things like API keys** (credentials / external enablement). Otherwise, use judgment and proceed.
+
+## 7. Compact at section boundaries
+- Before launching a **new section of the codebase or a new task**, **check the context size** first.
+- If the context window is **above 50%**, **compact first** before starting the new work. (Externalize state to the SDD ledger / git / docs so the resume after compaction is clean.)
 
 ---
 *Source: owner directive, 2026-10-02.*

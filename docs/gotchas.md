@@ -34,6 +34,36 @@ Legend: ✅ verified against installed source/repo this session · 📄 from ven
 - **Text transforms apply to the TTS branch only; the transcript branch gets raw LLM text.** ✅ Tags must be stripped
   separately in `transcription_node` (and again client-side). (`agent_activity.py:2407-2419,2495`)
 
+## ElevenLabs / expressive-TTS
+
+- **RESOLVED 2026-10-02 — bumped the livekit stack to 1.8.3** (commit `18c0b54`). 1.8.3 is the latest version common to all five
+  livekit packages on the Databricks mirror `<internal-pypi-mirror>`; **pypi.org is blocked from the sandbox**, and the only
+  "1.8.4" on the mirror is the unrelated `livekit-plugins-bithuman`. 1.8.3 adds the Text-to-Dialogue WebSocket, so the Halloween model
+  is **`eleven_v3_conversational`** (streams audio tags at ~280 ms — meets the ≤400 ms gate), **not `eleven_v4_turbo`** (the 1.8.3 plugin
+  has no `eleven_v4*` routing; v4 would need 1.8.4+, unavailable here). `UG_HALLOWEEN_TTS_MODEL` default = `eleven_v3_conversational`.
+- **The bump forced extra pins:** `livekit` 1.1.5→1.1.18, `livekit-api` 1.1.0→1.2.1 (hard deps of agents 1.8.3). Re-bumping the livekit
+  stack later is a ~7-pin edit.
+- **`openai` SDK was downgraded 3.14→2.54** (livekit-agents 1.8.3 requires `openai<3`). The repo doesn't import `openai` directly and the
+  suite is green, but the live UAIG Responses path hasn't run on 2.x — **verify against the live gateway at the live step.**
+- **C1–C13 anchors now sit on 1.8.3 source** — the 1.5.6 line numbers in spec §4 are stale; re-verification against 1.8.3 is in progress.
+
+### Original 1.5.6 limitation (kept as the "why")
+
+- **Inline tags do NOT stream at `livekit-plugins-elevenlabs==1.5.6`.** 📄 The plugin's `.stream()` speaks only the
+  `multi-stream-input` WebSocket, which doesn't carry the tag-performing models. `eleven_v3` / `eleven_v3_conversational` /
+  `eleven_v4` / `eleven_v4_turbo` need the **Text-to-Dialogue** WebSocket — added in **livekit-agents 1.7.1**
+  (v3/v3_conversational, ~280 ms TTFA) and **1.8.4** (v4/v4_turbo, ~100 ms). At 1.5.6 you can only *stream* Flash/turbo
+  (no tags), or run `eleven_v3` over **HTTP `/stream` per-sentence** (~0.7–1.9 s TTFA — **fails** the ≤400 ms R8 gate).
+  ⇒ **Streamed inline tags require bumping agents+plugins to ≥1.7.1 / 1.8.4, which forces re-verifying the C1–C13 1.5.6
+  source anchors.** (Decision pending 2026-10-02.)
+- **Missing `ELEVEN_API_KEY` raises `ValueError` at construction** — check the env before constructing, don't rely on a lazy failure.
+- **`prewarm()` is a no-op on the ElevenLabs plugin** — the spec's "cue-time prewarm" has no effect; the WebSocket opens lazily on first `.stream()`.
+- **A profile-owned TTS is not wired to the session.** The session subscribes `error`/`metrics_collected` and calls `prewarm()`
+  only on its *own* `activity.tts`. For a profile-owned TTS: subscribe to its `error`/`metrics` yourself, build the
+  `StreamAdapter` once, and `aclose()` it at shutdown (`StreamAdapter.aclose()` does NOT close the wrapped TTS).
+- **Two `SPOOKY_TAGS` are undocumented** (`nervously`, `inhales deeply`); ElevenLabs documents `[whispers]`/`[laughs]`/`[sighs]`/`[exhales]`/`[mischievously]`, and v3 sometimes *speaks* a tag aloud — test each tag per voice/model (Task 1).
+- **Low R13 risk:** the plugin adds no new transitive deps beyond numpy (`av` is already a core dep).
+
 ## Databricks platform
 
 - **No native TTS, and no realtime STT.** 📄 FMAPI is chat/reasoning/embedding/image only; the AI Gateway exposes no
