@@ -140,10 +140,18 @@ def test_resolve_verdict_falls_back_to_the_rule_when_the_engine_did_not_answer(s
     assert resolve_verdict(IntentVerdict("none", 0.0, source), rule) is rule
 
 
-def test_resolve_verdict_with_nothing_to_act_on_is_a_none_verdict():
-    nothing = resolve_verdict(IntentVerdict("none", 0.0, "skipped"), None)
-    assert nothing == IntentVerdict("none", 0.0, "none")
+@pytest.mark.parametrize("source", ["timeout", "error", "skipped", "disabled"])
+def test_resolve_verdict_with_nothing_to_act_on_passes_the_engine_source_through(source):
+    miss = IntentVerdict("none", 0.0, source)
+    nothing = resolve_verdict(miss, None)
+    assert nothing == IntentVerdict("none", 0.0, source)  # spec §8: timeout / error stay observable
+    assert nothing is not miss                            # a fresh verdict, not the caller's object
     assert decide_mode(HALLOWEEN, nothing).reason == "no_intent"
+
+
+def test_resolve_verdict_never_acts_on_a_non_model_intent():
+    stray = IntentVerdict("enter", 0.95, "timeout")       # an "enter" the engine did not actually answer
+    assert resolve_verdict(stray, None) == IntentVerdict("none", 0.0, "timeout")
 
 
 ENTER_REQUESTS = [
@@ -162,6 +170,18 @@ ENTER_REQUESTS = [
     "I'm VIP, spooky please",
     "no, do a spooky voice",                                   # negation does not leak across a comma
     "I don't want the normal voice, I want a spooky voice",    # ...nor does a negated exit phrase
+    # requests addressed to the assistant, in the shapes people actually use
+    "can you be spooky",
+    "I want you to be a little bit scarier",
+    "let's go spooky",
+    "okay make it spooky",
+    "can we make it spooky",
+    "would you mind making it spooky",
+    "could you talk like a ghost",
+    "please change to spooky",
+    "switch to halloween",
+    "can you switch to halloween please",
+    "give me spooky vibes",
 ]
 
 EXIT_REQUESTS = [
@@ -181,6 +201,15 @@ EXIT_REQUESTS = [
     "go back to your normal voice, not the spooky voice",
     "do a spooky voice, actually no, stop the spooky voice",  # exit wins over enter in one utterance
     "no stop the spooky voice",                               # a bare "no" does not cancel an exit
+    # requests to get the normal voice back, in the shapes people actually use
+    "switch back to your regular voice",
+    "I want your normal voice back",
+    "can you talk in your normal voice",
+    "revert to your original voice",
+    "give me the normal voice",
+    "the regular voice please",
+    "I'd like the normal voice back",
+    "can we go back to your normal voice",
 ]
 
 NOT_COMMANDS = [
@@ -192,6 +221,8 @@ NOT_COMMANDS = [
     "don't go back to your normal voice",         # a negated exit is not an exit either
     "I'd rather not have the halloween voice",
     "stop pretending to have a spooky voice",      # an unparsed stop request is never an enter
+    "cancel the spooky voice",                     # "cancel" means an order in support: not an exit, but
+                                                   # still never read as an enter
     "are you open on halloween",
     "what time does the halloween sale end",
     "where is my order",
@@ -258,6 +289,106 @@ def test_has_cue_true_for_voice_requests_in_either_direction(text):
 def test_every_explicit_command_is_also_a_cue():
     for text in (*ENTER_REQUESTS, *EXIT_REQUESTS):
         assert explicit_command(text) is not None and has_cue(text), text
+
+
+# --------------------------------------------------------------------------------------
+# Topic look-alikes and mentions of the normal voice. The explicit rule is the only mechanism while the
+# engine is unavailable, and an exit rule beats the engine, so a wrong rule is either a surprise flip into
+# Halloween or a false exit that nothing can correct.
+# --------------------------------------------------------------------------------------
+
+# Halloween / spooky TOPICS worded with the same verbs and nouns as a voice request.
+TOPIC_LOOKALIKES = [
+    "can I switch to the halloween delivery slot",
+    "I would like to change to the halloween package",
+    "will the ghost tour be scary",
+    "is the haunted house going to be scary for my kids",
+    "do you sell halloween accent pillows",
+    "can we switch to the halloween delivery slot",
+    "please change to the ghost tour tickets",
+    "let's switch to halloween candy",
+    "can you switch to the halloween menu",
+    "do you sell halloween vibe candles",
+    "I love the halloween vibes in your store",
+    "it will be scary for the kids",
+    "the tour might sound spooky",
+    "that haunted house will sound scary to my kids",
+    "does the haunted house tour make it scary",
+    "could you make the ghost costume bigger",
+    "I want to make it a spooky party",
+    "do you sound scary at night",                  # a question about the voice is not a request
+    "how do you make it spooky",
+    "do you have something spooky please",          # "spooky please" only counts as a clause of its own
+    "is the ghost tour scary please tell me",
+    "the tour guide will talk like a ghost",
+    "I want to switch to the spooky season box",
+]
+
+
+@pytest.mark.parametrize("text", TOPIC_LOOKALIKES)
+def test_topic_lookalikes_never_produce_a_rule_or_a_cue(text):
+    assert explicit_command(text) is None
+    assert not has_cue(text)
+
+
+# Mentions of the normal voice (or stop-verbs next to a topic) that are not a request to drop the spooky
+# voice.
+NOT_EXIT_REQUESTS = [
+    "your normal voice is boring, can you do a spooky one",
+    "can you do a spooky voice instead of your normal voice",
+    "I love your natural voice but can you do a spooky one",
+    "is that your real voice",
+    "what does your normal voice sound like",
+    "do you have a regular voice option",
+    "I like your usual voice",
+    "tell me about your normal voice",
+    "why is your normal voice so quiet",
+    "I want it spookier than your normal voice",
+    "why did you switch from your normal voice",
+    "use a spooky voice rather than your normal voice",
+    "instead of going back to your normal voice, keep the spooky one",   # contrast before the verb
+    "unlike your normal voice this one is fun",
+    "I use my normal voice for voicemail",                               # somebody else's voice
+    "I prefer my regular voice when I call",
+    "how do you sound in your normal voice",                             # a question, not a request
+    "I want to know about your normal voice",
+    "does this sound normal",
+    "cancel the halloween things I ordered",
+    "cancel the scary stuff I ordered",
+    "stop the scary things I ordered",
+    "turn off the halloween accent lights",                              # topic words need a strong noun
+    "stop the scary movie",
+]
+
+
+@pytest.mark.parametrize("text", NOT_EXIT_REQUESTS)
+def test_a_mention_of_the_normal_voice_is_not_an_exit(text):
+    verdict = explicit_command(text)
+    assert verdict is None or verdict.intent != "exit"
+
+
+def test_a_request_that_contrasts_with_the_normal_voice_still_enters():
+    assert explicit_command("can you do a spooky voice instead of your normal voice").intent == "enter"
+
+
+@pytest.mark.parametrize("text", [
+    "your normal voice is boring, can you do a spooky one",
+    "can you do a spooky voice instead of your normal voice",
+    "I love your natural voice but can you do a spooky one",
+])
+def test_an_engine_enter_is_not_lost_to_a_mention_of_the_normal_voice(text):
+    verdict = resolve_verdict(_v("enter", 0.95), explicit_command(text))
+    assert decide_mode(STANDARD, verdict).mode_after == HALLOWEEN
+
+
+@pytest.mark.parametrize("text", [
+    "is that your real voice",
+    "what does your normal voice sound like",
+    "cancel the halloween things I ordered",
+])
+def test_no_false_exit_can_be_forced_in_halloween_mode(text):
+    verdict = resolve_verdict(_v("none", 0.9), explicit_command(text))
+    assert decide_mode(HALLOWEEN, verdict).mode_after == HALLOWEEN
 
 
 def test_voice_mode_module_is_pure():
