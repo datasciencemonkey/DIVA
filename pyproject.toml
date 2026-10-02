@@ -8,13 +8,16 @@ dependencies = [
     "databricks-sdk==0.133.0",
     "python-dotenv==1.2.2",
     "requests==2.34.2",
-    # LiveKit voice-agent worker stack (ReferenceApp-verified pins)
-    "livekit==1.1.5",
-    "livekit-agents==1.5.6",
-    "livekit-api==1.1.0",
-    "livekit-plugins-openai==1.5.6",
-    "livekit-plugins-deepgram==1.5.6",
-    "livekit-plugins-silero==1.5.6",
+    # LiveKit voice-agent worker stack. Bumped from the ReferenceApp-verified 1.5.6 set to
+    # 1.8.3 so ElevenLabs can stream tag-performing models via Text-to-Dialogue.
+    # livekit-agents 1.8.3 hard-pins livekit==1.1.18 and requires livekit-api>=1.2.0.
+    "livekit==1.1.18",
+    "livekit-agents==1.8.3",
+    "livekit-api==1.2.1",
+    "livekit-plugins-openai==1.8.3",
+    "livekit-plugins-deepgram==1.8.3",
+    "livekit-plugins-silero==1.8.3",
+    "livekit-plugins-elevenlabs==1.8.3",
     "httpx==0.28.1",
     "httpx-sse==0.4.3",
     "opentelemetry-sdk==1.39.1",
