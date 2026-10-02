@@ -202,6 +202,27 @@ EXITS_NAMING_BOTH_VOICES = [
     "I prefer the normal voice to the spooky voice",
     "I prefer the normal voice over the spooky voice",
     "use the normal voice instead of the spooky voice",
+    # worded as a request, whichever way the request is phrased
+    "I want to change from spooky to the normal voice",
+    "could you please swap the spooky voice for the normal voice",
+    "let's replace the spooky voice with the normal voice",
+    "I'd like to switch from the scary voice to the regular voice",
+    "okay so switch from the spooky voice to the normal voice",
+    "you should swap the spooky voice for your normal voice",
+    "would you mind switching from the spooky voice to the normal voice",
+    "do you mind switching from the spooky voice to the normal voice",
+    "kindly swap the spooky voice for the normal voice",
+    "I wanna switch from the spooky voice to the normal voice",
+    "I would like to swap the spooky voice for your normal voice",
+    # "from" before the move's own connector does not make the normal voice the one being left
+    "trade the spooky voice from earlier for the normal voice",
+    "replace the spooky voice from earlier with the normal voice",
+    "go from spooky into your normal voice",
+    # what is moved must be the voice, named by a spooky word or "voice" / "persona", at any distance
+    "swap your old voice for your normal voice",
+    "swap this persona for your normal voice",
+    "switch from the whole spooky halloween thing to the normal voice",
+    "replace all of the spooky voice stuff with the normal voice",
 ]
 
 EXIT_REQUESTS = [
@@ -352,9 +373,36 @@ def test_topic_lookalikes_never_produce_a_rule_or_a_cue(text):
     assert not has_cue(text)
 
 
+# Leaving the normal voice is not asking for it. An exit here beats the engine: in STANDARD it drops a
+# genuine enter, in HALLOWEEN it throws the caller out.
+LEAVES_THE_NORMAL_VOICE = [
+    "switch from this normal voice to a spooky voice",
+    "change from that regular voice to the creepy voice",
+    "I need a break from this normal voice",
+    "can you change from this normal voice to a spooky voice please",
+    "switch from that old regular voice to a spooky voice",
+    "change from that same old regular voice to a spooky voice",
+]
+
+# Questions and refusals about a move are not requests to make it.
+NOT_A_REQUEST_TO_MOVE = [
+    "how do I switch from the spooky voice to the normal voice",
+    "how can you switch from the spooky voice to the normal voice",
+    "why did you switch from the spooky voice to the normal voice",
+    "did you switch from the spooky voice to the normal voice",
+    "what happens if I swap the spooky voice for the normal voice",
+    "I'd rather you didn't switch from the spooky voice to the normal voice",
+    "stop switching from the spooky voice to the normal voice",
+    "please don't switch from the spooky voice to the normal voice",
+]
+
 # Mentions of the normal voice (or stop-verbs next to a topic) that are not a request to drop the spooky
 # voice.
 NOT_EXIT_REQUESTS = [
+    *LEAVES_THE_NORMAL_VOICE,
+    *NOT_A_REQUEST_TO_MOVE,
+    "please switch your phone from airplane mode to normal mode",        # a move, but not of the voice
+    "please swap the voice on my phone for the normal voice",            # "my", after the voice word
     "your normal voice is boring, can you do a spooky one",
     "can you do a spooky voice instead of your normal voice",
     "I love your natural voice but can you do a spooky one",
@@ -419,6 +467,25 @@ def test_no_false_exit_can_be_forced_in_halloween_mode(text):
     assert decide_mode(HALLOWEEN, verdict).mode_after == HALLOWEEN
 
 
+@pytest.mark.parametrize("text", LEAVES_THE_NORMAL_VOICE)
+def test_leaving_the_normal_voice_lets_an_engine_enter_land_in_standard(text):
+    verdict = resolve_verdict(_v("enter", 0.95), explicit_command(text))
+    assert decide_mode(STANDARD, verdict).mode_after == HALLOWEEN
+
+
+@pytest.mark.parametrize("text", [*LEAVES_THE_NORMAL_VOICE, *NOT_A_REQUEST_TO_MOVE])
+def test_leaving_or_questioning_a_move_never_throws_a_halloween_caller_out(text):
+    verdict = resolve_verdict(_v("none", 0.9), explicit_command(text))
+    assert decide_mode(HALLOWEEN, verdict).mode_after == HALLOWEEN
+
+
+def test_a_negated_move_is_still_a_cue_but_never_an_exit():
+    text = "please don't swap the old voice for the normal voice"   # no spooky word: only the move frame
+    assert has_cue(text)
+    verdict = explicit_command(text)
+    assert verdict is None or verdict.intent != "exit"
+
+
 # Wanting the normal voice must never read as an enter, however the sentence names the spooky one.
 # Checking only "not an exit" would let a reversed ENTER through (the caller is stranded in Halloween).
 PREFERS_THE_NORMAL_VOICE = [
@@ -428,7 +495,7 @@ PREFERS_THE_NORMAL_VOICE = [
     "the normal voice sounds nicer than the halloween voice",
     "the normal voice and the spooky voice are both fine",     # names both voices; no verb or marker
     "your regular voice and your usual halloween voice are both fine",
-    "replace the spooky voice with a normal one",              # "a normal one" names no voice: verb guards
+    "replace the spooky voice with a normal one",              # "a normal one" names no voice
     "swap the spooky voice for a regular one",
     "trade the scary voice for a usual one",
     "exchange the spooky voice for a normal one",

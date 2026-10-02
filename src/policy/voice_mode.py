@@ -83,16 +83,28 @@ _ASK = (r"(?:go|going|come|coming|get|getting|switch|switching|change|changing|t
         r"return|returning|back|use|using|want|need|prefer|give|bring|put|try|"
         r"(?:i'?d|we'?d|would)\s+(?:like|love|prefer))")
 # A word that may sit between that verb and the mention, unless it turns the request into something else:
-# a contrast ("instead of your normal voice"), leaving the normal voice ("switch from your normal voice";
-# a bare "from" is fine: "switch from the spooky voice to the normal voice"), somebody else's voice
-# ("my normal voice"), or a question about it ("I want to know about your normal voice").
+# a contrast ("instead of your normal voice"), somebody else's voice ("my normal voice"), a question
+# about it ("I want to know about your normal voice"), or leaving it: "from" followed, within three
+# words and before any to / for / with, by the normal voice ("switch from this normal voice", "a break
+# from your normal voice"). "from the spooky voice to the normal voice" is a move to it, so "from" is
+# fine there.
 _NOT_CONTRAST = (r"(?!(?:instead|rather|than|different|other|unlike|over|away|"
                  r"my|his|her|their|our|mine|"
                  r"know|about|ask|tell|learn|wonder|why|what|how|whether|if|when|where|who)\b"
-                 rf"|from\s+(?:(?:the|a|an)\s+)?{_NORMAL_VOICE}\b)")
+                 rf"|from(?:\s+(?!(?:to|for|with|into)\b){_WORD}){{0,3}}?\s+{_NORMAL_VOICE}\b)")
 # Verbs that move the caller from one voice to another: "switch from X to Y", "replace X with Y".
 _MOVE = (r"(?:switch|switching|change|changing|go|going|move|moving|replace|replacing|"
          r"swap|swapping|trade|trading|exchange|exchanging)")
+# A move has to be worded as a request, from the start of the clause: "switch from X to Y", "could you
+# please swap ...", "I'd like to replace ...", "let's ...". Questions and refusals are not requests: "how
+# do I switch ...", "why did you switch ...", "I'd rather you didn't switch ...", "stop switching ...".
+_REQUEST = (r"(?:(?:can|could|would|will|shall|should)\s+(?:you|we)(?:\s+mind)?|do\s+you\s+mind|kindly|"
+            r"let'?s|(?:i|we)(?:'d|\s+would)?\s+(?:want|need|like|love)\s+(?:you\s+)?to|i\s+wanna|"
+            r"you\s+(?:should|could|can))")
+_MOVE_LEAD = rf"^\s*(?:(?:{_OPENER}|{_NEG}|{_REQUEST})\s+)*"
+# What is moved must be the voice (a spooky word, "voice", "persona"): "switch the phone from airplane
+# mode to normal mode" moves something else.
+_ABOUT_VOICE = rf"(?:{_ANY}|voices?|personas?)"
 # Exit verbs. Not "cancel": in a support call that means an order ("cancel the scary stuff I ordered").
 _STOP = (r"(?:stop|stopping|quit|quitting|cease|end|drop|dropping|cut|cutting|ditch|kill|skip|lose|"
          r"disable)")
@@ -139,10 +151,10 @@ _EXIT = _frames(
     # verb at most 4 words before the mention, with no contrast ("instead of", "than", "from") in between
     rf"\b{_ASK}\b(?:\s+{_NOT_CONTRAST}{_WORD}){{0,4}}?\s+{_NORMAL_VOICE}\b",
     # "switch from the spooky voice to the normal voice", "replace the spooky voice with the normal
-    # voice", "swap it for your regular voice": the normal voice is where the caller is being moved to,
-    # however much of the sentence is spent naming the voice being left
-    rf"\b{_MOVE}\b(?:\s+{_NOT_CONTRAST}{_WORD}){{0,6}}?"
-    rf"\s+(?:to|for|with)\s+(?:(?:the|a|an)\s+)?{_NORMAL_VOICE}\b",
+    # voice", "swap the ghost voice for your regular voice": the normal voice is where the caller is
+    # being moved to, however much of the sentence is spent naming the voice being left
+    rf"{_MOVE_LEAD}(?P<core>{_MOVE}\b(?:\s+{_NOT_CONTRAST}{_WORD}){{0,4}}?\s+{_ABOUT_VOICE}\b"
+    rf"(?:\s+{_NOT_CONTRAST}{_WORD}){{0,4}}?\s+(?:to|for|with)\s+(?:(?:the|a|an)\s+)?{_NORMAL_VOICE}\b)",
     # "can you talk in your normal voice", "be your normal self" (these verbs also report, as in
     # "how do you sound in your normal voice", so they need the request lead-in)
     rf"{_LEAD}(?P<core>(?:be|being|sound|sounding|talk|talking|speak|speaking)\b"
