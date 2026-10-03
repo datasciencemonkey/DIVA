@@ -494,7 +494,7 @@ bearer token the agent already has (`DATABRICKS_TOKEN`, which needs the `ai-func
 
 The response we read is `response.answers.voice_mode` →
 `{"type": "choice", "choice": "enter", "probabilities": {…}, "confidence": 0.93}`. Anything else is
-treated as `none`/`error`: a null `response`, a non-null `error_message`, an unknown label, or a
+treated as `none`/`error`: a non-2xx status, a null or missing `response`, an unknown label, or a
 confidence outside 0–1.
 
 **Engine `uaig_chat` (alternate)** — `POST {DATABRICKS_HOST}/ai-gateway/openai/v1/chat/completions` with
@@ -627,7 +627,7 @@ today's (the existing tests pin it).
 | `UG_DECIDE_REASONING_EFFORT` | env | unset | `uaig_chat` only; sent only if set |
 | `UG_DECIDE_TIMEOUT_S` / `UG_DECIDE_CUE_WAIT_S` | env | `3.0` / `0.8` | background-call limit / longest a turn waits |
 | `UG_HALLOWEEN_TTS` | env | `elevenlabs` | `elevenlabs` / `openai` / `deepgram` |
-| `UG_HALLOWEEN_TTS_MODEL` | env | `eleven_v3` | pinned by Task 1 (a turbo model if latency requires) |
+| `UG_HALLOWEEN_TTS_MODEL` | env | `eleven_v3_conversational` | pinned by Task 1 (a turbo model if latency requires) |
 | `UG_HALLOWEEN_VOICE_ID` | env | — (required for ElevenLabs) | chosen by ear in Task 1 |
 | `UG_HALLOWEEN_STABILITY` | env | `0.5` | ElevenLabs voice setting |
 | `UG_HALLOWEEN_FALLBACK_VOICE` | env | `aura-2-zeus-en` | Deepgram |
@@ -636,7 +636,7 @@ today's (the existing tests pin it).
 
 - **Workspace prerequisite:** AI Decide must be enabled on the target workspace (admin → Previews) for
   `UG_DECIDE_ENGINE=ai_decide`.
-- **Dependency:** `livekit-plugins-elevenlabs==1.5.6` in `pyproject.toml` and `agent-requirements.in`.
+- **Dependency:** `livekit-plugins-elevenlabs==1.8.3` in `pyproject.toml` and `agent-requirements.in`.
   Recompile `agent-requirements.txt` **for Python 3.11**, the Apps runtime (see the deploy notes).
 
 ## 8. Failure behavior
@@ -649,7 +649,7 @@ today's (the existing tests pin it).
 | Late answer after the caller's next turn has started | controller (`turn_seq`) | dropped, never applied | none | span `path=late_dropped` |
 | Answer not in by end of turn (any turn) | `on_turn` | the reply goes out in the current mode; the answer is applied as an announced switch when it lands, unless a newer turn has started | natural-language requests switch a beat later | span `path=announced` |
 | Exception anywhere in AI Decide | `on_turn` / late-apply try/except | swallowed; the turn continues in the current mode | none (the turn is never dropped, C3) | log |
-| `ELEVEN_API_KEY` missing | `voice_profiles` at bind | `halloween` = Deepgram fallback | spooky persona, dark voice, no tags | evidence `degraded: true` |
+| `ELEVEN_API_KEY` missing (or `UG_HALLOWEEN_VOICE_ID` missing, which ElevenLabs also requires) | `voice_profiles` at bind | `halloween` = Deepgram fallback either way | spooky persona, dark voice, no tags | evidence `degraded: true` |
 | ElevenLabs runtime error / egress blocked | `tts_node` try/except | `mark_degraded` → fallback for the rest of the call | the current utterance may cut off; later replies use the dark voice | evidence + `ug.voice_degraded` |
 | LLM emits an unknown tag | TTS filter | dropped | never read aloud | — |
 | LLM emits tags in standard mode (left over in history) | TTS filter (empty vocabulary) | all dropped | none | — |
