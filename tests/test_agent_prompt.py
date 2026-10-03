@@ -78,6 +78,10 @@ def test_governance_block_is_last_even_with_persona_and_tags():
     # every addition is present, and the output ends with the governance block, byte-for-byte unchanged
     assert "[whispers]" in out and "[sighs]" in out and VOICE_REQUESTS in out
     assert out.endswith(build_instructions("Support.", _D_NEUTRAL).removeprefix("Support.\n\n"))
+    # A same-turn switch patches f"{steady}\n\n{note}" into that one reply, so the note lands AFTER the
+    # governance block. Each note therefore ends by re-asserting the rules, keeping them the last word (G11).
+    for note in (ON_NOTE, OFF_NOTE):
+        assert note.endswith("Follow the rules above.")
 
 
 def test_added_prompt_text_carries_no_tier_words():

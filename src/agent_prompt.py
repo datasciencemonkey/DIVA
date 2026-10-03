@@ -52,14 +52,17 @@ VOICE_REQUESTS = (
 )
 
 # Same-turn switch: the controller appends one of these (after a blank line) to the steady instructions
-# for THIS reply only; later turns use the updated steady instructions on their own.
+# for THIS reply only; later turns use the updated steady instructions on their own. The note therefore
+# lands AFTER the governance block for that one reply, so each ends by re-asserting the rules (G11).
 ON_NOTE = (
     'The Halloween voice the caller asked for has just switched on, before this reply, so do not say '
-    '"One moment". Open with one short, spooky flourish, then answer everything they asked.'
+    '"One moment". Open with one short, spooky flourish, then answer everything they asked. '
+    "Follow the rules above."
 )
 OFF_NOTE = (
     'The normal voice has just switched back on, before this reply, so do not say "One moment". '
-    'Say "As you wish…" once, in your plain natural manner, then answer everything they asked.'
+    'Say "As you wish…" once, in your plain natural manner, then answer everything they asked. '
+    "Follow the rules above."
 )
 
 # Announced switch (the answer landed after the reply started): passed as generate_reply(instructions=...).

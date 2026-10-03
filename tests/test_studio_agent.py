@@ -200,6 +200,29 @@ async def test_halloween_profile_streams_through_profile_tts():
     assert tts.closed is False                      # lifecycle (aclose) is Task 10's job, not tts_node's
 
 
+async def test_halloween_profile_preserves_tags_on_normal_path():
+    """R1 safety net, the mirror of the degrade-strip test below: on the NORMAL Halloween path the tags must
+    reach the profile TTS UNMODIFIED, because ElevenLabs can only perform a cue it is actually handed. Only the
+    degrade path (tag-less Deepgram), the standard path and the transcript strip tags. Without this pin, a
+    stray `strip_tags_stream` on the normal path would silence every expressive cue (R1) with no test failing.
+    Same tagged input as the degrade test; unit-level, so the tagged text is fed to tts_node directly (the
+    session-level transform chain does not run in this harness)."""
+    controller = FakeController(HALLOWEEN)
+    tts = FakeTTS(frames=["h1"])
+    fallback = FakeTTS(frames=["f1"])
+    agent = make_agent(controller, {"halloween": tts, "halloween_fallback": fallback},
+                       fallback_profile=FALLBACK)
+
+    frames = await collect(agent.tts_node(atext("Welcome ", "[whispers]", " friend ", "[laughs]"), None))
+
+    assert frames == ["h1"]                                 # the Halloween profile TTS produced the audio
+    joined = "".join(tts.pushed)
+    assert "[whispers]" in joined and "[laughs]" in joined  # the cues reached ElevenLabs intact ...
+    assert joined == "Welcome [whispers] friend [laughs]"   # ... and the text is otherwise unmodified
+    assert controller.degrade_reasons == []                 # normal path: the degrade (strip) branch never ran
+    assert fallback.pushed == []                            # the tag-less fallback never saw the text
+
+
 async def test_profile_tts_uses_tight_connect_options():
     """A hung vendor must degrade fast: APIConnectOptions(max_retry=1, timeout=5.0) (spec §7.7)."""
     controller = FakeController(HALLOWEEN)
