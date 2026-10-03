@@ -452,6 +452,27 @@
               <div class="directives" id="directives">
                 <p class="directives-await">Directives resolve on connect…</p>
               </div>
+
+              <!-- Voice mode (Plan 5): the AI Decide verdict + the voice that is speaking. Hidden until a
+                   `voice_mode` evidence fragment arrives; applyVoiceMode() fills it and sets
+                   body[data-voice-mode] so the stylesheet can shift the whole studio into the mode. -->
+              <div class="voice-mode" id="voiceMode" role="group" aria-labelledby="vmTitle" data-mode="standard" hidden>
+                <div class="vm-head">
+                  <span class="vm-title" id="vmTitle">Voice mode · AI Decide</span>
+                  <span class="vm-chip" id="vmChip" data-mode="standard">Standard</span>
+                </div>
+                <p class="vm-voice" id="vmVoice">—</p>
+                <p class="vm-decided" id="vmDecided"></p>
+                <div class="vm-probs" id="vmProbs" role="group" aria-label="Decision probabilities" hidden>
+                  <div class="vm-prob" data-k="enter"><span class="vm-prob-k">Enter</span><span class="vm-prob-bar" aria-hidden="true"><i></i></span><span class="vm-prob-v">—</span></div>
+                  <div class="vm-prob" data-k="exit"><span class="vm-prob-k">Exit</span><span class="vm-prob-bar" aria-hidden="true"><i></i></span><span class="vm-prob-v">—</span></div>
+                  <div class="vm-prob" data-k="none"><span class="vm-prob-k">None</span><span class="vm-prob-bar" aria-hidden="true"><i></i></span><span class="vm-prob-v">—</span></div>
+                </div>
+                <p class="vm-fallback" id="vmFallback" title="The Halloween voice failed, so the call is on the fallback voice for the rest of the session" hidden>
+                  <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4l9 16H3z"/><path d="M12 10v4"/><path d="M12 17.2v.01"/></svg>
+                  Fallback voice
+                </p>
+              </div>
             </div>
           </article>
 

@@ -898,6 +898,114 @@ body[data-connected="true"] .mic-signal { color: var(--accent); }
 .btn.is-connecting svg { animation: pulse 1s var(--ease-signature) infinite; }
 
 /* =============================================================================
+   VOICE MODE (Plan 5) — the Control pillar's "AI Decide" row, and the restrained
+   Halloween accent the studio takes on while that mode is live.
+   applyVoiceMode() fills the row from a `voice_mode` evidence fragment and sets
+   body[data-voice-mode]. The accent rules are inert in standard mode (or with no
+   mode at all), so the studio looks exactly as it always did; halloween adds a
+   pumpkin/violet accent to the header, the ambient glow and the Control pillar
+   ONLY — never a reskin — and it clears cleanly when the attribute goes. The
+   palette is tokens, so both themes hold.
+   ========================================================================== */
+:root {
+  --hw-orange: #FF8A2B;   /* pumpkin — lines, fills, glows */
+  --hw-violet: #9D6BFF;   /* spectral violet — borders, glows */
+  --hw-ink:    #FFB877;   /* pumpkin as TEXT on navy (AA) */
+}
+:root[data-theme="light"] {
+  --hw-orange: #C2560A;   /* darkened for white / oat */
+  --hw-violet: #6B3FD1;
+  --hw-ink:    #8F3F00;   /* AA on the tinted chip over white / oat */
+}
+
+/* --- the row ---------------------------------------------------------------- */
+.voice-mode { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--hairline); display: flex; flex-direction: column; gap: 7px; }
+.voice-mode[hidden], .vm-probs[hidden], .vm-fallback[hidden] { display: none; }
+.vm-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.vm-title { font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; color: var(--text-lo); }
+.vm-chip {
+  flex: 0 0 auto; font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em;
+  padding: 3px 10px; border-radius: 999px;
+  color: var(--text-mid); background: var(--surface-3); border: 1px solid var(--hairline-strong);
+  transition: color var(--dur-2) var(--ease-signature), background var(--dur-2) var(--ease-signature), border-color var(--dur-2) var(--ease-signature);
+}
+.vm-chip[data-mode="halloween"] {
+  color: var(--hw-ink);
+  background: color-mix(in srgb, var(--hw-orange) 14%, var(--surface-2));
+  border-color: color-mix(in srgb, var(--hw-orange) 45%, transparent);
+}
+.vm-voice { font-family: var(--mono); font-size: .84rem; font-weight: 600; color: var(--text-hi); line-height: 1.35; word-break: break-word; overflow-wrap: anywhere; }
+.vm-decided { font-family: var(--mono); font-size: .74rem; color: var(--text-lo); line-height: 1.45; }
+.vm-decided:empty { display: none; }
+
+/* enter / exit / none — the decider's distribution; fills are transform-only (scaleX) */
+.vm-probs { display: flex; flex-direction: column; gap: 5px; margin-top: 2px; }
+.vm-prob { display: grid; grid-template-columns: 2.4rem minmax(0, 1fr) 2.3rem; align-items: center; gap: 8px; }
+.vm-prob-k { font-size: .68rem; text-transform: uppercase; letter-spacing: .07em; color: var(--text-lo); }
+.vm-prob-bar { height: 6px; border-radius: 999px; overflow: hidden; background: var(--surface-3); }
+.vm-prob-bar i {
+  display: block; height: 100%; background: var(--text-lo);
+  transform: scaleX(0); transform-origin: left center;
+  transition: transform var(--dur-3) var(--ease-signature);
+}
+.vm-prob[data-top="true"] .vm-prob-bar i { background: var(--c-control); }   /* the leading label takes the pillar's own hue */
+.voice-mode[data-mode="halloween"] .vm-prob[data-top="true"] .vm-prob-bar i { background: linear-gradient(90deg, var(--hw-orange), var(--hw-violet)); }
+.vm-prob-v { text-align: right; font-family: var(--mono); font-size: .72rem; color: var(--text-mid); font-feature-settings: "tnum" 1; }
+.vm-prob[data-top="true"] .vm-prob-v { color: var(--text-hi); font-weight: 600; }
+
+/* the Halloween voice failed: the call is on the fallback voice (amber = the Control hue, "degraded") */
+.vm-fallback {
+  align-self: flex-start; display: inline-flex; align-items: center; gap: 6px;
+  font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em;
+  padding: 3px 10px; border-radius: 999px;
+  color: var(--c-control);
+  background: color-mix(in srgb, var(--c-control) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--c-control) 36%, transparent);
+}
+.vm-fallback svg { flex: 0 0 auto; }
+
+/* --- the Halloween accent: header hairline + glow, an ambient wash, the Control pillar.
+   Everything it touches is transitioned (gradients can't be, so the wash and the pillar's top
+   line are opacity-faded layers), so enter AND exit are a fade, not a jump. ---- */
+.topbar      { transition: border-color var(--dur-3) var(--ease-signature), box-shadow var(--dur-3) var(--ease-signature); }
+.brand-mark  { transition: color var(--dur-3) var(--ease-signature); }
+.pillar[data-pillar="control"] { transition: border-color var(--dur-3) var(--ease-signature), box-shadow var(--dur-3) var(--ease-signature); }
+.bg::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0;
+  background:
+    radial-gradient(ellipse 60% 55% at 8% 0%,    color-mix(in srgb, var(--hw-orange) 20%, transparent), transparent 70%),
+    radial-gradient(ellipse 58% 60% at 96% 100%, color-mix(in srgb, var(--hw-violet) 26%, transparent), transparent 70%);
+  transition: opacity var(--dur-3) var(--ease-signature);
+}
+/* the pillar's 2px top line (.pillar::before, amber) gets a pumpkin→violet twin that fades in over it */
+.pillar[data-pillar="control"]::after {
+  content: ""; position: absolute; inset: 0 0 auto 0; height: 2px; pointer-events: none; opacity: 0;
+  background: linear-gradient(90deg, var(--hw-orange), var(--hw-violet) 60%, transparent);
+  transition: opacity var(--dur-3) var(--ease-signature);
+}
+
+body[data-voice-mode="halloween"] .bg::before { opacity: 1; }
+:root[data-theme="light"] body[data-voice-mode="halloween"] .bg::before { opacity: .6; }
+body[data-voice-mode="halloween"] .brand-mark { color: var(--hw-orange); }
+body[data-voice-mode="halloween"] .topbar {
+  border-bottom-color: color-mix(in srgb, var(--hw-violet) 55%, transparent);
+  box-shadow: 0 1px 24px -8px color-mix(in srgb, var(--hw-orange) 55%, transparent);
+}
+body[data-voice-mode="halloween"] .pillar[data-pillar="control"] {
+  border-color: color-mix(in srgb, var(--hw-violet) 50%, var(--hairline));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--hw-violet) 12%, transparent),
+              0 14px 38px -18px color-mix(in srgb, var(--hw-violet) 60%, transparent);
+  animation: hw-glow 5.5s ease-in-out infinite;   /* a slow breath; reduced-motion holds it still */
+}
+body[data-voice-mode="halloween"] .pillar[data-pillar="control"]::after { opacity: 1; }
+@keyframes hw-glow {
+  50% {
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--hw-violet) 24%, transparent),
+                0 16px 46px -14px color-mix(in srgb, var(--hw-orange) 50%, transparent);
+  }
+}
+
+/* =============================================================================
    RESPONSIVE
    ========================================================================== */
 @media (max-width: 1080px) {
@@ -938,4 +1046,8 @@ body[data-connected="true"] .mic-signal { color: var(--accent); }
      removed (movement with no state to preserve), never left mid-animation. */
   .hm-flow { opacity: 0 !important; }
   .draw-svg path, .draw-svg line, .draw-svg polyline, .draw-svg circle, .draw-svg rect { stroke-dashoffset: 0 !important; }
+  /* Halloween accent: the breathing glow is decoration — hold the finished, static accent instead. The
+     wash and the pillar's top-line twin are pseudo-elements, which the blanket `*` rule above does not reach. */
+  body[data-voice-mode="halloween"] .pillar[data-pillar="control"] { animation: none; }
+  .bg::before, .pillar[data-pillar="control"]::after { transition: none; }
 }
