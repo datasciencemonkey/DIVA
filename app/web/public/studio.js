@@ -1015,7 +1015,7 @@
     if (HAS_GSAP) animIn($$(".directive", grid), { y: 8, stagger: 0.05, dur: 0.4 });
   }
 
-  /* CONTROL · voice mode (Plan 5). One `voice_mode` fragment per AI Decide verdict: the row shows the
+  /* CONTROL · voice mode (Plan 5). One `voice_mode` fragment per mode change, dropped late answer or degrade (plus one at bind): the row shows the
      decision live, and body[data-voice-mode] lets the stylesheet shift the whole studio into — and
      back out of — the Halloween accent. Every field is optional: `probabilities` is null when the
      engine omits it (the bars just hide), and nothing here may throw on a partial payload. */

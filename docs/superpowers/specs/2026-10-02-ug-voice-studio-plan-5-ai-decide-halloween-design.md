@@ -1,7 +1,7 @@
 # UG Voice Studio — Plan 5: Expressive Mode + AI Decide Halloween Voice — Design Spec
 
 **Date:** 2026-10-02
-**Status:** Draft for review — research complete, architecture recommended, **implementation not started**.
+**Status:** Implemented — build/UI/deploy tasks complete and reviewed; code-complete on `plan-5-halloween-mode`. Owner-gated discovery (Task 1) and live validation (Task 13) remain.
 **Branch / worktree:** `plan-5-halloween-mode` (from `plan-4-frontend` @ `da942cb`), worktree
 `../voice-agents-ug-demo-worktrees/plan-5-halloween-mode`.
 **Builds on:** master spec `2026-09-24-unity-gateway-voice-studio-design.md` (§6 lifecycle, §7 speech stack,
@@ -588,7 +588,9 @@ today's (the existing tests pin it).
   - If the caller sounds uncomfortable, drop the act and offer the normal voice.
   - If the caller asks for the normal voice, say "As you wish…" (the system switches back).
 - **Switch notes:**
-  - `ON_NOTE` / `OFF_NOTE` are added to `turn_ctx` on a same-turn switch.
+  - `ON_NOTE` / `OFF_NOTE` are added to `turn_ctx` on a same-turn switch. They are appended after the
+    steady instructions, so for that one reply they trail the governance block; each therefore ends by
+    re-asserting the rules (G11).
   - `ANNOUNCE_ON` / `ANNOUNCE_OFF` are the `generate_reply` instructions for an announced switch.
 
 ### 7.10 Evidence and UI
@@ -654,7 +656,7 @@ controller log line.
 |---|---|---|---|---|
 | AI Decide not enabled / wrong region / token lacks scope (HTTP 403/404) | `DecideClient.classify` | verdict `none` (`error`); explicit-command rule still applies | explicit commands still work; set `UG_DECIDE_ENGINE=uaig_chat` | log `[ug] ai_decide … failed: HTTP 403`, once per distinct reason per call (nothing changed, so no span) |
 | Engine slower than the cue wait | `on_turn` | announced switch when it lands | "One moment…" then the spooky announcement | span `path=announced` |
-| Engine slower than its timeout, 5xx, 429, or bad JSON | `classify` | `none` (`timeout` / `error`) | explicit commands still work; subtle ones may need repeating | log `[ug] ai_decide … failed: <reason>`, once per distinct reason per call (nothing changed, so no span) |
+| Engine slower than its timeout, 5xx, 429, or bad JSON | `classify` | `none` (`timeout` / `error`) | explicit commands still work; subtle ones may need repeating | log `[ug] ai_decide … failed: <reason>`, once per distinct reason per call (no span unless it lands late → `late_dropped`, the row below) |
 | Late answer after the caller's next turn has started | controller (`turn_seq`) | dropped, never applied | none | span `path=late_dropped` |
 | Answer not in by end of turn (any turn) | `on_turn` | the reply goes out in the current mode; the answer is applied as an announced switch when it lands, unless a newer turn has started | natural-language requests switch a beat later | span `path=announced` |
 | Exception anywhere in AI Decide | `on_turn` / late-apply try/except | swallowed; the turn continues in the current mode | none (the turn is never dropped, C3) | log |
@@ -719,7 +721,7 @@ The master spec's eight invariants (§12) hold unchanged. New for Plan 5:
 
 ## 12. Risks to verify in plan Task 1 (discovery)
 
-- **R8 — ElevenLabs streaming at our 1.5.6 pin.**
+- **R8 — ElevenLabs streaming at our 1.8.3 pin** (bumped from 1.5.6, which could not stream the tag-performing model).
   - Check: the installed plugin's constructor; which model ids stream (`eleven_v3` vs newer turbo
     models); that tags are *performed*, not spoken; time to first audio.
   - Gate: tags performed correctly in ≥ 9 of 10 scripted lines, median time to first audio ≤ 400 ms, and
