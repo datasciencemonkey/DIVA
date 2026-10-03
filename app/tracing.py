@@ -22,7 +22,7 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor, SpanExporter
 # ---------------------------------------------------------------------------
 
 # Span name → MLflow SpanType for typed trace-tree rendering. `ug.ai_decide` is ours (the span the voice-mode
-# controller opens per decision, app/voice_mode.py); the exporter JSON-encodes the type, so it is typed here
+# controller opens on a mode transition or dropped late answer, app/voice_mode.py); the exporter JSON-encodes the type, so it is typed here
 # rather than with a bare string on the span.
 _SPAN_TYPES = {
     "agent_session": "AGENT",

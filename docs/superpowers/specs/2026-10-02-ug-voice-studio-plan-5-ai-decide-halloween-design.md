@@ -270,7 +270,7 @@ Decide.
 
 - ElevenLabs is the only verified option that performs **inline expressive tokens** the LLM writes
   into its text (`[whispers]`, `[sighs]`, `[laughs]`, `[mischievously]`, …) — exactly R1's "expressive
-  tokens" — and `livekit-plugins-elevenlabs==1.5.6` exists for our pin.
+  tokens" — and `livekit-plugins-elevenlabs==1.8.3` exists for our pin.
 - OpenAI `gpt-4o-mini-tts` sets style through one `instructions` parameter and is already installed. It
   is the alternate if ElevenLabs fails the Task 1 bake-off.
 - Deepgram `aura-2-zeus-en` is a deep voice with no expressive control. It is the no-new-dependency
@@ -280,7 +280,7 @@ Decide.
 |---|---|---|---|
 | Inline expressive tokens | **Yes — audio tags** | No — one style instruction | No (no SSML / tags / emotion) |
 | Spooky realism | High | Medium–high | Low (darker timbre only) |
-| Plugin at our pin | `livekit-plugins-elevenlabs==1.5.6` (new dependency) | `livekit-plugins-openai==1.5.6` (installed) | installed |
+| Plugin at our pin | `livekit-plugins-elevenlabs==1.8.3` (new dependency) | `livekit-plugins-openai==1.8.3` (installed) | installed |
 | New secret / egress | `ELEVEN_API_KEY` → `api.elevenlabs.io` | `OPENAI_API_KEY` → `api.openai.com` | none |
 | Time to first audio | turbo-class ≈ 0.1–0.15 s; v3 ≈ 0.25–0.3 s (third-party figures) | streaming, low | low |
 | Cost exposure | highest per character, but only Halloween turns use it | low | unchanged |
