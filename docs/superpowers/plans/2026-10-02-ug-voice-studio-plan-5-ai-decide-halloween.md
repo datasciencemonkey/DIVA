@@ -375,7 +375,7 @@ async def test_classify_never_raises_on_timeout_or_garbage():
 
 **Files:** Modify `pyproject.toml`, `agent-requirements.{in,txt}`, `app.yaml`, `.env.example`, `README.md`, `skills/building-voice-agents-on-databricks/references/{agent-and-tools,deployment,observability}.md`.
 
-- [ ] **Step 1: Add the dependency** — `livekit-plugins-elevenlabs==1.5.6` to `pyproject.toml` + `agent-requirements.in`; `uv sync`; import-smoke `uv run python -c "import livekit.plugins.elevenlabs; print('ok')"`.
+- [ ] **Step 1: Add the dependency** — `livekit-plugins-elevenlabs==1.8.3` to `pyproject.toml` + `agent-requirements.in`; `uv sync`; import-smoke `uv run python -c "import livekit.plugins.elevenlabs; print('ok')"`.
 - [ ] **Step 2: Recompile for Python 3.11** — regenerate `agent-requirements.txt` for the Apps runtime (gotchas: Worktrees & deploy), including the ElevenLabs plugin + its `codecs` extra.
 - [ ] **Step 3: Config** — add the §7.12 env to `app.yaml`; add the `ELEVEN_API_KEY` secret via `valueFrom: elevenlabs-api-key` (the secret + app resource are created out-of-band in the `ug-voice-studio` scope — **owner, key-gated**); mirror all vars (blank) into `.env.example`.
 - [ ] **Step 4: Docs** — README note; fold the C7/C8 pitfalls, the AI Decide pattern, and the new secret into the skill bundle references.

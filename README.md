@@ -23,7 +23,7 @@ Ask the agent for a spooky voice and it switches. Tier, model and governance sta
 
 - **AI Decide.** Databricks `ai_decide` (Beta) classifies each caller turn as enter, exit or none, outside the conversational LLM. A deterministic policy applies at most one change per turn, and an exit always wins. `UG_DECIDE_ENGINE=uaig_chat` swaps in a gateway-served chat model as the decider; `UG_AI_DECIDE=0` turns the feature off.
 - **Expressive voice.** In Halloween mode the Databricks LLM writes inline cues such as `[whispers]`, and ElevenLabs (`eleven_v3_conversational`) performs them. Cues are never read aloud or shown. If ElevenLabs is unavailable the call carries on in a darker Deepgram voice (`aura-2-zeus-en`).
-- **Visible.** The Control pillar shows each decision live: mode, confidence, latency and path.
+- **Visible.** The Control pillar shows each mode change live: mode, confidence, latency and path.
 
 Settings live in `app.yaml` and are mirrored in `.env.example`: `UG_AI_DECIDE`, `UG_DECIDE_ENGINE`, `UG_DECIDE_MODEL`, `UG_DECIDE_TIMEOUT_S`, `UG_DECIDE_CUE_WAIT_S`, `UG_HALLOWEEN_TTS`, `UG_HALLOWEEN_TTS_MODEL`, `UG_HALLOWEEN_VOICE_ID`, `UG_HALLOWEEN_STABILITY`, `UG_HALLOWEEN_FALLBACK_VOICE`, plus the secret `ELEVEN_API_KEY`.
 

@@ -26,7 +26,7 @@ scope here.
 | # | Requirement | Acceptance criteria |
 |---|---|---|
 | R1 | **Expressive mode** — the model emits expressive tokens and the TTS performs them. | In Halloween mode the LLM emits allow-listed cues (e.g. `[whispers]`); the TTS performs them and never reads them aloud; they never appear in the caller's transcript; `ug.expressive_tags` > 0 on Halloween calls. |
-| R2 | **Databricks decides automatically** whether the caller wants Halloween mode. | No UI toggle. Databricks **AI Decide** (`ai_decide`) makes the call by default (§2); every decision is traced (`ug.ai_decide`) and shown on the Control pillar; both explicit ("do a spooky voice") and natural ("make this creepy for me") requests switch the mode. |
+| R2 | **Databricks decides automatically** whether the caller wants Halloween mode. | No UI toggle. Databricks **AI Decide** (`ai_decide`) makes the call by default (§2); each mode change is traced (`ug.ai_decide`) and shown on the Control pillar (v1 records transitions, dropped late answers and degrades, not every classified turn; §7.10–§7.11); both explicit ("do a spooky voice") and natural ("make this creepy for me") requests switch the mode. |
 | R3 | **Scary / spooky voice** in the TTS output. | Owner's choice: voice **and** persona. The agent speaks in the spooky voice and persona either in the reply to the request (same-turn switch) or in a short in-character announcement right after it (announced switch, §7.3). An exit returns to the standard voice the same way. |
 | R4 | **Sequencing** researched and specified. | §7.3 defines the per-turn order of decide → apply → speak, covering both switch paths, barge-in, preemptive generation, and late or failed decisions. |
 | R5 | **Stays governed.** | Mode never changes tier, routed model, or directives; facts are spoken exactly; content stays PG; an exit is always honored (§9). |
@@ -194,8 +194,9 @@ Trade-offs:
     rules plus a one-variable switch to Option C's engine.
 - **State:** an explicit `VoiceModeState` with a single writer.
 - **Observability:**
-  - A `ug.ai_decide` span per turn: engine, cue, verdict, per-label probabilities, latency, path
-    (same-turn / announced / late-dropped), and mode before and after.
+  - A `ug.ai_decide` span per switch or dropped late answer (not per turn): engine, cue, verdict,
+    per-label probabilities, latency, path (same-turn / announced / late-dropped), and mode before and
+    after.
   - Root `ug.voice_mode*` attributes.
   - A Control-pillar row that **shows Databricks deciding, live**.
 - **Testing:** policy, parsers, tag filter and prompt are pure and deterministic. The controller is
@@ -387,9 +388,9 @@ Evidence payload (topic `ug_evidence`; contains no personal data and no transcri
 
 ```json
 {"type": "ug_evidence",
- "voice_mode": {"mode": "halloween", "voice": "ElevenLabs · eleven_v3", "decided_by": "Databricks AI Decide",
-                "engine": "ai_decide", "path": "announced", "confidence": 0.93,
-                "probabilities": {"enter": 0.93, "exit": 0.01, "none": 0.06},
+ "voice_mode": {"mode": "halloween", "voice": "ElevenLabs · eleven_v3_conversational",
+                "decided_by": "Databricks AI Decide", "engine": "ai_decide", "path": "announced",
+                "confidence": 0.93, "probabilities": {"enter": 0.93, "exit": 0.01, "none": 0.06},
                 "latency_ms": 1640, "reason": "enter", "degraded": false}}
 ```
 
@@ -605,17 +606,25 @@ today's (the existing tests pin it).
 
 ### 7.11 Observability
 
-- **Span `ug.ai_decide`:** one per classified turn, from the agent's tracer provider; a no-op when
-  tracing is off.
+Observability follows §7.10: v1 records mode transitions, dropped late answers and degrades, not every
+classified turn. A turn that is classified but changes nothing emits no span, no evidence fragment and no
+controller log line.
+
+- **Span `ug.ai_decide`:** one per mode transition (`same_turn` / `announced`) and one per late answer
+  that is dropped (`late_dropped`), from the agent's tracer provider; a no-op when tracing is off. A
+  degrade has no span of its own: it shows up as its evidence fragment, its log line and the root
+  attribute `ug.voice_degraded`.
   - Attributes: `ug.decide.engine`, `ug.decide.cue`, `ug.decide.source`, `ug.decide.intent`,
     `ug.decide.confidence`, `ug.decide.probabilities`, `ug.decide.latency_ms`, `ug.decide.path`
-    (`same_turn` / `announced` / `late_dropped` / `none`), `ug.decide.reason`, and
+    (`same_turn` / `announced` / `late_dropped`), `ug.decide.reason`, and
     `ug.voice_mode.before` / `ug.voice_mode.after`.
   - `mlflow.spanType = "CHAIN"`.
   - Utterance text is **not** copied; LiveKit's own user-turn spans already hold the transcript.
 - **Root enrichment:** `ug.voice_mode` (final), `ug.voice_mode_transitions`, `ug.decide_engine`,
   `ug.expressive_tags`, `ug.voice_degraded`.
-- **Logs:** one `[ug] ai_decide …` line per transition, late drop, or degrade.
+- **Logs:** the controller writes one `[ug] voice_mode …` line per transition, late drop, or degrade. The
+  decision engine logs separately, under `[ug] ai_decide …` (`src/services/ai_decide.py`): a request
+  failure, once per distinct reason per call, or an unknown `UG_DECIDE_ENGINE`.
 
 ### 7.12 Configuration, secrets, dependencies
 
@@ -643,13 +652,13 @@ today's (the existing tests pin it).
 
 | Failure | Detected by | Behavior | Caller experience | Observable |
 |---|---|---|---|---|
-| AI Decide not enabled / wrong region / token lacks scope (HTTP 403/404) | `DecideClient.classify` | verdict `none` (`error`); explicit-command rule still applies | explicit commands still work; set `UG_DECIDE_ENGINE=uaig_chat` | span `source=error`, log once per call |
+| AI Decide not enabled / wrong region / token lacks scope (HTTP 403/404) | `DecideClient.classify` | verdict `none` (`error`); explicit-command rule still applies | explicit commands still work; set `UG_DECIDE_ENGINE=uaig_chat` | log `[ug] ai_decide … failed: HTTP 403`, once per distinct reason per call (nothing changed, so no span) |
 | Engine slower than the cue wait | `on_turn` | announced switch when it lands | "One moment…" then the spooky announcement | span `path=announced` |
-| Engine slower than its timeout, 5xx, 429, or bad JSON | `classify` | `none` (`timeout` / `error`) | explicit commands still work; subtle ones may need repeating | span |
+| Engine slower than its timeout, 5xx, 429, or bad JSON | `classify` | `none` (`timeout` / `error`) | explicit commands still work; subtle ones may need repeating | log `[ug] ai_decide … failed: <reason>`, once per distinct reason per call (nothing changed, so no span) |
 | Late answer after the caller's next turn has started | controller (`turn_seq`) | dropped, never applied | none | span `path=late_dropped` |
 | Answer not in by end of turn (any turn) | `on_turn` | the reply goes out in the current mode; the answer is applied as an announced switch when it lands, unless a newer turn has started | natural-language requests switch a beat later | span `path=announced` |
 | Exception anywhere in AI Decide | `on_turn` / late-apply try/except | swallowed; the turn continues in the current mode | none (the turn is never dropped, C3) | log |
-| `ELEVEN_API_KEY` missing (or `UG_HALLOWEEN_VOICE_ID` missing, which ElevenLabs also requires) | `voice_profiles` at bind | `halloween` = Deepgram fallback either way | spooky persona, dark voice, no tags | evidence `degraded: true` |
+| `ELEVEN_API_KEY` missing (or `UG_HALLOWEEN_VOICE_ID` missing, which ElevenLabs also requires) | `voice_profiles` at bind | `halloween` = Deepgram fallback either way | spooky persona, dark voice, no tags | a warning log naming the missing setting, and the Deepgram fallback `voice` label in the evidence once Halloween is on; `degraded` stays `false` (only a runtime `mark_degraded`, the next row, sets it) |
 | ElevenLabs runtime error / egress blocked | `tts_node` try/except | `mark_degraded` → fallback for the rest of the call | the current utterance may cut off; later replies use the dark voice | evidence + `ug.voice_degraded` |
 | LLM emits an unknown tag | TTS filter | dropped | never read aloud | — |
 | LLM emits tags in standard mode (left over in history) | TTS filter (empty vocabulary) | all dropped | none | — |
@@ -677,7 +686,7 @@ The master spec's eight invariants (§12) hold unchanged. New for Plan 5:
 | Layer | Tests (files) |
 |---|---|
 | Pure policy | `tests/test_voice_mode_policy.py` — cues (positives and negatives), explicit commands including negation, `resolve_verdict` (exit wins, safety net), the full `decide_mode` table |
-| Decision engines | `tests/test_ai_decide.py` — the state carries only the three allowed fields, truncated; `ai_decide` body shape (one `choice` question, labels exactly `enter`/`exit`/`none`, version 1.0); `parse_ai_decide` (valid, `error_message`, missing answer, unknown label, out-of-range confidence); the `uaig_chat` body and parser; timeout / HTTP error / garbage → no exception; engine selection |
+| Decision engines | `tests/test_ai_decide.py` — the state carries only the three allowed fields, truncated; `ai_decide` body shape (one `choice` question, labels exactly `enter`/`exit`/`none`, version 1.0); `parse_ai_decide` (valid, null `response`, missing answer, unknown label, out-of-range confidence); the `uaig_chat` body and parser; timeout / HTTP error / garbage → no exception; engine selection |
 | Expressive tokens | `tests/test_expressive.py` — allowed tags pass; unknown tags dropped; an empty vocabulary strips all; tags split across chunks; markdown links untouched; **regression: stock `filter_markdown` holds `[whispers]` text until the stream ends, while our filter streams it early**; placeholders survive `filter_emoji`; `strip_tags(_stream)` |
 | Prompt | `tests/test_agent_prompt.py` (extended) — persona before governance; governance last; no tier words; cue rules only with tags; voice-request line only when asked; output unchanged when no new arguments are passed |
 | Profiles | `tests/test_voice_profiles.py` — vendor selection, fallback when the key is missing, tags and persona per profile, `build_tts` arguments (fake plugin modules) |
