@@ -435,8 +435,10 @@ class VoiceModeController:
 
     def _emit_span(self, path: str, before: str, after: str, verdict: IntentVerdict,
                    latency_ms: float | None, reason: str, cue: bool) -> None:
-        """One `ug.ai_decide` span per classified turn (§7.11); a no-op when tracing is off. The utterance
-        is never copied — LiveKit's own user-turn span already holds the transcript."""
+        """One `ug.ai_decide` span per mode transition (`same_turn` / `announced`) and per dropped late answer
+        (`late_dropped`); a turn that changes nothing gets none, and a degrade has no span of its own (§7.11).
+        A no-op when tracing is off. The utterance is never copied — LiveKit's own user-turn span already
+        holds the transcript."""
         if self._tracer is None:
             return
         try:

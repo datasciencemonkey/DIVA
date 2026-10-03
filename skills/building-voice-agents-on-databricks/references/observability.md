@@ -116,10 +116,10 @@ The `enrichment` dict is captured by reference — mutate it during the call (e.
 
 ## Custom spans and `ug.*` attributes
 
-Your own spans (for example one per AI decision, see [agent-and-tools.md](agent-and-tools.md)) come from the same tracer provider. These rules keep them useful in MLflow:
+Your own spans (for example the `ug.ai_decide` span, see [agent-and-tools.md](agent-and-tools.md)) come from the same tracer provider. These rules keep them useful in MLflow:
 
 - **Type them through the map.** The exporter writes `mlflow.spanType` as `json.dumps(...)`, so a custom span's type belongs in `_SPAN_TYPES` (`"ug.ai_decide": "CHAIN"`), not in a bare string set on the span.
-- **Keep the span PII-free.** One span per classified turn with the engine, cue, source, intent, confidence, probabilities, latency, path (same-turn / announced / late-dropped), reason, and the mode before and after. Never copy utterance text: LiveKit's own user-turn spans already hold the transcript.
+- **Keep the span PII-free.** One span per mode transition and per dropped late answer (not for every classified turn; a degrade has no span of its own, it is an evidence fragment, a log line and the root attribute `ug.voice_degraded`), carrying the engine, cue, source, intent, confidence, probabilities, latency, path (same-turn / announced / late-dropped), reason, and the mode before and after. Never copy utterance text: LiveKit's own user-turn spans already hold the transcript.
 - **Put per-call rollups on the root span** through the `enrichment` dict (`ug.voice_mode`, `ug.voice_mode_transitions`, `ug.decide_engine`, `ug.expressive_tags`, `ug.voice_degraded`). Attribute values can be `str`, `bool`, `int` or `float`, so the dict need not be string-only. Fill the final values in the shutdown callback, before `force_flush`.
 - **Enrichment is fail-soft, so a typo fails silently.** Assert in a test that the keys you expect really land on the root span.
 

@@ -309,11 +309,11 @@ async def test_classify_never_raises_on_timeout_or_garbage():
 
 **Interfaces (spec §7.2/§7.3/§7.4):**
 - Produces: `VoiceModeState{mode, entries, transitions, degraded, last_agent_line, tags_spoken, turn_seq, last}`; `VoiceModeController(classifier, profiles, instructions_for, *, evidence_sink=None, tracer=None, on_cue=None, enabled=True, cue_wait_s=0.8)` with `profile`, `vocabulary()`, `instructions()`, `prefetch(transcript)`, `note_agent_line(text)`, `count_tag(name)`, `async on_turn(agent, turn_ctx, new_message)` (never raises), `mark_degraded(reason)`.
-- Consumes: Tasks 2,4,5,6; the 1.5.6 `update_instructions` helper via lazy import.
+- Consumes: Tasks 2,4,5,6; the 1.8.3 `update_instructions` helper via lazy import.
 
 - [ ] **Step 1: Write the failing tests** — `tests/test_voice_mode_controller.py` (fake classifier/profiles; a **real** `livekit.agents.llm.ChatContext` for the patch assertion). Cover: prefetch reuse; non-cue turn skips the wait; a same-turn enter patches a real `ChatContext` and calls `update_instructions`; an announced enter calls `generate_reply` once with `ANNOUNCE_ON`; a late answer after `turn_seq` advanced is dropped (`path=late_dropped`); an exit rule beats the engine; exceptions in the hook are swallowed (turn continues); evidence payload contains no transcript/PII; `mark_degraded` sets only `degraded`; `enabled=False` makes zero calls.
 - [ ] **Step 2: Run → FAIL.** `uv run pytest tests/test_voice_mode_controller.py -q`.
-- [ ] **Step 3: Implement** per spec §7.3 sequencing + §7.4 single-writer state. `prefetch` starts the background `classify` on the final transcript and accumulates multi-segment turns. `on_turn`: wait ≤ `cue_wait_s` only when `has_cue`; `resolve_verdict`→`decide_mode`; if changed → `_transition` (same-turn: patch `turn_ctx` via the 1.5.6 helper + `agent.update_instructions`; else announced via `session.generate_reply(instructions=ANNOUNCE_*)` guarded by `turn_seq`). Publish evidence (§7.2 payload) + `ug.ai_decide` span. **Never raise** (gotchas: LiveKit — a hook exception drops the turn).
+- [ ] **Step 3: Implement** per spec §7.3 sequencing + §7.4 single-writer state. `prefetch` starts the background `classify` on the final transcript and accumulates multi-segment turns. `on_turn`: wait ≤ `cue_wait_s` only when `has_cue`; `resolve_verdict`→`decide_mode`; if changed → `_transition` (same-turn: patch `turn_ctx` via the 1.8.3 helper + `agent.update_instructions`; else announced via `session.generate_reply(instructions=ANNOUNCE_*)` guarded by `turn_seq`). Publish evidence (§7.2 payload) + `ug.ai_decide` span. **Never raise** (gotchas: LiveKit — a hook exception drops the turn).
 - [ ] **Step 4: Run → PASS.** Commit (`feat(voice): VoiceModeController — decide, switch, degrade, evidence`).
 
 ---
@@ -326,7 +326,7 @@ async def test_classify_never_raises_on_timeout_or_garbage():
 
 - [ ] **Step 1: Write the failing tests** — `tests/test_studio_agent.py` (fake controller + fake profile TTS): standard profile delegates to the default node; Halloween streams through the profile TTS; a raised vendor error → `mark_degraded` called, no exception propagates, fallback audio continues; `transcription_node` output has no `[tags]`; `on_user_turn_completed` calls `controller.on_turn`.
 - [ ] **Step 2: Run → FAIL.** `uv run pytest tests/test_studio_agent.py -q`.
-- [ ] **Step 3: Implement** per spec §7.7 (copy the 1.5.6 default `tts_node` for the profile branch, with `APIConnectOptions(max_retry=1, timeout=5.0)`; wrap in try/except → `mark_degraded`). `transcription_node` runs `strip_tags_stream`.
+- [ ] **Step 3: Implement** per spec §7.7 (copy the 1.8.3 default `tts_node` for the profile branch, with `APIConnectOptions(max_retry=1, timeout=5.0)`; wrap in try/except → `mark_degraded`). `transcription_node` runs `strip_tags_stream`.
 - [ ] **Step 4: Run → PASS.** Commit (`feat(agent): StudioAgent nodes — tts routing + tag-stripped transcript`).
 
 ---

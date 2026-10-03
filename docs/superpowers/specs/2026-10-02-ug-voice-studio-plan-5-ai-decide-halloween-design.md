@@ -537,7 +537,7 @@ gateway in `src/services/uaig_chat.py`) and expects `{"intent", "confidence"}` b
 - **Routing:** `StudioAgent.tts_node` reads `controller.profile` once per utterance.
   - The standard profile hands off to `Agent.default.tts_node`, i.e. the session's TTS, so behavior is
     unchanged.
-  - The other profiles stream through a TTS instance owned by the profile. That code copies the 1.5.6
+  - The other profiles stream through a TTS instance owned by the profile. That code copies the 1.8.3
     default node, with tight connection options `APIConnectOptions(max_retry=1, timeout=5.0)`.
   - That instance sits outside the session's error count (C10).
 - **Warm-up:** on a cue, `on_cue` opens the Halloween TTS connection (`prewarm()`) while the decision is
@@ -690,7 +690,7 @@ The master spec's eight invariants (§12) hold unchanged. New for Plan 5:
 | Expressive tokens | `tests/test_expressive.py` — allowed tags pass; unknown tags dropped; an empty vocabulary strips all; tags split across chunks; markdown links untouched; **regression: stock `filter_markdown` holds `[whispers]` text until the stream ends, while our filter streams it early**; placeholders survive `filter_emoji`; `strip_tags(_stream)` |
 | Prompt | `tests/test_agent_prompt.py` (extended) — persona before governance; governance last; no tier words; cue rules only with tags; voice-request line only when asked; output unchanged when no new arguments are passed |
 | Profiles | `tests/test_voice_profiles.py` — vendor selection, fallback when the key is missing, tags and persona per profile, `build_tts` arguments (fake plugin modules) |
-| Controller | `tests/test_voice_mode_controller.py` — prefetch reuse; cue-wait cap; non-cue skip; a same-turn enter patches **a real `llm.ChatContext`** through the 1.5.6 helper and calls `update_instructions`; an announced enter calls `generate_reply` once with `ANNOUNCE_ON`; a late answer after a newer turn is dropped; an exit rule beats the engine; exceptions swallowed; evidence contains no personal data; degrade; kill switch |
+| Controller | `tests/test_voice_mode_controller.py` — prefetch reuse; cue-wait cap; non-cue skip; a same-turn enter patches **a real `llm.ChatContext`** through the 1.8.3 helper and calls `update_instructions`; an announced enter calls `generate_reply` once with `ANNOUNCE_ON`; a late answer after a newer turn is dropped; an exit rule beats the engine; exceptions swallowed; evidence contains no personal data; degrade; kill switch |
 | Agent nodes | `tests/test_studio_agent.py` — the standard profile uses the default node; Halloween streams through the profile's TTS (fake); a vendor error → degrade, no exception; the transcript strips tags; the hook calls the controller |
 | Tracing | `tests/test_tracing.py` (extended) — `ug.voice_*` attributes, the span-type map |
 | Governance | `tests/test_voice_governance.py` — G9–G13 as structural tests (bind unchanged across transitions; a spy on the engine's input; the persona can't drop governance; exit always wins) |
