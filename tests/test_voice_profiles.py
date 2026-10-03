@@ -16,6 +16,7 @@ import subprocess
 import sys
 import types
 from pathlib import Path
+from typing import get_args
 
 import livekit.plugins
 import pytest
@@ -149,6 +150,37 @@ def test_elevenlabs_is_the_default_vendor():
 def test_elevenlabs_model_is_configurable_and_shown_in_the_label():
     p = resolve_profiles({**ELEVEN_ENV, "UG_HALLOWEEN_TTS_MODEL": "eleven_v3"})["halloween"]
     assert "eleven_v3" in p.label and "conversational" not in p.label
+
+
+@pytest.mark.parametrize("model, performs_tags", [
+    pytest.param("eleven_v3", True, id="v3"),
+    pytest.param("eleven_v3_conversational", True, id="v3 conversational"),
+    pytest.param("eleven_turbo_v2_5", False, id="turbo"),
+    pytest.param("eleven_flash_v2_5", False, id="flash"),
+    pytest.param("eleven_multilingual_v2", False, id="multilingual"),
+    pytest.param("Eleven_V3", False, id="case-sensitive, like the plugin's own check"),
+])
+def test_only_elevenlabs_dialogue_models_get_tags(model, performs_tags):
+    """Any other ElevenLabs model speaks "[laughs]" aloud (G13). Its profile keeps the spooky persona but gets no
+    tags (fail closed): the tag filter then drops every cue, and the prompt never asks for one."""
+    p = resolve_profiles({**ELEVEN_ENV, "UG_HALLOWEEN_TTS_MODEL": model})["halloween"]
+    assert p.vendor == "elevenlabs"
+    assert p.persona == HALLOWEEN_PERSONA
+    assert p.tags == (frozenset(SPOOKY_TAGS) if performs_tags else frozenset())
+
+
+def test_the_tag_gate_agrees_with_the_plugins_own_dialogue_routing():
+    """`eleven_v3` is a copy of the plugin's rule for which models go to text-to-dialogue, the only path that
+    performs tags. A stack bump that changes the rule or adds models must fail here, not quietly lose the tags
+    or let a model speak them."""
+    from livekit.plugins.elevenlabs.models import DIALOGUE_TTS_MODEL_PREFIX, TTSModels, is_dialogue_model
+
+    from app.voice_profiles import DIALOGUE_MODEL_PREFIX
+
+    assert DIALOGUE_MODEL_PREFIX == DIALOGUE_TTS_MODEL_PREFIX
+    for model in get_args(TTSModels):
+        tags = resolve_profiles({**ELEVEN_ENV, "UG_HALLOWEEN_TTS_MODEL": model})["halloween"].tags
+        assert bool(tags) == is_dialogue_model(model), model
 
 
 @pytest.mark.parametrize("env", [

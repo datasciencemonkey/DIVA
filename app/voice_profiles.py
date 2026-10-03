@@ -4,13 +4,17 @@ and which persona the prompt wears.
     profile             voice                                               tags               persona
     standard            Deepgram aura-2-andromeda-en, the session's own     none               none
     halloween           UG_HALLOWEEN_TTS: ElevenLabs (default), OpenAI,     SPOOKY_TAGS,       HALLOWEEN_PERSONA
-                        or Deepgram                                         ElevenLabs only
+                        or Deepgram                                         ElevenLabs v3 only
     halloween_fallback  Deepgram UG_HALLOWEEN_FALLBACK_VOICE                none               HALLOWEEN_PERSONA
 
 `resolve_profiles(env)` only reads the mapping it is given. It picks a vendor only after seeing that the
 vendor's settings are there: at LiveKit 1.8.3 the ElevenLabs plugin raises ValueError at construction without
 ELEVEN_API_KEY. A Halloween voice whose settings are missing therefore *is* the Deepgram fallback: the same
 spooky persona in a darker Deepgram voice, with no expressive tags, and nothing crashes.
+
+Tags are gated on the ElevenLabs *model* as well as the vendor: only `eleven_v3*` performs an inline `[tag]`.
+Any other model (turbo, flash, multilingual) would speak it aloud, so that profile keeps the persona and gets
+no tags (G13, fail closed).
 
 `build_tts(profile)` imports the vendor plugin only when called, so this module imports without LiveKit, and
 constructs the TTS without connecting (ElevenLabs opens its WebSocket on first use; `prewarm()` is a no-op
@@ -38,6 +42,9 @@ STANDARD_VOICE = "aura-2-andromeda-en"          # app/agent.py builds the sessio
 DEFAULT_FALLBACK_VOICE = "aura-2-zeus-en"       # the darker Deepgram voice the spec names for Halloween
 DEFAULT_VENDOR = "elevenlabs"
 DEFAULT_ELEVENLABS_MODEL = "eleven_v3_conversational"   # a dialogue model: it performs and streams [tags]
+# The ElevenLabs models that perform an inline [tag]: the plugin sends `eleven_v3*` to text-to-dialogue (its own
+# rule, DIALOGUE_TTS_MODEL_PREFIX; a test keeps the two equal). Any other model would speak the tag aloud (G13).
+DIALOGUE_MODEL_PREFIX = "eleven_v3"
 DEFAULT_STABILITY = 0.5
 OPENAI_MODEL = "gpt-4o-mini-tts"
 OPENAI_STYLE = ("Speak as a playful, spooky Halloween host: eerie and theatrical, with slow dramatic pauses. "
@@ -112,8 +119,10 @@ def _halloween(env: Mapping[str, str], fallback: VoiceProfile) -> VoiceProfile:
                        ", ".join(missing), vendor, fallback.label)
         return replace(fallback, key="halloween")
     if vendor == "elevenlabs":
-        return VoiceProfile("halloween", f"ElevenLabs · {_elevenlabs_model(env)}", "elevenlabs",
-                            frozenset(SPOOKY_TAGS), HALLOWEEN_PERSONA)
+        model = _elevenlabs_model(env)
+        # fail closed: a model that cannot perform the tags keeps the persona but gets none, so none is ever spoken
+        tags = frozenset(SPOOKY_TAGS) if model.startswith(DIALOGUE_MODEL_PREFIX) else frozenset()
+        return VoiceProfile("halloween", f"ElevenLabs · {model}", "elevenlabs", tags, HALLOWEEN_PERSONA)
     if vendor == "openai":
         return VoiceProfile("halloween", f"OpenAI · {OPENAI_MODEL}", "openai", frozenset(), HALLOWEEN_PERSONA)
     return replace(fallback, key="halloween")   # UG_HALLOWEEN_TTS=deepgram
