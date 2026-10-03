@@ -114,6 +114,17 @@ Wire it into `build_tracer_provider` by wrapping the OTLP exporter **before** th
 
 The `enrichment` dict is captured by reference — mutate it during the call (e.g. once you know the caller) and the root span picks it up at export.
 
+## Custom spans and `ug.*` attributes
+
+Your own spans (for example one per AI decision, see [agent-and-tools.md](agent-and-tools.md)) come from the same tracer provider. These rules keep them useful in MLflow:
+
+- **Type them through the map.** The exporter writes `mlflow.spanType` as `json.dumps(...)`, so a custom span's type belongs in `_SPAN_TYPES` (`"ug.ai_decide": "CHAIN"`), not in a bare string set on the span.
+- **Keep the span PII-free.** One span per classified turn with the engine, cue, source, intent, confidence, probabilities, latency, path (same-turn / announced / late-dropped), reason, and the mode before and after. Never copy utterance text: LiveKit's own user-turn spans already hold the transcript.
+- **Put per-call rollups on the root span** through the `enrichment` dict (`ug.voice_mode`, `ug.voice_mode_transitions`, `ug.decide_engine`, `ug.expressive_tags`, `ug.voice_degraded`). Attribute values can be `str`, `bool`, `int` or `float`, so the dict need not be string-only. Fill the final values in the shutdown callback, before `force_flush`.
+- **Enrichment is fail-soft, so a typo fails silently.** Assert in a test that the keys you expect really land on the root span.
+
+(Source anchors for these notes are in the Voice Studio repo's `docs/gotchas.md`, section "Repo (voice-agents-ug-demo)".)
+
 ## Config (app.yaml)
 
 Set all three or tracing stays off: `DATABRICKS_TRACE_CATALOG`, `DATABRICKS_TRACE_SCHEMA`, `DATABRICKS_TRACE_TABLE_PREFIX`, plus `OTEL_SERVICE_NAME`. `DATABRICKS_HOST`/`DATABRICKS_TOKEN` are already present. The app SP / PAT user must be able to write to the target UC schema.

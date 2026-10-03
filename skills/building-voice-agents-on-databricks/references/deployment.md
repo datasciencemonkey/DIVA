@@ -37,6 +37,20 @@ uv pip compile agent-requirements.in --python-version 3.11 -o agent-requirements
 
 (`agent-requirements.in` = your direct worker deps — see `templates/agent-requirements.in`.)
 
+Notes on the compile:
+
+- **`-o` on an existing file keeps its pins as preferences.** A recompile moves only what your `.in` edits force (numpy stays put), and re-running the same command is idempotent. Add `--upgrade` to take newer versions on purpose.
+- **A `livekit-agents` bump moves its companions.** 1.8.x hard-pins `livekit==1.1.18`, needs `livekit-api>=1.2.0`, and requires `openai<3` (replacing an `openai` 3.x from an earlier resolve). Bump `livekit`, `livekit-api` and every `livekit-plugins-*` in the `.in` together, or the resolve fails.
+- **Apps run Linux; compiling on a Mac is fine** when the same compile with `--python-platform linux`, run on a copy of the output so the same pins are preferred, produces identical pins.
+- **Verify before you deploy:** the pins are 3.11-valid and the stack really installs and imports there.
+
+```bash
+grep -iE '^(numpy|livekit-plugins-[a-z]+)==' agent-requirements.txt      # numpy 2.4.x, every plugin you use pinned
+uv venv /tmp/v311 --python 3.11
+uv pip install --python /tmp/v311/bin/python -r agent-requirements.txt    # what start_app.py does at boot
+/tmp/v311/bin/python -c "import livekit.agents, livekit.plugins.elevenlabs"
+```
+
 ## Secrets
 
 ```bash
@@ -64,6 +78,29 @@ Grant the app's service principal **READ on the scope** (the platform reads secr
 SP=$(databricks apps get my-voice-agent -o json --profile "$PROFILE" | python3 -c "import sys,json;print(json.load(sys.stdin)['service_principal_client_id'])")
 databricks secrets put-acl my-voice-agent "$SP" READ --profile "$PROFILE"
 ```
+
+### Adding another secret later (example: an ElevenLabs key)
+
+A new `valueFrom:` line in `app.yaml` is not enough on its own. The key needs a secret in the scope **and** an app resource that points at it, and both are created outside the repo by whoever owns the key. Attach the resource **before** you deploy the `app.yaml` that references it: `valueFrom` only resolves once the resource exists.
+
+```bash
+# 1. the secret (value read from the gitignored .env.local, never echoed)
+val=$(grep '^ELEVEN_API_KEY=' .env.local | cut -d= -f2-)
+databricks secrets put-secret "$SCOPE" elevenlabs_api_key --string-value "$val" --profile "$PROFILE"
+
+# 2. the app resource. Send the FULL resources list so the existing ones are not dropped:
+#    start from `databricks apps get my-voice-agent -o json` and append
+#    {"name":"elevenlabs-api-key","secret":{"scope":"my-voice-agent","key":"elevenlabs_api_key","permission":"READ"}}
+databricks apps update my-voice-agent --json @resources.json --profile "$PROFILE"
+```
+
+```yaml
+# app.yaml -- the name after valueFrom is the RESOURCE name, not the scope key
+- name: ELEVEN_API_KEY
+  valueFrom: elevenlabs-api-key
+```
+
+The app's service principal already has READ on the scope, so a new key in the same scope needs no new ACL. Keep non-secret knobs (model, fallback voice, thresholds) as plain `value:` entries. For an optional value only the owner can choose (such as an ElevenLabs voice id), leave it out as a commented-out entry rather than `value: ""`: each entry needs one of `value` / `valueFrom`, and the docs say nothing about empty strings.
 
 ## Auth note: PAT vs service principal
 
@@ -110,3 +147,7 @@ Look for, in order: `[web] ... listening on 0.0.0.0:8000` (web tier up), then ~3
 | web tier crashes on import | a module-level dep missing from root `requirements.txt` | add it (only the web tier's imports) |
 | SDK "more than one authorization method configured" | PAT + SP creds both in env | ensure the launcher pops `DATABRICKS_CLIENT_ID/SECRET` |
 | worker keeps restarting | outbound to LiveKit Cloud / STT provider blocked | verify Apps egress reaches `wss://…livekit.cloud` and the provider |
+| resolver conflict after bumping `livekit-agents` | its companions are pinned to it (`livekit`, `livekit-api`, `openai<3`) | bump them and every `livekit-plugins-*` together in the `.in` |
+| vendor-direct TTS (e.g. ElevenLabs) never speaks; the call carries on in the fallback voice | key or voice id missing, the app resource not attached, or outbound to the vendor (`api.elevenlabs.io`) blocked | confirm the `ELEVEN_API_KEY` resource is attached and the voice id is set; verify egress; check `apps logs` for the degrade/warning line |
+
+More dated findings, with source anchors, are kept in the Voice Studio repo's `docs/gotchas.md` (sections "Worktrees & deploy" and "ElevenLabs / expressive-TTS").
