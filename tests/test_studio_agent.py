@@ -3,14 +3,17 @@
 Three overrides are exercised with fakes (no network, no AgentSession):
   - `tts_node` routes by the ACTIVE profile, snapshotted ONCE at the start of the utterance: standard
     delegates to `Agent.default.tts_node` (the session's own TTS); any other profile streams through its
-    own TTS and, on ANY vendor error, degrades to the fallback (Deepgram dark voice) WITHOUT raising.
+    own TTS and, on ANY vendor error, degrades to the EXPLICIT fallback (Deepgram dark voice) WITHOUT
+    raising — and, because that voice performs no tags, with the degrade-path text tag-stripped (G13).
   - `transcription_node` strips expressive tags for every profile so a `[tag]` never shows.
   - `on_user_turn_completed` hands the turn to the controller.
 
+A caller cancellation (`CancelledError`) is NOT a vendor error: it propagates and does not degrade.
+
 Fakes: a controller exposing `.profile` / `.mark_degraded` / `.on_turn`; streaming TTS instances that
-honor push_text/end_input and yield frames (or raise a vendor error); and a spy on
-`Agent.default.tts_node`. The profile-owned TTS lifecycle (error/metrics subscription, aclose) is Task 10's
-wiring job and is out of scope here.
+honor push_text/end_input and yield frames (optionally failing before, after N frames, or blocking on a
+gate); and a spy on `Agent.default.tts_node`. The profile-owned TTS lifecycle (error/metrics subscription,
+aclose) is Task 10's wiring job and is out of scope here.
 """
 import asyncio
 from types import SimpleNamespace
@@ -32,13 +35,12 @@ FALLBACK = VoiceProfile("halloween_fallback", "Deepgram · zeus", "deepgram", fr
 
 # --------------------------------------------------------------------------------------- fakes
 class FakeController:
-    """Stands in for VoiceModeController: exposes `.profile` (switching to the fallback once degraded),
-    records `mark_degraded`/`on_turn`, and counts `.profile` reads so the per-utterance snapshot can be
-    asserted."""
+    """Stands in for VoiceModeController: `.profile` returns the active profile (and counts reads, so the
+    per-utterance snapshot can be asserted — the degrade path must NOT re-read it); records
+    `mark_degraded`/`on_turn`."""
 
-    def __init__(self, profile, *, fallback=None):
+    def __init__(self, profile):
         self._profile = profile
-        self._fallback = fallback
         self.degraded = False
         self.degrade_reasons: list[str] = []
         self.on_turn_args: list[tuple] = []
@@ -47,8 +49,6 @@ class FakeController:
     @property
     def profile(self):
         self.profile_reads += 1
-        if self.degraded and self._fallback is not None:
-            return self._fallback
         return self._profile
 
     def mark_degraded(self, reason):
@@ -61,8 +61,8 @@ class FakeController:
 
 class FakeStream:
     """A SynthesizeStream stand-in: push_text buffers tokens, end_input unblocks iteration, and iteration
-    yields one `.frame` per configured frame — or raises a vendor error (after end_input, as a real vendor
-    would once it has the text)."""
+    yields one `.frame` per configured frame — or fails before any frame (`fail`), after N frames
+    (`fail_after`), and/or blocks on a `gate` after each frame (to test mid-stream cancellation)."""
 
     def __init__(self, parent):
         self._parent = parent
@@ -90,19 +90,25 @@ class FakeStream:
             self._parent.on_iter()               # a hook to flip mode mid-utterance (snapshot test)
         if self._parent.fail:
             raise RuntimeError("vendor stream exploded")
-        for frame in self._parent.frames:
+        for i, frame in enumerate(self._parent.frames):
             yield SimpleNamespace(frame=frame)
+            if self._parent.gate is not None:
+                await self._parent.gate.wait()   # block so a consumer can be cancelled mid-stream
+            if self._parent.fail_after is not None and (i + 1) >= self._parent.fail_after:
+                raise RuntimeError("vendor stream exploded mid-synthesis")
 
 
 class FakeTTS:
-    """A streaming TTS stand-in. `streaming=False` forces the StreamAdapter branch; `fail=True` makes its
-    stream raise a vendor error. Records pushed text and the conn_options it was handed."""
+    """A streaming TTS stand-in. `streaming=False` forces the StreamAdapter branch. Records pushed text and
+    the conn_options it was handed."""
 
-    def __init__(self, frames=(), *, streaming=True, fail=False, on_iter=None):
+    def __init__(self, frames=(), *, streaming=True, fail=False, fail_after=None, on_iter=None, gate=None):
         self.capabilities = SimpleNamespace(streaming=streaming, aligned_transcript=False)
         self.frames = list(frames)
         self.fail = fail
+        self.fail_after = fail_after
         self.on_iter = on_iter
+        self.gate = gate
         self.pushed: list[str] = []
         self.conn_options: list = []
         self.closed = False
@@ -141,8 +147,17 @@ async def collect(agen):
     return [item async for item in agen]
 
 
-def make_agent(controller, mapping):
-    return StudioAgent(controller, build_tts=make_build_tts(mapping), instructions="test")
+async def _until(pred, *, tries=400, delay=0.005):
+    for _ in range(tries):
+        if pred():
+            return
+        await asyncio.sleep(delay)
+    raise AssertionError("condition not met in time")
+
+
+def make_agent(controller, mapping, *, fallback_profile=None):
+    return StudioAgent(controller, build_tts_fn=make_build_tts(mapping),
+                       fallback_profile=fallback_profile, instructions="test")
 
 
 # =============================================================================== standard: delegate
@@ -159,7 +174,7 @@ async def test_standard_profile_delegates_to_default_tts_node(monkeypatch):
     monkeypatch.setattr(Agent.default, "tts_node", staticmethod(spy))
     controller = FakeController(STANDARD)
     build = make_build_tts({})
-    agent = StudioAgent(controller, build_tts=build, instructions="test")
+    agent = StudioAgent(controller, build_tts_fn=build, instructions="test")
 
     sentinel = object()
     frames = await collect(agent.tts_node(atext("Hi ", "there"), sentinel))
@@ -203,7 +218,7 @@ async def test_profile_tts_is_built_once_across_utterances():
     controller = FakeController(HALLOWEEN)
     tts = FakeTTS(frames=["a"])
     build = make_build_tts({"halloween": tts})
-    agent = StudioAgent(controller, build_tts=build, instructions="test")
+    agent = StudioAgent(controller, build_tts_fn=build, instructions="test")
 
     await collect(agent.tts_node(atext("one"), None))
     await collect(agent.tts_node(atext("two"), None))
@@ -215,10 +230,11 @@ async def test_profile_tts_is_built_once_across_utterances():
 # =============================================================================== degrade (never raise)
 async def test_vendor_error_degrades_without_raising_and_fallback_continues():
     """A vendor error on the profile TTS → mark_degraded + fallback audio, and NO exception escapes."""
-    controller = FakeController(HALLOWEEN, fallback=FALLBACK)
+    controller = FakeController(HALLOWEEN)
     boom = FakeTTS(frames=["never"], fail=True)
     fallback = FakeTTS(frames=["f1", "f2"])
-    agent = make_agent(controller, {"halloween": boom, "halloween_fallback": fallback})
+    agent = make_agent(controller, {"halloween": boom, "halloween_fallback": fallback},
+                       fallback_profile=FALLBACK)
 
     frames = await collect(agent.tts_node(atext("spooky ", "please"), None))
 
@@ -226,14 +242,50 @@ async def test_vendor_error_degrades_without_raising_and_fallback_continues():
     assert len(controller.degrade_reasons) == 1             # marked exactly once
     assert frames == ["f1", "f2"]                           # fallback audio continued
     assert fallback.pushed == ["spooky ", "please"]         # the full utterance text reached the fallback
+    assert controller.profile_reads == 1                    # L2: snapshot only — no re-read on degrade
+
+
+async def test_degrade_to_a_tagless_fallback_strips_tags_so_deepgram_never_speaks_them():
+    """G13 / M1a: the decoded [whispers]/[laughs] bound for ElevenLabs must NOT reach the tag-less Deepgram
+    fallback as text (Deepgram would read them aloud). The degrade-path text is stripped."""
+    controller = FakeController(HALLOWEEN)
+    boom = FakeTTS(frames=["x"], fail=True)
+    fallback = FakeTTS(frames=["f1"])
+    agent = make_agent(controller, {"halloween": boom, "halloween_fallback": fallback},
+                       fallback_profile=FALLBACK)
+
+    frames = await collect(agent.tts_node(atext("Welcome ", "[whispers]", " friend ", "[laughs]"), None))
+
+    assert frames == ["f1"]
+    joined = "".join(fallback.pushed)
+    assert "[" not in joined and "]" not in joined          # no bracketed cue reaches Deepgram
+    assert "whispers" not in joined and "laughs" not in joined
+    assert "Welcome" in joined and "friend" in joined       # the real words still spoken
+
+
+async def test_degrade_does_not_replay_frames_already_played():
+    """M1c: if the profile voice already played ≥1 frame before dying, the fallback must not re-speak the
+    buffered text (no double audio); the un-played tail may be lost (accepted, spec §8)."""
+    controller = FakeController(HALLOWEEN)
+    primary = FakeTTS(frames=["p1", "p2"], fail_after=1)    # plays one frame, then the vendor dies
+    fallback = FakeTTS(frames=[])
+    agent = make_agent(controller, {"halloween": primary, "halloween_fallback": fallback},
+                       fallback_profile=FALLBACK)
+
+    frames = await collect(agent.tts_node(atext("one ", "two ", "three"), None))
+
+    assert frames == ["p1"]                 # the already-played frame; NOT re-spoken
+    assert controller.degraded is True
+    assert fallback.pushed == []            # the buffered (already-played) text was not replayed
 
 
 @pytest.mark.parametrize("exc", [ValueError("missing voice id"), ImportError("no plugin")])
 async def test_build_tts_failure_degrades_to_fallback(exc):
     """build_tts raising ValueError/ImportError is also a degrade, not a crash (spec §7.7)."""
-    controller = FakeController(HALLOWEEN, fallback=FALLBACK)
+    controller = FakeController(HALLOWEEN)
     fallback = FakeTTS(frames=["only-fallback"])
-    agent = make_agent(controller, {"halloween": exc, "halloween_fallback": fallback})
+    agent = make_agent(controller, {"halloween": exc, "halloween_fallback": fallback},
+                       fallback_profile=FALLBACK)
 
     frames = await collect(agent.tts_node(atext("make ", "it ", "spooky"), None))
 
@@ -245,15 +297,92 @@ async def test_build_tts_failure_degrades_to_fallback(exc):
 async def test_tts_node_never_raises_even_if_the_fallback_also_fails():
     """Belt-and-braces: even if the fallback TTS fails too, tts_node yields nothing rather than raising
     (a vendor outage must never crash the audio path or the session)."""
-    controller = FakeController(HALLOWEEN, fallback=FALLBACK)
+    controller = FakeController(HALLOWEEN)
     boom = FakeTTS(frames=["x"], fail=True)
     boom_fallback = FakeTTS(frames=["y"], fail=True)
-    agent = make_agent(controller, {"halloween": boom, "halloween_fallback": boom_fallback})
+    agent = make_agent(controller, {"halloween": boom, "halloween_fallback": boom_fallback},
+                       fallback_profile=FALLBACK)
 
     frames = await collect(agent.tts_node(atext("uh oh"), None))   # must not raise
 
     assert frames == []
     assert controller.degraded is True
+
+
+async def test_degrade_targets_the_explicit_fallback_even_after_a_midutterance_flip():
+    """L2: the degrade targets the EXPLICIT halloween_fallback, never a re-read of controller.profile. A
+    mid-utterance flip to STANDARD must not turn the 'fallback' into the standard voice."""
+    controller = FakeController(HALLOWEEN)
+
+    def flip_to_standard():
+        controller._profile = STANDARD                       # a mid-utterance mode flip
+
+    boom = FakeTTS(frames=["x"], fail=True, on_iter=flip_to_standard)
+    fallback = FakeTTS(frames=["f1"])
+    wrong = FakeTTS(frames=["WRONG"])
+    build = make_build_tts({"halloween": boom, "halloween_fallback": fallback, "standard": wrong})
+    agent = StudioAgent(controller, build_tts_fn=build, fallback_profile=FALLBACK, instructions="test")
+
+    frames = await collect(agent.tts_node(atext("spooky"), None))
+
+    assert frames == ["f1"]                 # the Deepgram fallback, not the standard voice
+    assert "standard" not in build.calls    # never routed to the standard voice
+    assert controller.profile_reads == 1    # read once (the snapshot); the degrade used the explicit fallback
+
+
+async def test_degrade_resolves_the_fallback_from_the_controller_when_not_injected():
+    """If no explicit fallback_profile is passed, the agent takes 'halloween_fallback' from the controller's
+    profiles (what resolve_profiles provides) — the arg is optional for Task 10."""
+    controller = FakeController(HALLOWEEN)
+    controller._profiles = {"halloween_fallback": FALLBACK}
+    boom = FakeTTS(frames=["x"], fail=True)
+    fallback = FakeTTS(frames=["f1", "f2"])
+    build = make_build_tts({"halloween": boom, "halloween_fallback": fallback})
+    agent = StudioAgent(controller, build_tts_fn=build, instructions="test")   # no explicit fallback_profile
+
+    frames = await collect(agent.tts_node(atext("boo"), None))
+
+    assert frames == ["f1", "f2"]
+    assert controller.degraded is True
+
+
+async def test_degrade_skips_retrying_the_same_failing_voice():
+    """L3: when the active profile IS the fallback (an already-degraded call), a failure must not retry the
+    same voice — that would be seconds of dead air."""
+    controller = FakeController(FALLBACK)                    # active profile key == fallback key
+    boom = FakeTTS(frames=["x"], fail=True)
+    build = make_build_tts({"halloween_fallback": boom})
+    agent = StudioAgent(controller, build_tts_fn=build, fallback_profile=FALLBACK, instructions="test")
+
+    frames = await collect(agent.tts_node(atext("boo"), None))
+
+    assert frames == []                                      # no audio, no pointless retry
+    assert controller.degraded is True                       # the failure is still recorded
+    assert build.calls == ["halloween_fallback"]             # built once; the same voice is NOT retried
+
+
+# =============================================================================== cancellation (invariant 6)
+async def test_cancellation_propagates_and_does_not_degrade():
+    """A caller cancellation mid-stream must propagate (CancelledError) and must NOT be mistaken for a
+    vendor error — no degrade, no swallowing (uses the framework's aio.cancel_and_wait)."""
+    controller = FakeController(HALLOWEEN)
+    gate = asyncio.Event()
+    primary = FakeTTS(frames=["p1", "p2"], gate=gate)        # plays p1, then blocks on the gate
+    agent = make_agent(controller, {"halloween": primary}, fallback_profile=FALLBACK)
+
+    played: list = []
+
+    async def consume():
+        async for frame in agent.tts_node(atext("hi"), None):
+            played.append(frame)
+
+    task = asyncio.create_task(consume())
+    await _until(lambda: played == ["p1"])                   # first frame out; stream now blocked on the gate
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert controller.degrade_reasons == []                  # a cancellation is NOT a vendor error
 
 
 # =============================================================================== profile snapshot
