@@ -49,6 +49,13 @@ def has_pua(s):
     return any("\ue000" <= ch <= "\uf8ff" for ch in s)
 
 
+# A theatrical stage direction: 39 characters inside the brackets, so it can never be a tag (32 at most)
+DIRECTION = "[whispers menacingly into the microphone]"
+# A markdown link whose text (95 characters) is far past the tag cap but inside the drop limit
+LONG_LINK = ("[our complete returns policy, including the exceptions for opened items and for final sale goods]"
+             "(http://x/returns)")
+
+
 # ------------------------------------------------------------------ vocabulary
 
 def test_spooky_vocabulary_is_the_spec_set():
@@ -122,11 +129,49 @@ async def test_tag_cut_off_by_the_end_of_the_stream_is_dropped_not_spoken():
 
 
 @pytest.mark.asyncio
-async def test_the_tag_length_cap_is_34_characters_brackets_included():
+async def test_a_tag_name_can_be_32_characters_and_no_longer():
     longest, too_long = "a" * 32, "b" * 33   # `[` + 32 + `]` is 34; one more character is not a tag
     stage = encode_tags(lambda: frozenset({longest, too_long}))
-    assert has_pua(await collect(stage, [f"[{longest}] x"]))
-    assert await collect(stage, [f"[{too_long}] x"]) == f"[{too_long}] x"   # too long to buffer: left as text
+    mid = await collect(stage, [f"[{longest}] x [{too_long}] y"])
+    assert has_pua(mid)   # the 32-character name is a tag, exactly as before
+    decoded = await collect(decode_tags, [mid])
+    assert " ".join(decoded.split()) == f"[{longest}] x y"   # the 33-character one is not, even when listed: dropped
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("vocabulary", [
+    pytest.param(all_tags, id="halloween_vocabulary"),
+    pytest.param(no_tags, id="empty_vocabulary"),
+    pytest.param(lambda: frozenset({DIRECTION[1:-1]}), id="vocabulary_listing_it"),
+])
+async def test_a_direction_too_long_to_be_a_tag_is_dropped_not_spoken(vocabulary):
+    # G13: the vocabulary is the only way onto the air, and a group this long can never be in it
+    seen = []
+    reply = f"{DIRECTION} Welcome, mortal. {DIRECTION}"   # one at each end: the last has no character after it
+    mid = await collect(encode_tags(vocabulary, on_tag=seen.append), [reply])
+    assert " ".join(mid.split()) == "Welcome, mortal."
+    assert not has_pua(mid) and seen == []
+
+
+@pytest.mark.asyncio
+async def test_a_bracketed_group_is_dropped_up_to_120_characters_and_left_as_text_beyond():
+    dropped, kept = "d" * 118, "k" * 119   # `[` + 118 + `]` is 120
+    assert " ".join((await collect(encode_tags(all_tags), [f"[{dropped}] x"])).split()) == "x"
+    assert await collect(encode_tags(all_tags), [f"[{kept}] x"]) == f"[{kept}] x"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("vocabulary", [all_tags, no_tags])
+async def test_a_markdown_link_with_long_text_still_passes(vocabulary):
+    text = f"see {LONG_LINK} now"
+    assert await collect(encode_tags(vocabulary), [text]) == text
+
+
+@pytest.mark.asyncio
+async def test_a_stray_open_bracket_at_the_end_swallows_at_most_33_characters():
+    swallowed, kept = "x" * 33, "y" * 34   # `[` + 33 is 34 characters: the longest cut-off tag that is dropped
+    assert await collect(encode_tags(all_tags), [f"so sorry [{swallowed}"]) == "so sorry "
+    assert await collect(encode_tags(all_tags), [f"so sorry [{kept}"]) == f"so sorry [{kept}"
 
 
 @pytest.mark.asyncio
@@ -226,6 +271,12 @@ TEXTS = [
     "empty [] and [two\nlines] and \ue000 forged",
     "[" + "z" * 40 + "] too long",
     "stray ] bracket and [ lone",
+    pytest.param(f"{DIRECTION} Welcome, mortal. [sighs] Boo! {DIRECTION}", id="direction_too_long_to_be_a_tag"),
+    pytest.param(f"see {LONG_LINK} now", id="markdown_link_with_long_text"),
+    pytest.param("so sorry [" + "x" * 33, id="cut_off_bracket_dropped"),
+    pytest.param("so sorry [" + "y" * 34, id="cut_off_bracket_kept"),
+    pytest.param("[" + "d" * 118 + "] x", id="group_at_the_drop_limit"),
+    pytest.param("[" + "k" * 119 + "] x", id="group_past_the_drop_limit"),
 ]
 
 
@@ -316,6 +367,39 @@ async def test_standard_voice_chain_lets_no_tag_reach_the_tts():
     assert "[" not in out and not has_pua(out)
 
 
+@pytest.mark.asyncio
+async def test_a_direction_too_long_to_be_a_tag_does_not_stall_the_reply():
+    """The over-cap half of C7: left as text, a bracketed direction makes the stock filter hold the whole
+    reply AND hands the TTS the direction to read out."""
+    from livekit.agents.voice.transcription.filters import filter_markdown
+    chunks = ["[whispers menacingly into the ", "microphone] Welcome, ", "mortal. Come ", "closer, my dear."]
+
+    stock = await consumed_at_each_piece(filter_markdown, chunks)
+    assert {n for n, _ in stock} == {len(chunks)}   # premise: nothing leaves before the stream ends
+
+    ours = encode_tags(all_tags)
+    early = await consumed_at_each_piece(lambda text: filter_markdown(ours(text)), chunks)
+    assert early[0][0] < len(chunks)   # the reply streams as soon as the direction has closed
+    assert " ".join("".join(piece for _, piece in early).split()) == "Welcome, mortal. Come closer, my dear."
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("vocabulary, expected", [
+    pytest.param(all_tags, "Welcome, mortal. [sighs] Boo!", id="halloween_vocabulary"),
+    pytest.param(no_tags, "Welcome, mortal. Boo!", id="empty_vocabulary"),
+])
+async def test_full_chain_never_speaks_a_direction_too_long_to_be_a_tag(vocabulary, expected):
+    from livekit.agents.voice.transcription.text_transforms import _apply_text_transforms
+    chain = [encode_tags(vocabulary), "filter_markdown", "filter_emoji", decode_tags]
+
+    async def reply():
+        for chunk in ["[whispers menacingly into the ", "microphone] Welcome, mortal. ", "[sighs] Boo!"]:
+            yield chunk
+
+    out = "".join([piece async for piece in _apply_text_transforms(reply(), chain)])
+    assert " ".join(out.split()) == expected
+
+
 # ------------------------------------------------------------------ strip_tags / strip_tags_stream
 
 def test_strip_tags_removes_all_brackets():
@@ -335,6 +419,20 @@ def test_strip_tags_removes_all_brackets():
 ])
 def test_strip_tags_tidies_the_gaps_it_leaves(text, expected):
     assert strip_tags(text) == expected
+
+
+def test_strip_tags_removes_a_direction_too_long_to_be_a_tag():
+    # otherwise the caller would read on screen what G13 keeps off the air
+    assert strip_tags(f"{DIRECTION} Welcome, mortal. [sighs] Boo! {DIRECTION}") == "Welcome, mortal. Boo!"
+
+
+def test_strip_tags_keeps_a_markdown_link_with_long_text():
+    assert strip_tags(f"see {LONG_LINK} now") == f"see {LONG_LINK} now"
+
+
+def test_strip_tags_swallows_at_most_33_characters_after_a_stray_open_bracket():
+    assert strip_tags("so sorry [" + "x" * 33) == "so sorry"
+    assert strip_tags("so sorry [" + "y" * 34) == "so sorry [" + "y" * 34
 
 
 @pytest.mark.asyncio
