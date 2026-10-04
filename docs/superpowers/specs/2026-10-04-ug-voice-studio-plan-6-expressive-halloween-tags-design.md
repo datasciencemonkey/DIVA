@@ -40,6 +40,24 @@ cue palette and style guide, and writes its replies with those cues.** The voice
 
 So both halves must change: *what the model is told* and *what is allowed through the filter*.
 
+### 3.1 What ElevenLabs documents (research pass, 2026-10-04)
+
+D = official ElevenLabs docs, C = community, I = inference. Sources: the
+[best-practices](https://elevenlabs.io/docs/overview/capabilities/text-to-speech/best-practices),
+[text-to-dialogue](https://elevenlabs.io/docs/overview/capabilities/text-to-dialogue),
+[v3 Conversational / expressive mode](https://elevenlabs.io/docs/eleven-agents/customization/voice/expressive-mode) and
+[agents API](https://elevenlabs.io/docs/api-reference/agents/create) pages, and the
+[audio-tags help article](https://elevenlabs.io/docs/help-center/product/core-capabilities/text-to-speech/how-do-audio-tags-work-with-eleven-v3-and-v4).
+
+- Tags are **free-form natural-language instructions**, not a fixed list (D). That is why G13 needs *our* allowlist: ElevenLabs will not refuse a tag it cannot perform, it may simply read it out.
+- **One or two words** per tag is the documented best practice for v3 and v3 Conversational (D); three or more words destabilise the audio and get read aloud (C). Palette tags are therefore one or two words.
+- **Reach:** on v3 Conversational "each tag affects approximately the next 4-5 words", and there is no stop tag (D). The prompt therefore asks for a fresh cue at each beat.
+- **Placement:** a tag goes before the words it affects (D); ellipses add pauses and weight (D); words meant to be spoken never go inside brackets (ElevenLabs' own tagging prompt).
+- **Stability:** Creative (0.0) responds most to tags but is the least reliable, Robust (1.0) the least responsive, Natural (0.5, our default) the safe middle (D). T1 measures 0.0 against 0.5.
+- **Voice dependence:** tags land when the delivery exists in the voice's training data, and a Professional Voice Clone loses its characteristics on v3 Conversational (D). Hence verification on the configured voice.
+- **Read aloud:** a known limitation when a voice cannot deliver a tag; the realtime remedy is to whitelist short, auditory tags and strip the rest (I), which is exactly this design.
+- ElevenLabs now describes v3 Conversational as the previous generation. This plan keeps the model the app runs today; changing the TTS model is out of scope.
+
 ## 4. Goals and non-goals
 
 **Goals**
@@ -50,7 +68,7 @@ So both halves must change: *what the model is told* and *what is allowed throug
   v3 Halloween voice (same-turn and announced switches included), and absent otherwise.
 - G-D (verified): every tag in the palette is proven *performed, not read aloud* on the configured voice/model.
 
-**Non-goals:** a new voice or model; AI-Decide policy changes; UI work (the client strip already removes any
+**Non-goals:** **changing the backend LLM** (it stays the Databricks-served Unity Gateway model for the caller's tier; this plan touches prompt text and the TTS tag filter only); a new voice or TTS model; AI-Decide policy changes; UI work (the client strip already removes any
 closed `[...]` ≤ 120 chars, `studio.js:1168`); sound-effect, crying and accent tags (startling, distressing or
 risk of offensive impressions — the same exclusions Plan 5 made).
 
@@ -80,7 +98,7 @@ def grouped(tags: Iterable[str]) -> list[tuple[str, tuple[str, ...]]]   # palett
 Four categories (final membership is fixed by T1's bake-off, not by this spec): `breath` (non-verbal: breathing,
 laughter, sighs), `volume` (whisper / soft / low / loud intensity), `emotion` (attitude: dismissive, mischievous,
 nervous, menacing ...), `pacing` (tension and timing: building tension, pause, slow ...). Every name is
-lowercase, ≤ 32 characters (`MAX_TAG_LEN`), unique across categories.
+one or two lowercase words (ElevenLabs' guidance), ≤ 32 characters (`MAX_TAG_LEN`), unique across categories.
 
 ### 6.2 Filter — `app/expressive.py`
 
@@ -102,7 +120,7 @@ lowercase, ≤ 32 characters (`MAX_TAG_LEN`), unique across categories.
   worked example showing cues *around* a fact (never inside it) plus a tension-building passage like the
   reference. Rendered only when the vocabulary is non-empty, so standard, Deepgram-fallback and OpenAI prompts stay
   byte-identical.
-- `ON_NOTE` / `ANNOUNCE_ON`: invite one cue in the opening flourish; still consistent with `BRIDGE_ON` (T11).
+- `ON_NOTE`, `OFF_NOTE`, `ANNOUNCE_*`, `BRIDGE_ON` and `VOICE_REQUESTS` are **unchanged**: the steady instructions already carry the cue rules, both switch notes end "Follow the rules above.", and an announced switch runs on the updated steady instructions (a test pins this).
 - Governance stays the last block (G11).
 
 ### 6.4 Data flow (unchanged shape)
