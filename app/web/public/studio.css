@@ -998,8 +998,11 @@ body[data-voice-mode="halloween"] .bg::before { opacity: 1; }
 :root[data-theme="light"] body[data-voice-mode="halloween"] .bg::before { opacity: .6; }
 body[data-voice-mode="halloween"] .brand-mark { color: var(--hw-orange); }
 body[data-voice-mode="halloween"] .topbar {
-  border-bottom-color: color-mix(in srgb, var(--hw-violet) 55%, transparent);
-  box-shadow: 0 1px 24px -8px color-mix(in srgb, var(--hw-orange) 55%, transparent);
+  /* T5 escalation: a brighter violet edge, with the pumpkin bloom pooling just under it. Static shadows riding the
+     transition above; Harvest's softer twin is in the T5 block below. */
+  border-bottom-color: color-mix(in srgb, var(--hw-violet) 72%, transparent);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--hw-violet) 20%, transparent),
+              0 10px 30px -12px color-mix(in srgb, var(--hw-orange) 62%, transparent);
 }
 body[data-voice-mode="halloween"] .pillar[data-pillar="control"] {
   border-color: color-mix(in srgb, var(--hw-violet) 50%, var(--hairline));
@@ -1348,6 +1351,81 @@ body[data-voice-mode="halloween"] :is(.hw-ember, .hw-bat)   { will-change: trans
   .hw-cobweb { width: 104px; }
   .hw-ember:nth-child(n + 5), .hw-bat:nth-child(n + 2) { display: none; }
 }
+
+/* =============================================================================
+   HALLOWEEN REGION SKINS (docs/halloween-ui/DESIGN.md §2, §5) — T5 topbar / hero / Configure, T6 Generate, T7 Live
+   The palette swap (T0) already repaints every surface, so these blocks add only what a swap cannot: light,
+   not paint. Each is scoped under body[data-voice-mode="halloween"], so standard mode and architecture.html
+   (same stylesheet, never sets the attribute) are untouched, and all of it lets go with the attribute.
+   - Static only: text- and box-shadows that sit still, gradients, and colours. Nothing here animates, so there is
+     nothing for the reduced-motion block to switch off. The shadows that change on enter / exit (topbar, CTA,
+     timeline node) ride transitions their base rules already declare, so they fade with the token cross-fade and
+     the blanket rule collapses them under reduce; the two faint text-glows (wordmark, hero) have none to ride and
+     switch with the attribute, as DESIGN §2 specifies a static glow.
+   - Data stays neutral (G13): no transcript, directive, token, price or retrieval text is restyled (bar the one
+     contrast fix in T7), and the pillar hues (the data identity) are untouched. The display face itself
+     (--font-display) is T9a.
+   ========================================================================== */
+
+/* ---- T5 · topbar, hero & Configure ----------------------------------------------------------------
+   Topbar: the violet underline + pumpkin glow is escalated in place (the Halloween accent rule above). The
+   wordmark gets a faint pumpkin glow (its dim "Voice Studio" half stays crisp) and the current stepper tab is lit
+   pumpkin rather than merely tinted. Hero: the headline takes the faint pumpkin glow DESIGN §2 prescribes for the
+   display headings. Configure: the card's hairline edge is lit pumpkin -> violet, and the primary CTAs sit in
+   lantern light instead of a black drop shadow. Harvest runs the text glows at roughly half strength, and the topbar
+   bloom softer: a pumpkin halo on parchment goes muddy before it goes bright. */
+body[data-voice-mode="halloween"] .brand-word { text-shadow: 0 0 16px color-mix(in srgb, var(--hw-orange) 40%, transparent); }
+body[data-voice-mode="halloween"] .brand-dim  { text-shadow: none; }
+body[data-voice-mode="halloween"] .step[aria-current="step"] {
+  border-color: color-mix(in srgb, var(--accent) 48%, transparent);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+}
+body[data-voice-mode="halloween"] .hero-title { text-shadow: 0 0 18px color-mix(in srgb, var(--hw-orange) 30%, transparent); }
+body[data-voice-mode="halloween"] .config-card::before {
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--hw-orange) 60%, transparent), color-mix(in srgb, var(--hw-violet) 60%, transparent), transparent);
+}
+/* Midnight only: Harvest keeps the neutral shadow the light rule above gives it, exactly as standard-light does.
+   :not(:disabled) leaves a disabled CTA on `.btn:disabled`'s no-shadow. */
+:root:not([data-theme="light"]) body[data-voice-mode="halloween"] .btn--primary:not(:disabled) {
+  box-shadow: 0 12px 28px -14px color-mix(in srgb, var(--hw-orange) 62%, transparent), inset 0 1px 0 rgba(255,255,255,.22);
+}
+:root:not([data-theme="light"]) body[data-voice-mode="halloween"] .btn--primary:not(:disabled):hover {
+  box-shadow: 0 18px 42px -16px color-mix(in srgb, var(--hw-orange) 70%, transparent), inset 0 1px 0 rgba(255,255,255,.28);
+}
+
+:root[data-theme="light"] body[data-voice-mode="halloween"] .topbar {
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--hw-violet) 14%, transparent),
+              0 10px 26px -14px color-mix(in srgb, var(--hw-orange) 42%, transparent);
+}
+:root[data-theme="light"] body[data-voice-mode="halloween"] .brand-word { text-shadow: 0 0 14px color-mix(in srgb, var(--hw-orange) 22%, transparent); }
+:root[data-theme="light"] body[data-voice-mode="halloween"] .hero-title { text-shadow: 0 0 18px color-mix(in srgb, var(--hw-orange) 16%, transparent); }
+/* Harvest: a focused field's edge. The standard 60% border is weaker in pumpkin on parchment (2.0:1 against the card,
+   where standard-light's deeper Lava reaches 2.6:1); solid pumpkin lifts it to ~3.9:1 and the halo stays. */
+:root[data-theme="light"] body[data-voice-mode="halloween"] .field input:focus,
+:root[data-theme="light"] body[data-voice-mode="halloween"] .field textarea:focus { border-color: var(--accent); }
+
+/* ---- T6 · Generate ---------------------------------------------------------------------------------
+   The lit stretch of the timeline runs pumpkin -> spectral violet (toward the step still to come, where the
+   standard rule faded out into the faint hairline), and the step in progress gets a second, violet aura outside
+   its pumpkin ring. The done / active / pending states still tell apart by fill (tinted + check), ring + aura,
+   and dim violet outline; the done check stays as T1 left it. Summary and fail cards, their badges and the stat /
+   tier readouts need nothing: they are token-painted, and the numerals stay in DM Sans / mono. */
+body[data-voice-mode="halloween"] .tl-step[data-state="done"]::before,
+body[data-voice-mode="halloween"] .tl-step[data-state="active"]::before {
+  background: linear-gradient(var(--accent), color-mix(in srgb, var(--hw-violet) 62%, transparent));
+}
+body[data-voice-mode="halloween"] .tl-step[data-state="active"] .tl-node {
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 18%, transparent), 0 0 0 11px color-mix(in srgb, var(--hw-violet) 10%, transparent);
+}
+
+/* ---- T7 · Live console & pillars -------------------------------------------------------------------
+   Rail, mic, ask-chips, the four pillars (the Choice / Context / Costs top hue lines intact and at least as visible
+   as in standard; Control's is T0's pumpkin -> violet twin, and T8's), transcript bubbles, live dot, the Costs meter
+   and sparkline all follow the palette; measured as rendered, every text pair in the console is AA in Midnight
+   and, with the one fix below, in Harvest. The fix: an in-progress caption
+   (dimmed to 60% in standard) lands at 4.1-4.2:1 on the parchment bubbles, under AA for data text; lifting it keeps
+   it visibly dimmer than a final line and legible. (The Control pillar's lantern is T8.) */
+:root[data-theme="light"] body[data-voice-mode="halloween"] .turn[data-interim="true"] .turn-text { opacity: .72; }
 
 /* =============================================================================
    RESPONSIVE
