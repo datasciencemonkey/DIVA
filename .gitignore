@@ -4,10 +4,29 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 
-# Env / secrets
+# Env / secrets (.env.example is the committed template, so keep its values empty)
 .env
-.env.local
-.env.*.local
+.env.*
+*.env
+.envrc
+!.env.example
+
+# Credentials, keys, and local-only tool settings (e.g. .claude/settings.local.json)
+.databrickscfg
+.netrc
+.pypirc
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+credentials*.json
+*service-account*.json
+secrets/
+.secrets/
+*.local.json
+CLAUDE.local.md
 
 # Databricks / OMC operational state
 .databricks/
@@ -25,3 +44,4 @@ node_modules/
 .build/
 .gstack/
 .isaac/
+*.log

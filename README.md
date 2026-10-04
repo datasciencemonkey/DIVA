@@ -11,6 +11,6 @@ and generated per-company datasets.
 ## Build target
 
 - **Profile:** `DEFAULT` (`.databrickscfg`) — chosen by the user, never auto-selected.
-- **Lakebase:** endpoint `ep-your-endpoint-id` (`…database.us-east-1.cloud.databricks.com`),
-  database `databricks_postgres`, user `you@example.com`.
+- **Lakebase:** your Lakebase endpoint (`LAKEBASE_ENDPOINT` in `.env.local`; see `.env.example`),
+  database `databricks_postgres`.
 - **Lakebase-capable:** yes — user-provided live instance (endpoint reachability confirmed in Task 5 discovery).
