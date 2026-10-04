@@ -315,7 +315,9 @@
       Every voice turn walks the same path: the caller's browser into a LiveKit room, an agent that
       listens and speaks, then two governed tools. One is the <b>Unity AI Gateway</b> — which exposes
       <b>Model Context Protocol</b> and routes each turn to the model a caller's tier has earned; the
-      other is <b>Lakebase</b>, the read-only store the assistant is allowed to know.
+      other is <b>Lakebase</b>, the read-only store the assistant is allowed to know — retrieval is
+      <a href="https://www.databricks.com/blog/lakebase-search-state-art-full-text-and-vector-search-postgres">Lakebase Search</a>
+      (<span class="mono">lakebase_vector</span> ANN).
     </p>
     <ul class="arch-legend" data-anim aria-label="Pillar colour key">
       <li data-p="choice"><span class="lg-key"><span class="lg-dot"></span>Choice</span> routing</li>
@@ -332,7 +334,7 @@
       <!-- viewBox 1200 wide; min-width 1040 keeps rendered text >=11px even when scrolled on a phone.
            Strokes render fully drawn by default (CSS); GSAP only ADDS the entrance when it's live. -->
       <svg class="arch-svg draw-svg" viewBox="0 0 1200 880" role="img"
-           aria-label="Left to right: a caller in the browser reaches the Studio web tier, which mints a short-TTL LiveKit token carrying PII-free metadata and serves the SPA. The browser joins a LiveKit Cloud room whose token dispatch summons the agent worker. The agent runs Deepgram speech-to-text (nova-3), an LLM turn, and Deepgram text-to-speech (aura-2). The LLM turn calls the Unity AI Gateway, which exposes a Model Context Protocol interface, and routes to one of three models by the caller's governed tier. Two read-only tools reach Lakebase: read_loyalty_context returns the governed tier, and semantic_search retrieves knowledge with pgvector ANN and BM25. Token usage is metered as costs. Separately, one time per world, the studio drafts synthetic data through the gateway and embeds it into Lakebase.">
+           aria-label="Left to right: a caller in the browser reaches the Studio web tier, which mints a short-TTL LiveKit token carrying PII-free metadata and serves the SPA. The browser joins a LiveKit Cloud room whose token dispatch summons the agent worker. The agent runs Deepgram speech-to-text (nova-3), an LLM turn, and Deepgram text-to-speech (aura-2). The LLM turn calls the Unity AI Gateway, which exposes a Model Context Protocol interface, and routes to one of three models by the caller's governed tier. Two read-only tools reach Lakebase: read_loyalty_context returns the governed tier, and semantic_search retrieves knowledge with Lakebase Search ANN. Token usage is metered as costs. Separately, one time per world, the studio drafts synthetic data through the gateway and embeds it into Lakebase.">
 
         <!-- ============ EDGES (behind nodes) ============ -->
         <g>
@@ -514,7 +516,7 @@
 
           <rect class="d-pill d-pill--context" x="1016" y="558" width="152" height="42" rx="10"/>
           <text class="d-mono" x="1028" y="575">semantic_search</text>
-          <text class="d-note t-context" x="1028" y="591">pgvector ANN + BM25</text>
+          <text class="d-note t-context" x="1028" y="591">Lakebase Search ANN</text>
 
           <text class="d-mono d-mono--mid" x="1016" y="620" style="font-size:12px">schema: ug</text>
         </g>
@@ -601,7 +603,7 @@
         </span>
         <div class="gov-body">
           <b>Every runtime tool is read-only</b>
-          <p>Both tools the assistant can call (<span class="mono">semantic_search</span> and <span class="mono">record_lookup</span>) only read. A live call can retrieve knowledge and a caller's own records, but it can never write.</p>
+          <p>Both tools the assistant can call (<span class="mono">semantic_search</span> and <span class="mono">record_lookup</span>) only read. Retrieval is <a href="https://www.databricks.com/blog/lakebase-search-state-art-full-text-and-vector-search-postgres">Lakebase Search</a> ANN (<span class="mono">lakebase_vector</span>), not pgvector HNSW. A live call can retrieve knowledge and a caller's own records, but it can never write.</p>
         </div>
       </div>
 

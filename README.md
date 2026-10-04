@@ -4,7 +4,8 @@
 
 DIVA is a working, end-to-end blueprint. A caller talks to an AI support agent from the browser. The agent's
 models are governed and served through **Unity AI Gateway**, its answers come from data in **Lakebase
-Postgres**, every call is traced to **Unity Catalog / MLflow**, and everything ships as **one Databricks App**.
+Postgres** via [**Lakebase Search**](https://www.databricks.com/blog/lakebase-search-state-art-full-text-and-vector-search-postgres)
+(`lakebase_vector` ANN + `lakebase_text` BM25), every call is traced to **Unity Catalog / MLflow**, and everything ships as **one Databricks App**.
 Voice transport is **LiveKit**; speech-to-text and text-to-speech are **Deepgram**.
 
 The reference implementation is the **Unity Gateway Voice Studio**: a governed voice-agent studio presenting
@@ -12,26 +13,33 @@ The reference implementation is the **Unity Gateway Voice Studio**: a governed v
 loyalty→model routing, generic Lakebase-scoped tools, and generated per-company datasets. Fork it, point it at
 your workspace, and swap in your own data, prompts and tools.
 
+This repo also ships the **`building-voice-agents-on-databricks`** [Agent Skill](https://agentskills.io) so a
+coding agent (Cursor, Claude Code, or anything that loads [Agent Skills](https://agentskills.io)) can reuse the
+patterns without re-learning the traps. See **[Agent skill](#agent-skill)** below.
+
 ## What the blueprint covers
 
 | Pillar | What you see | How it's built |
 |---|---|---|
 | **Choice** | Different callers get different models | App-side routing: the caller's loyalty tier (Standard / Premium / VIP) maps to a model through env vars; Unity AI Gateway serves it |
 | **Control** | Governed, observable LLM calls | Every chat and embedding call goes through Unity AI Gateway; OpenTelemetry spans land in a Unity Catalog table and render as MLflow traces |
-| **Context** | Answers grounded in real data | Read-only tools over Lakebase: `semantic_search` (pgvector ANN) and `record_lookup` (the caller's own records) |
+| **Context** | Answers grounded in real data | Read-only tools over Lakebase: `semantic_search` ([**Lakebase Search**](https://www.databricks.com/blog/lakebase-search-state-art-full-text-and-vector-search-postgres) ANN, `lakebase_vector`) and `record_lookup` (the caller's own records) |
 | **Costs** | Spend you can watch | Cumulative token usage streamed to the UI with a cost projection |
 
 ## How a call works
 
 1. **Generate a world.** Name a fictional company, a role and a system prompt. The generator drafts documents,
    customers and records through Unity AI Gateway, embeds them, and writes them to Lakebase in one transaction
-   under a fresh `data_generation_id`.
+   under a fresh `data_generation_id`. Indexes are [Lakebase Search](https://www.databricks.com/blog/lakebase-search-state-art-full-text-and-vector-search-postgres):
+   `lakebase_ann` (cosine ANN via `lakebase_vector`) and `lakebase_bm25` (BM25 via `lakebase_text`).
 2. **Start a call.** The web tier mints a short-lived LiveKit token that carries `data_generation_id` and
    `customer_id`, and dispatches the agent into a fresh room.
 3. **Bind and route.** The agent worker looks up the caller's tier in Lakebase (never from speech), and
    `route_for(tier)` picks the model. The model never sees the tier.
-4. **Talk.** Deepgram STT → the routed LLM through the gateway's Responses API → Deepgram TTS. Both tools are
-   scoped to the bound dataset, and `record_lookup` only returns the caller's own records.
+4. **Talk.** Deepgram STT → the routed LLM through the gateway's Responses API → Deepgram TTS. `semantic_search`
+   is [Lakebase Search](https://www.databricks.com/blog/lakebase-search-state-art-full-text-and-vector-search-postgres)
+   ANN (`ORDER BY embedding <=> $q` on the `lakebase_ann` index); `record_lookup` is plain SQL
+   and only returns the caller's own records. Both tools are scoped to the bound dataset.
 5. **Show and trace.** PII-free evidence (routing decision, retrieval hits, token usage) streams to the UI, and
    the spans flush over OTLP into a Unity Catalog table.
 
@@ -43,15 +51,35 @@ your workspace, and swap in your own data, prompts and tools.
 | `src/` | Routing policy, the governance prompt, the synthetic-world generator, and the Lakebase / gateway / retrieval services |
 | `infra/` | The Lakebase schema, ANN and BM25 indexes, and `apply_schema.py` |
 | `start_app.py`, `app.yaml` | The single-container Databricks App launcher and spec |
-| `skills/building-voice-agents-on-databricks/` | A reusable agent skill: deployment, agent-and-tools and observability patterns, plus templates |
+| `skills/building-voice-agents-on-databricks/` | Agent skill: deploy, worker + tools, observability — [what you can ask it to do](#agent-skill) |
 | `docs/discovery/` | Verified contracts for the platform behavior the code relies on |
 | `docs/superpowers/` | The design spec and implementation plans |
 | `tests/` | 82 tests; the one live integration test is skipped unless `LAKEBASE_ENDPOINT` is set |
 
+## Agent skill
+
+Shipped at [`skills/building-voice-agents-on-databricks/`](skills/building-voice-agents-on-databricks/SKILL.md)
+([install notes](skills/README.md)). Point Cursor, Claude Code, or any Agent Skills loader at that folder
+(copy it to `~/.cursor/skills/` or `~/.claude/skills/`, or leave it in the repo). Then ask the agent to:
+
+| Ask it to… | It will… | Reference |
+|---|---|---|
+| **Deploy DIVA (or your fork) as a Databricks App** | Compile worker deps for Apps Python 3.11, attach secret resources, grant the app SP, `databricks sync --full`, then `apps deploy` | [deployment.md](skills/building-voice-agents-on-databricks/references/deployment.md) |
+| **Package a LiveKit worker + browser token server in one container** | Use the `start_app.py` / `app.yaml` templates: web binds the port immediately; the worker boots in `/tmp/agent-venv` | [templates/](skills/building-voice-agents-on-databricks/templates/) |
+| **Wire the LLM through Unity AI Gateway** | Build `openai.responses.LLM` against `{host}/ai-gateway/openai/v1` with tools, after the participant identity is known | [agent-and-tools.md](skills/building-voice-agents-on-databricks/references/agent-and-tools.md) |
+| **Add Lakebase-backed voice tools** | Factory `build_tools(pool, ctx)` with fail-soft `pool=None`, customer-scoped lookups, no `from __future__ import annotations` | [agent-and-tools.md](skills/building-voice-agents-on-databricks/references/agent-and-tools.md) |
+| **Mint LiveKit tokens with agent dispatch** | Stdlib HS256 JWT, unique room per visit, `roomConfig.agents` matching the worker name | [agent-and-tools.md](skills/building-voice-agents-on-databricks/references/agent-and-tools.md) |
+| **Trace every call into MLflow / Unity Catalog** | LiveKit OTel → Databricks OTLP `/api/2.0/otel/v1/traces` with a UC-table header; fail-soft if unset | [observability.md](skills/building-voice-agents-on-databricks/references/observability.md) |
+| **Debug "the call connects but no agent joins"** | Check py3.11 vs 3.12 numpy pins, Silero `download-files` egress, LiveKit Cloud outbound, SP folder grants | [SKILL.md](skills/building-voice-agents-on-databricks/SKILL.md) |
+| **Fix `NameError: RunContext` on every tool turn** | Drop postponed annotations in the tools module so LiveKit `get_type_hints()` can resolve `RunContext` | [agent-and-tools.md](skills/building-voice-agents-on-databricks/references/agent-and-tools.md) |
+
+Example prompts: *“Deploy this voice agent as a Databricks App using the skill.”* · *“Add a Lakebase `record_lookup` tool the way the skill does.”* · *“The call connects but no agent joins — follow the skill.”*
+
 ## Prerequisites
 
 - A Databricks workspace with Unity AI Gateway (chat models for the tiers and for generation, plus an embedding
-  model) and a Lakebase database with Lakebase Search enabled.
+  model) and a Lakebase database with [Lakebase Search](https://www.databricks.com/blog/lakebase-search-state-art-full-text-and-vector-search-postgres)
+  enabled (`lakebase_vector` + `lakebase_text`).
 - A LiveKit project (for example LiveKit Cloud) and a Deepgram API key.
 - The Databricks CLI with a profile you choose (`--profile <name>`; nothing here auto-selects one), and
   [`uv`](https://docs.astral.sh/uv/) (Python 3.12+).
@@ -77,8 +105,9 @@ uv run pytest -q
 
 ## Deploy as a Databricks App
 
-The full walkthrough is in [`skills/building-voice-agents-on-databricks/references/deployment.md`](skills/building-voice-agents-on-databricks/references/deployment.md).
-In short:
+The full walkthrough is in the skill:
+[`skills/building-voice-agents-on-databricks/references/deployment.md`](skills/building-voice-agents-on-databricks/references/deployment.md).
+Or ask a coding agent with that skill loaded to deploy it. In short:
 
 1. Compile the worker dependencies for the Apps runtime (Python 3.11):
    `uv pip compile agent-requirements.in --python-version 3.11 -o agent-requirements.txt`.
@@ -106,6 +135,8 @@ blueprint generalizes. It isn't part of this repo.
 
 ## Docs
 
+- **Lakebase Search:** [Lakebase Search: state-of-the-art full text and vector search for Postgres](https://www.databricks.com/blog/lakebase-search-state-art-full-text-and-vector-search-postgres) — `lakebase_vector` (ANN) + `lakebase_text` (BM25); this blueprint uses both indexes, and the voice tool path is ANN
+- **Agent skill:** [`skills/building-voice-agents-on-databricks/SKILL.md`](skills/building-voice-agents-on-databricks/SKILL.md) — [what you can ask it to do](#agent-skill)
 - **Design spec:** `docs/superpowers/specs/2026-09-24-unity-gateway-voice-studio-design.md`
 - **Plan (wave 1):** `docs/superpowers/plans/2026-09-24-ug-voice-studio-plan-1-foundations.md`
 - **Conventions:** run everything with `uv`; the Databricks profile is user-chosen (`--profile <name>`), never auto-selected.
