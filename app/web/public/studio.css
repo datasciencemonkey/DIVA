@@ -1075,6 +1075,43 @@ body[data-voice-mode="halloween"] {
 }
 
 /* =============================================================================
+   HALLOWEEN ACCENT AUDIT (docs/halloween-ui/DESIGN.md §5) — pumpkin, and the pillar hues, on
+   the surfaces they now meet. Every place the studio pairs --accent (or a pillar hue) with a
+   surface or text was measured as rendered, in both palettes. Midnight needed nothing: each
+   pairing is as good as standard or better (pumpkin on violet beats Lava on navy — focus ring
+   6.3-8.4:1, CTA label 6.7-8.1:1), and in BOTH palettes the hero motif, CTAs, connected chip,
+   transcript bubbles, cost-meter fill and sparkline read as intended, so their rules are left
+   alone. What is left, below: (1) Harvest's parchment --ink-2 is darker and warmer than the standard
+   oat, so pillar-hue / accent / danger TEXT sitting on its own tint over it slips under AA;
+   each label is pulled toward the aubergine ink (the way the light theme already darkens its
+   hues) and the hues themselves — and standard — stay as they are. (2) The ambient Lava orb is
+   raw rgba, not a token, so the palette swap can't reach it. Static colour only: nothing is
+   animated or written inline, and all of it lets go when body[data-voice-mode] does.
+   ========================================================================== */
+
+/* Harvest: the gold / mint pillar hues as TEXT on their own tint, pulled toward --text-hi */
+:root[data-theme="light"] body[data-voice-mode="halloween"] {
+  --hw-control-ink: color-mix(in srgb, var(--c-control) 76%, var(--text-hi));
+  --hw-context-ink: color-mix(in srgb, var(--c-context) 84%, var(--text-hi));
+}
+:root[data-theme="light"] body[data-voice-mode="halloween"] .cost-bars[data-level="1"] span[data-tier="Low"]  { color: var(--hw-context-ink); }   /* 4.48 -> 5.24 */
+:root[data-theme="light"] body[data-voice-mode="halloween"] .cost-bars[data-level="3"] span[data-tier="High"] { color: var(--hw-control-ink); }   /* 4.10 -> 5.26 */
+:root[data-theme="light"] body[data-voice-mode="halloween"] .tier-badge[data-tier="VIP"]                      { color: var(--hw-control-ink); }   /* 4.28 -> 5.49 */
+:root[data-theme="light"] body[data-voice-mode="halloween"] .vm-fallback                                      { color: var(--hw-control-ink); }   /* 4.39 -> 5.63 */
+:root[data-theme="light"] body[data-voice-mode="halloween"] .caller-group[data-tier="VIP"] .caller-avatar     { color: var(--hw-control-ink); }   /* 3.95 -> 5.06 (standard-light is 4.2 — already under) */
+/* Harvest: pumpkin / danger text on a tint of itself, and the timeline's done-check on its pumpkin node */
+:root[data-theme="light"] body[data-voice-mode="halloween"] .caller-live-avatar { color: color-mix(in srgb, var(--accent-text) 80%, var(--text-hi)); }   /* 4.29 -> 5.30 */
+:root[data-theme="light"] body[data-voice-mode="halloween"] .form-error        { color: color-mix(in srgb, var(--danger) 85%, var(--text-hi)); }        /* 4.26 -> 5.08 */
+:root[data-theme="light"] body[data-voice-mode="halloween"] .tl-done           { color: var(--accent-text); }   /* icon on a 20% pumpkin tint: 2.73 -> 4.09 (needs 3) */
+
+/* ambient: the top-left Lava orb (raw rgba(255,54,33), both themes) would keep tinting the corner a
+   maroon / rose under the pumpkin wash; drop it while the mode is live — the wash (.bg::before) carries
+   that corner, and the orb is back the moment the attribute leaves. Harvest needs its own selector to
+   out-rank the light-only `.bg-aurora` opacity above. */
+body[data-voice-mode="halloween"] .bg-aurora--a,
+:root[data-theme="light"] body[data-voice-mode="halloween"] .bg-aurora--a { opacity: 0; }
+
+/* =============================================================================
    RESPONSIVE
    ========================================================================== */
 @media (max-width: 1080px) {
