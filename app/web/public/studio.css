@@ -1006,6 +1006,75 @@ body[data-voice-mode="halloween"] .pillar[data-pillar="control"]::after { opacit
 }
 
 /* =============================================================================
+   HALLOWEEN PALETTE — "All Hallows' Console" (docs/halloween-ui/DESIGN.md §1)
+   The seasonal skin is built the way the light theme is: the SAME custom properties,
+   re-declared under one scoped selector. Everything above already draws from these
+   tokens, so the whole studio retints in one cascade and reverts for free when
+   body[data-voice-mode] leaves — nothing is written inline, so there is nothing to
+   unwind. (This supersedes "accent only, never a reskin" in the Voice Mode note: that
+   accent now rides on top of this palette.) It composes with the theme: "Midnight" is
+   dark, the default; "Harvest" is the data-theme="light" sibling. Harvest sits on the
+   same <body> and out-ranks Midnight, so it MUST restate every token Midnight sets or
+   Midnight's value leaks into light — keep the two lists identical. Scoped to <body>, so
+   architecture.html (same stylesheet, never sets the attribute) is untouched.
+   NOT re-declared, so they keep their data meaning in both themes: the four pillar hues
+   (--c-choice/-control/-context/-costs) and --danger. The signature hues are the
+   --hw-* tokens above. Every text token is AA on surface, surface-2/-3, ink and ink-2.
+   ========================================================================== */
+
+/* "Midnight" — a haunted indigo-black with a violet undertone; pumpkin replaces Lava as THE signal */
+body[data-voice-mode="halloween"] {
+  /* ---- ink + surfaces ---- */
+  --ink:        #0C0718;   /* page / .bg */
+  --ink-2:      #140C24;   /* inputs / insets / card-gradient base */
+  --surface:    #1A1230;   /* card top */
+  --surface-2:  #221834;   /* resting controls, bubbles */
+  --surface-3:  #2C2144;   /* hover / pressed controls */
+  --hairline:        rgba(157,107,255,.16);   /* spectral violet (= --hw-violet) */
+  --hairline-strong: rgba(157,107,255,.30);
+  --topbar-bg: linear-gradient(to bottom, rgba(12,7,24,.86), rgba(12,7,24,.58));
+
+  /* ---- text ---- */
+  --text-hi:  #F3ECFA;   /* AA (>=12.9:1) on every card surface incl. hover surface-3 */
+  --text-mid: #C6B7E0;   /* AA (>=7.9:1) on every card surface incl. hover surface-3 */
+  --text-lo:  #AD9ECB;   /* AA (>=6.0:1) on every card surface incl. hover surface-3 */
+
+  /* ---- signal: pumpkin ---- */
+  --accent:      var(--hw-orange);   /* #FF8A2B — CTA/focus/connected/"live"/hero fills */
+  --accent-deep: #F0761A;            /* button gradient base */
+  --accent-ink:  #1A0C02;            /* label on the pumpkin button (8.13:1 top, 6.66:1 base) */
+  --accent-text: var(--hw-ink);      /* #FFB877 — accent-as-TEXT (AA, >=8.7:1) */
+
+  --shadow: 0 26px 64px -24px rgba(0,0,0,.82);
+}
+
+/* "Harvest" — warm parchment + aubergine ink; pumpkin darkened for AA on a pale ground */
+:root[data-theme="light"] body[data-voice-mode="halloween"] {
+  /* ---- ink + surfaces ---- */
+  --ink:        #F6EEE2;   /* parchment — page / .bg */
+  --ink-2:      #EADFCB;   /* insets, inputs, card-gradient base */
+  --surface:    #FFFBF3;   /* card top */
+  --surface-2:  #F3E9D7;   /* resting controls, bubbles */
+  --surface-3:  #E7D8BF;   /* hover / pressed controls */
+  --hairline:        rgba(107,63,209,.16);   /* violet (= light --hw-violet) */
+  --hairline-strong: rgba(107,63,209,.28);
+  --topbar-bg: linear-gradient(to bottom, rgba(246,238,226,.9), rgba(246,238,226,.62));   /* parchment twin of the standard light topbar */
+
+  /* ---- text ---- */
+  --text-hi:  #241433;   /* deep aubergine — AA (>=12.2:1) on every card surface incl. hover surface-3 */
+  --text-mid: #4C3A52;   /* AA (>=7.3:1) on every card surface incl. hover surface-3 */
+  --text-lo:  #5E4A64;   /* AA (>=5.6:1) on every card surface incl. hover surface-3 */
+
+  /* ---- signal: pumpkin, darkened ---- */
+  --accent:      var(--hw-orange);   /* #C2560A (the light --hw-orange) — CTA/focus/connected/hero */
+  --accent-deep: #A8470A;            /* primary-button gradient base */
+  --accent-ink:  #FFFFFF;            /* white label on the pumpkin button (4.54:1 top, 5.88:1 base) */
+  --accent-text: #9A3F06;            /* accent-as-TEXT (AA, >=4.8:1 on every card surface incl. hover surface-3) */
+
+  --shadow: 0 1px 2px rgba(0,0,0,.04), 0 16px 40px -20px rgba(0,0,0,.13);   /* the standard light shadow, restated so Midnight's heavier one doesn't leak */
+}
+
+/* =============================================================================
    RESPONSIVE
    ========================================================================== */
 @media (max-width: 1080px) {
