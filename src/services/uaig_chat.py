@@ -1,4 +1,4 @@
-"""UAIG chat completion returning parsed JSON — for the generator (off hot path)."""
+"""Unity Gateway chat completion returning parsed JSON — for the generator (off hot path)."""
 from __future__ import annotations
 
 import json

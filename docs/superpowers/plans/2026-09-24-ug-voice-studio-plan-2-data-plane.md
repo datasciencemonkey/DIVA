@@ -4,9 +4,9 @@
 
 **Goal:** Generate a small per-company dataset (docs + customers-across-tiers + records) into the `ug` Lakebase schema under a fresh `data_generation_id`, and retrieve from it with hybrid Lakebase Search (BM25 + ANN) + structured lookup — all scoped by `data_generation_id`.
 
-**Architecture:** A `uv run` generator dogfoods Unity AI Gateway (chat for drafting, FMAPI for embeddings) to write synthetic rows into the generic schema, then builds the Lakebase Search indexes. A retrieval service exposes `semantic_search` (ANN), `keyword_search` (BM25), and `record_lookup` (SQL). Builds directly on Plan 1's `db.py` / schema / routing / loyalty modules (merged to `main`).
+**Architecture:** A `uv run` generator dogfoods Unity Gateway (chat for drafting, FMAPI for embeddings) to write synthetic rows into the generic schema, then builds the Lakebase Search indexes. A retrieval service exposes `semantic_search` (ANN), `keyword_search` (BM25), and `record_lookup` (SQL). Builds directly on Plan 1's `db.py` / schema / routing / loyalty modules (merged to `main`).
 
-**Tech Stack:** Python 3.12, `uv`, `pytest`, `psycopg`, `databricks-sdk`, `requests`; Lakebase Search (`lakebase_vector` → `lakebase_ann`, `lakebase_text` → `lakebase_bm25`), pgvector `vector`; UAIG OpenAI-compatible gateway (`/ai-gateway/openai/v1`).
+**Tech Stack:** Python 3.12, `uv`, `pytest`, `psycopg`, `databricks-sdk`, `requests`; Lakebase Search (`lakebase_vector` → `lakebase_ann`, `lakebase_text` → `lakebase_bm25`), pgvector `vector`; OpenAI-compatible Unity Gateway (`/ai-gateway/openai/v1`).
 
 **Spec:** `docs/superpowers/specs/2026-09-24-unity-gateway-voice-studio-design.md`
 **Contracts (verified, read these):** `docs/discovery/lakebase-search-contract.md` (Lakebase Search API + create_pool), `docs/discovery/model-routing-contract.md`, `docs/discovery/runtime-contracts.md`.
@@ -20,7 +20,7 @@
 - **Lakebase Search is ENABLED** on your-project. Retrieval = `lakebase_ann` (ANN, cosine `<=>`) + `lakebase_bm25` (BM25, `to_bm25query`); embeddings are **bring-your-own** via FMAPI. pgvector `hnsw` + native FTS/`pg_trgm` are the documented fallback.
 - **Read-only distinction:** the *agent's runtime tools* are read-only (Plan 3). The **generator writes** datasets — that is content-prep/setup (spec §9), not an agent tool, and is the only writer in this plan.
 - All generated data is **clearly labeled synthetic** (a `synthetic: true` marker in `datasets`/`documents.metadata` and in generated content framing).
-- Generation + embeddings go through **UAIG** (`{host}/ai-gateway/openai/v1`); every tier/gen model must be a served endpoint on DEFAULT.
+- Generation + embeddings go through **Unity Gateway** (`{host}/ai-gateway/openai/v1`); every tier/gen model must be a served endpoint on DEFAULT.
 - Everything scoped by **`data_generation_id`** — no query crosses datasets.
 
 ## Review Focus
@@ -220,7 +220,7 @@ Co-authored-by: Isaac <no-reply@databricks.com>"
 
 **Interfaces:**
 - Consumes: Task 2's `EMBED_MODEL`/`EMBED_DIM` (env `UG_EMBED_MODEL`, default from contract).
-- Produces: `gateway.post(path: str, body: dict) -> dict` (UAIG auth + base_url + `requests`); `embeddings.embed_texts(texts: list[str]) -> list[list[float]]`, `embeddings.EMBED_DIM: int`, `embeddings.to_pgvector(vec: list[float]) -> str` (formats `'[...]'` for `::vector`).
+- Produces: `gateway.post(path: str, body: dict) -> dict` (Unity Gateway auth + base_url + `requests`); `embeddings.embed_texts(texts: list[str]) -> list[list[float]]`, `embeddings.EMBED_DIM: int`, `embeddings.to_pgvector(vec: list[float]) -> str` (formats `'[...]'` for `::vector`).
 
 - [ ] **Step 1: Write the failing tests** (mock the gateway — no network in unit tests)
 
@@ -261,7 +261,7 @@ Add `"requests==2.34.2"` to `[project].dependencies`; run `uv sync`.
 
 `src/services/gateway.py`:
 ```python
-"""Thin UAIG (OpenAI-compatible) gateway client — auth + base_url + POST.
+"""Thin Unity Gateway (OpenAI-compatible) client — auth + base_url + POST.
 
 Used off the hot path (generation, embeddings). Auth via WorkspaceClient so it
 works with DATABRICKS_CONFIG_PROFILE locally and Apps-injected creds in prod.
@@ -294,7 +294,7 @@ def post(path: str, body: dict, timeout: float = 60.0) -> dict:
 
 `src/services/embeddings.py`:
 ```python
-"""FMAPI embeddings over UAIG (bring-your-own embeddings for lakebase_ann).
+"""FMAPI embeddings over Unity Gateway (bring-your-own embeddings for lakebase_ann).
 
 EMBED_MODEL / EMBED_DIM come from docs/discovery/embeddings-and-index-contract.md.
 """
@@ -329,7 +329,7 @@ Live smoke: `DATABRICKS_CONFIG_PROFILE=DEFAULT uv run python -c "from src.servic
 
 ```bash
 git add src/services/gateway.py src/services/embeddings.py tests/test_embeddings.py pyproject.toml uv.lock
-git commit -m "feat: UAIG gateway helper + FMAPI embeddings client
+git commit -m "feat: Unity Gateway helper + FMAPI embeddings client
 
 Co-authored-by: Isaac <no-reply@databricks.com>"
 ```
@@ -544,7 +544,7 @@ Co-authored-by: Isaac <no-reply@databricks.com>"
 
 ---
 
-### Task 6: UAIG generation client + dataset generator
+### Task 6: Unity Gateway generation client + dataset generator
 
 **Files:**
 - Create: `src/services/uaig_chat.py`, `generate.py`
@@ -612,7 +612,7 @@ Expected: FAIL — `ModuleNotFoundError: src.generate` (module at repo root `gen
 
 `src/services/uaig_chat.py`:
 ```python
-"""UAIG chat completion returning parsed JSON — for the generator (off hot path)."""
+"""Unity Gateway chat completion returning parsed JSON — for the generator (off hot path)."""
 from __future__ import annotations
 
 import json
@@ -633,7 +633,7 @@ def complete_json(system: str, user: str, model: str) -> dict:
 
 `src/generate.py` (pure row-building + orchestration):
 ```python
-"""Synthetic dataset generator (spec §9). Dogfoods UAIG (chat) + FMAPI (embeddings).
+"""Synthetic dataset generator (spec §9). Dogfoods Unity Gateway (chat) + FMAPI (embeddings).
 The generator is the only writer in v1; the agent's tools stay read-only."""
 from __future__ import annotations
 
@@ -707,7 +707,7 @@ Expected: prints a `data_generation_id`; verify (SQL) that `datasets.status='rea
 
 ```bash
 git add src/services/uaig_chat.py src/generate.py generate.py tests/test_generate.py
-git commit -m "feat: UAIG-powered synthetic dataset generator
+git commit -m "feat: Unity Gateway-powered synthetic dataset generator
 
 Co-authored-by: Isaac <no-reply@databricks.com>"
 ```
@@ -777,7 +777,7 @@ Co-authored-by: Isaac <no-reply@databricks.com>"
 
 ## Self-Review
 
-**1. Spec coverage:** generator → §9 (Task 6); generic-schema retrieval → §8/§13 (Tasks 4–5); Lakebase Search hybrid → §4/§7 + lakebase-search-contract (Tasks 2,4,5); embeddings via UAIG → §9 (Task 3); tier fixes → §11 deferred (Task 1); scoping/no-fabrication → §12 (Tasks 5–7). Agent/tracing/UI/deploy remain Plans 3–4.
+**1. Spec coverage:** generator → §9 (Task 6); generic-schema retrieval → §8/§13 (Tasks 4–5); Lakebase Search hybrid → §4/§7 + lakebase-search-contract (Tasks 2,4,5); embeddings via Unity Gateway → §9 (Task 3); tier fixes → §11 deferred (Task 1); scoping/no-fabrication → §12 (Tasks 5–7). Agent/tracing/UI/deploy remain Plans 3–4.
 
 **2. Placeholder scan:** No "TODO/handle X." The three "per Task 2 contract" notes (ANN opclass, BM25 query form, EMBED_DIM) are explicit cross-task dependencies on a discovery task that records verbatim DDL — not vague placeholders; the unit-tested surfaces (row-building, SQL shape, scoping, embeddings mock) are complete.
 

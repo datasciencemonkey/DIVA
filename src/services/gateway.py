@@ -1,4 +1,4 @@
-"""Thin UAIG (OpenAI-compatible) gateway client — auth + base_url + POST.
+"""Thin Unity Gateway (OpenAI-compatible) client — auth + base_url + POST.
 
 Used off the hot path (generation, embeddings). Auth via WorkspaceClient so it
 works with DATABRICKS_CONFIG_PROFILE locally and Apps-injected creds in prod.

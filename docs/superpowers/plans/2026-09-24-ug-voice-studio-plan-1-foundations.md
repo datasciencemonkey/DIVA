@@ -6,7 +6,7 @@
 
 **Architecture:** A Databricks-App voice-studio, generalizing the ReferenceApp governed skeleton. This plan builds only the discovery contracts + the pure/groundable core (routing policy, DB helpers, loyalty reader, Lakebase schema). No voice, no UI, no generator yet — those are Plans 2–4, written once this plan's discovery lands.
 
-**Tech Stack:** Python 3.12, `uv`, `pytest`, `psycopg[binary]` + `psycopg-pool`, `databricks-sdk`, Databricks CLI, Lakebase (Postgres), Unity AI Gateway.
+**Tech Stack:** Python 3.12, `uv`, `pytest`, `psycopg[binary]` + `psycopg-pool`, `databricks-sdk`, Databricks CLI, Lakebase (Postgres), Unity Gateway.
 
 **Spec:** `docs/superpowers/specs/2026-09-24-unity-gateway-voice-studio-design.md` (read it alongside this plan; the plan argues from it).
 
@@ -22,7 +22,7 @@
 - **Read-only v1** — no write tools/actions anywhere.
 - All generated data is **clearly labeled synthetic** (later plans).
 - **Governance invariants (spec §12):** the routing decision is deterministic and outside the LLM; the LLM never sees the raw tier; the caller name is courtesy-only; the tier comes from a governed lookup, never conversation; stale/missing → safe default, never fabricate; every data query is scoped by `data_generation_id`.
-- LLM path (later plans) is UAIG **Responses API** (`{host}/ai-gateway/openai/v1`, `use_websocket=False`, `store=False`) — never Chat Completions.
+- LLM path (later plans) is Unity Gateway **Responses API** (`{host}/ai-gateway/openai/v1`, `use_websocket=False`, `store=False`) — never Chat Completions.
 
 ## Review Focus
 
@@ -209,7 +209,7 @@ _THOROUGHNESS = {"Standard": "concise", "Premium": "balanced", "VIP": "thorough"
 @dataclass(frozen=True)
 class RoutingDecision:
     tier: str          # governance signal — used to build directives, never sent to the LLM
-    model: str         # UAIG-served conversational model for this session
+    model: str         # Unity Gateway-served conversational model for this session
     directives: dict   # LLM-safe behavior flags only (no tier/loyalty/spend)
 
 
@@ -551,7 +551,7 @@ Confirm Lakebase Search (BM25 + semantic) availability and the **exact** API: in
 
 - [ ] **Step 4: R2 — verify tier models** → `model-routing-contract.md`
 
-List models UAIG serves on this workspace; for each candidate, verify **Responses-API passthrough with function calling** (notes §7: `system.ai.gpt-5-5` worked, `databricks-claude-sonnet-4-5` did not). Pick `UG_MODEL_STANDARD` / `PREMIUM` / `VIP` + `UG_MODEL_FALLBACK` from the verified-compatible set; record a per-model price (illustrative) for the Costs pillar. Resolve ReferenceApp's §7 model-config inconsistency for our own config.
+List models Unity Gateway serves on this workspace; for each candidate, verify **Responses-API passthrough with function calling** (notes §7: `system.ai.gpt-5-5` worked, `databricks-claude-sonnet-4-5` did not). Pick `UG_MODEL_STANDARD` / `PREMIUM` / `VIP` + `UG_MODEL_FALLBACK` from the verified-compatible set; record a per-model price (illustrative) for the Costs pillar. Resolve ReferenceApp's §7 model-config inconsistency for our own config.
 
 - [ ] **Step 5: R3/R4/R7 — runtime contracts** → `runtime-contracts.md`
 

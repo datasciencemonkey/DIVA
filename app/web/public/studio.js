@@ -1,5 +1,5 @@
 /* =============================================================================
-   UAIG Voice Studio — application logic
+   UG Voice Studio — application logic
    Configure -> Generate -> Live, one governed voice call instrumented across
    the four pillars (Choice / Control / Context / Costs).
 

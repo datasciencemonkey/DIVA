@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="color-scheme" content="dark light" />
 <title>Studio Architecture</title>
-<meta name="description" content="How UAIG Voice Studio governs a single voice call end to end — LiveKit transport, a governed agent, the Unity AI Gateway (which exposes MCP), and a read-only Lakebase." />
+<meta name="description" content="How UG Voice Studio governs a single voice call end to end — LiveKit transport, a governed agent, the Unity Gateway (which exposes MCP), and a read-only Lakebase." />
 
 <!-- Apply the persisted theme before first paint so returning presenters never see a flash.
      Dark is the default; only a stored "light" preference flips the attribute. Shares the
@@ -225,6 +225,21 @@
   .gov-body p { color: var(--text-mid); font-size: .9rem; line-height: 1.5; margin-top: 4px; }
   .gov-body .mono { color: var(--text-hi); font-size: .86em; }
 
+  /* ===== STEP BY STEP: the same flow as plain text, numbered in call order ===== */
+  .steps { margin: clamp(30px, 4.5vw, 52px) 0 0; }
+  .steps-pre {
+    margin-top: 16px; padding: 20px 22px;
+    border: 1px solid var(--hairline); border-radius: var(--r-lg);
+    background: var(--surface); color: var(--text-hi);
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.45;
+    white-space: pre; overflow-x: auto;
+  }
+  .steps-pre:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  .steps-list { margin: 18px 0 0; padding-left: 1.6em; max-width: 76ch; color: var(--text-mid); font-size: .9rem; line-height: 1.55; }
+  .steps-list li + li { margin-top: 6px; }
+  .steps-list b { color: var(--text-hi); font-weight: 600; }
+  .steps-list .mono { color: var(--text-hi); font-size: .86em; }
+
   /* ===== FOOTER NOTE ===== */
   .arch-foot {
     margin: clamp(28px, 4vw, 44px) 0 0;
@@ -265,7 +280,7 @@
 <!-- Brand + theme toggle mirror the studio exactly. The centre (where the studio shows its
      stepper) is intentionally left for the nav tab that lands during integration. -->
 <header class="topbar">
-  <a class="brand" href="index.html" aria-label="UAIG Voice Studio home">
+  <a class="brand" href="index.html" aria-label="UG Voice Studio home">
     <span class="brand-mark" aria-hidden="true">
       <svg viewBox="0 0 32 32" width="26" height="26" fill="none">
         <rect x="1.2" y="1.2" width="29.6" height="29.6" rx="8.5" stroke="currentColor" stroke-width="1.4" opacity=".55"/>
@@ -277,7 +292,7 @@
         </g>
       </svg>
     </span>
-    <span class="brand-word">UAIG<span class="brand-dim"> Voice Studio</span></span>
+    <span class="brand-word">UG<span class="brand-dim"> Voice Studio</span></span>
   </a>
 
   <nav class="topbar-tabs" aria-label="Sections">
@@ -313,9 +328,11 @@
     <h1 class="arch-title" data-anim>One call, <em>governed</em> from first word to last.</h1>
     <p class="arch-lede" data-anim>
       Every voice turn walks the same path: the caller's browser into a LiveKit room, an agent that
-      listens and speaks, then two governed tools. One is the <b>Unity AI Gateway</b> — which exposes
+      listens and speaks, then two governed tools. One is the <b>Unity Gateway</b> — which exposes
       <b>Model Context Protocol</b> and routes each turn to the model a caller's tier has earned; the
-      other is <b>Lakebase</b>, the read-only store the assistant is allowed to know.
+      other is <b>Lakebase</b>, the read-only store the assistant is allowed to know — retrieval is
+      <a href="https://www.databricks.com/blog/lakebase-search-state-art-full-text-and-vector-search-postgres">Lakebase Search</a>
+      (<span class="mono">lakebase_vector</span> ANN).
     </p>
     <ul class="arch-legend" data-anim aria-label="Pillar colour key">
       <li data-p="choice"><span class="lg-key"><span class="lg-dot"></span>Choice</span> routing</li>
@@ -332,7 +349,7 @@
       <!-- viewBox 1200 wide; min-width 1040 keeps rendered text >=11px even when scrolled on a phone.
            Strokes render fully drawn by default (CSS); GSAP only ADDS the entrance when it's live. -->
       <svg class="arch-svg draw-svg" viewBox="0 0 1200 880" role="img"
-           aria-label="Left to right: a caller in the browser reaches the Studio web tier, which mints a short-TTL LiveKit token carrying PII-free metadata and serves the SPA. The browser joins a LiveKit Cloud room whose token dispatch summons the agent worker. The agent runs Deepgram speech-to-text (nova-3), an LLM turn, and Deepgram text-to-speech (aura-2). The LLM turn calls the Unity AI Gateway, which exposes a Model Context Protocol interface, and routes to one of three models by the caller's governed tier. Two read-only tools reach Lakebase: read_loyalty_context returns the governed tier, and semantic_search retrieves knowledge with pgvector ANN and BM25. Token usage is metered as costs. Separately, one time per world, the studio drafts synthetic data through the gateway and embeds it into Lakebase.">
+           aria-label="Left to right: a caller in the browser reaches the Studio web tier, which mints a short-TTL LiveKit token carrying PII-free metadata and serves the SPA. The browser joins a LiveKit Cloud room whose token dispatch summons the agent worker. The agent runs Deepgram speech-to-text (nova-3), an LLM turn, and Deepgram text-to-speech (aura-2). The LLM turn calls the Unity Gateway, which exposes a Model Context Protocol interface, and routes to one of three models by the caller's governed tier. Two read-only tools reach Lakebase: read_loyalty_context returns the governed tier, and semantic_search retrieves knowledge with Lakebase Search ANN. Token usage is metered as costs. Separately, one time per world, the studio drafts synthetic data through the gateway and embeds it into Lakebase.">
 
         <!-- ============ EDGES (behind nodes) ============ -->
         <g>
@@ -353,7 +370,7 @@
           <path class="d-edge" d="M780 262 L786 268 L792 262"/>
           <path class="d-edge" d="M786 360 L786 382"/>
           <path class="d-edge" d="M780 376 L786 382 L792 376"/>
-          <!-- LLM turn -> Unity AI Gateway : the inference call lands at the gateway's MCP interface -->
+          <!-- LLM turn -> Unity Gateway : the inference call lands at the gateway's MCP interface -->
           <path class="d-edge e-lava" d="M872 311 L926 311"/>
           <path class="d-edge e-lava" d="M920 305 L926 311 L920 317"/>
           <!-- governed tier -> model : Lakebase feeds the gateway's routing decision (Control -> Choice) -->
@@ -455,7 +472,7 @@
           <text class="d-mono t-lava" x="742" y="454">aura-2</text>
         </g>
 
-        <!-- Unity AI Gateway — BIG governed Tool. It EXPOSES a Model Context Protocol
+        <!-- Unity Gateway — BIG governed Tool. It EXPOSES a Model Context Protocol
              interface (inner panel, left) and routes each turn to the model the caller's
              governed tier has earned. MCP lives INSIDE the gateway, not as a separate hop. -->
         <g class="d-reveal">
@@ -514,7 +531,7 @@
 
           <rect class="d-pill d-pill--context" x="1016" y="558" width="152" height="42" rx="10"/>
           <text class="d-mono" x="1028" y="575">semantic_search</text>
-          <text class="d-note t-context" x="1028" y="591">pgvector ANN + BM25</text>
+          <text class="d-note t-context" x="1028" y="591">Lakebase Search ANN</text>
 
           <text class="d-mono d-mono--mid" x="1016" y="620" style="font-size:12px">schema: ug</text>
         </g>
@@ -544,7 +561,7 @@
           <text class="d-note" x="82" y="798">generator</text>
 
           <rect class="d-node d-node--inset" x="300" y="748" width="236" height="72" rx="12"/>
-          <text class="d-role" x="316" y="774" style="fill:var(--text-hi);font-weight:700">UAIG chat</text>
+          <text class="d-role" x="316" y="774" style="fill:var(--text-hi);font-weight:700">Unity Gateway chat</text>
           <text class="d-note" x="316" y="794">drafts docs &#183; customers &#183; records</text>
 
           <rect class="d-node d-node--inset" x="620" y="748" width="196" height="72" rx="12"/>
@@ -579,6 +596,55 @@
     </p>
   </div>
 
+  <!-- ===== STEP BY STEP: plain-text diagram, numbered in call order ===== -->
+  <section class="steps" aria-labelledby="stepsH">
+    <h2 class="gov-h" id="stepsH">Step by step: how a call connects</h2>
+    <p class="gov-sub">Numbers mark the order things happen: step 0 runs once per world, steps 1–4 establish the connection, and 5–9 run on every call.</p>
+    <pre class="steps-pre" tabindex="0" aria-label="Plain-text architecture diagram">                              +- Databricks App (1 container) -+
++------------------+          | +----------------------------+ |
+| Browser          |--[1][2]-&gt;| | Web / token tier           | |
+| studio UI        |&lt;---JWT---| | web_server.py              | |
+| livekit-client   |          | | GET /   GET /api/token     | |
++------------------+          | +----------------------------+ |
+    | [3]     ^ [8]           |                                |
+    v         |               |                                |            Databricks workspace
++------------------+          | +----------------------------+ |          +----------------------+
+| LiveKit Cloud    |--[4]----&gt;| | Agent worker               | |-[6][7]--&gt;| Unity Gateway        |
+| WebRTC SFU       |&lt;=[6][8]=&gt;| | agent.py (LiveKit Agents)  | |          | /responses (LLM)     |
+| + agent dispatch |          | |                            | |          | /embeddings          |
++------------------+          | | [5] bind: tier -&gt; model    | |          +----------------------+
+                              | | [6] STT -&gt; LLM -&gt; TTS      | |
+                              | | [7] tools: semantic_search | |          +----------------------+
+                              | |            record_lookup   | |--[5]----&gt;| Lakebase Postgres    |
+                              | | [8] publish evidence       | |--[7]----&gt;| customers, records   |
+                              | | [9] flush OTLP spans       | |          | Lakebase Search ANN  |
++------------------+          | |                            | |          +----------------------+
+| Deepgram         |&lt;===[6]==&gt;| |                            | |
+| STT nova-3       |          | |                            | |          +----------------------+
+| TTS aura-2       |          | |                            | |--[9]----&gt;| Unity Catalog table  |
++------------------+          | +----------------------------+ |          | -&gt; MLflow traces     |
+                              | start_app.py boots both tiers  |          +----------------------+
+                              +--------------------------------+
+
+[0] Before any call - generate a world (studio "Generate" step):
+
+    Browser --POST /api/generate--&gt; Web tier --draft + embed--&gt; Unity Gateway
+                                       |
+                                       +--write in 1 txn (data_generation_id)--&gt; Lakebase Postgres</pre>
+    <ol class="steps-list" start="0">
+      <li><b>Generate a world.</b> Name a fictional company, a role and a system prompt. The generator drafts documents, customers and records through Unity Gateway, embeds them, and writes them to Lakebase in one transaction under a fresh <span class="mono">data_generation_id</span>. Indexes are <a href="https://www.databricks.com/blog/lakebase-search-state-art-full-text-and-vector-search-postgres">Lakebase Search</a>: <span class="mono">lakebase_ann</span> (cosine ANN via <span class="mono">lakebase_vector</span>) and <span class="mono">lakebase_bm25</span> (BM25 via <span class="mono">lakebase_text</span>).</li>
+      <li><b>Load the studio.</b> The browser fetches the studio from the web tier and lists the worlds stored in Lakebase.</li>
+      <li><b>Start a call.</b> The web tier mints a short-lived LiveKit token (<span class="mono">GET /api/token</span>) that carries <span class="mono">data_generation_id</span> and <span class="mono">customer_id</span>, and dispatches the agent into a fresh room.</li>
+      <li><b>Join the room.</b> The browser connects to LiveKit Cloud over WebRTC with that token.</li>
+      <li><b>Dispatch the agent.</b> LiveKit hands the job to the agent worker, which stays registered as <span class="mono">ug-agent</span> over a WebSocket.</li>
+      <li><b>Bind and route.</b> The agent worker looks up the caller's tier in Lakebase (never from speech), and <span class="mono">route_for(tier)</span> picks the model. The model never sees the tier.</li>
+      <li><b>Talk.</b> Deepgram STT → the routed LLM through the gateway's Responses API → Deepgram TTS.</li>
+      <li><b>Ground.</b> <span class="mono">semantic_search</span> is <a href="https://www.databricks.com/blog/lakebase-search-state-art-full-text-and-vector-search-postgres">Lakebase Search</a> ANN (<span class="mono">ORDER BY embedding &lt;=&gt; $q</span> on the <span class="mono">lakebase_ann</span> index), with the question embedded through the gateway first; <span class="mono">record_lookup</span> is plain SQL and only returns the caller's own records. Both tools are scoped to the bound dataset.</li>
+      <li><b>Show.</b> PII-free evidence (routing decision, retrieval hits, token usage) streams to the UI over the LiveKit data channel.</li>
+      <li><b>Trace.</b> The spans flush over OTLP into a Unity Catalog table, where they read as MLflow traces.</li>
+    </ol>
+  </section>
+
   <!-- ===== GOVERNANCE LEDGER ===== -->
   <section class="gov" aria-labelledby="govH">
     <h2 class="gov-h" id="govH">What "governed" guarantees</h2>
@@ -601,7 +667,7 @@
         </span>
         <div class="gov-body">
           <b>Every runtime tool is read-only</b>
-          <p>Both tools the assistant can call (<span class="mono">semantic_search</span> and <span class="mono">record_lookup</span>) only read. A live call can retrieve knowledge and a caller's own records, but it can never write.</p>
+          <p>Both tools the assistant can call (<span class="mono">semantic_search</span> and <span class="mono">record_lookup</span>) only read. Retrieval is <a href="https://www.databricks.com/blog/lakebase-search-state-art-full-text-and-vector-search-postgres">Lakebase Search</a> ANN (<span class="mono">lakebase_vector</span>), not pgvector HNSW. A live call can retrieve knowledge and a caller's own records, but it can never write.</p>
         </div>
       </div>
 

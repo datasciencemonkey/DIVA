@@ -52,7 +52,7 @@ env:
   - name: UG_SCHEMA
     value: "ug"
 
-  # --- UAIG tier->model routing map (non-secret) ---
+  # --- Unity Gateway tier->model routing map (non-secret) ---
   - name: UG_MODEL_STANDARD
     value: "system.ai.gpt-5-nano"
   - name: UG_MODEL_PREMIUM

@@ -1,6 +1,6 @@
 ---
 name: building-voice-agents-on-databricks
-description: Use when building, deploying, or debugging a real-time voice agent on Databricks — a LiveKit agent worker plus a browser token server packaged as one Databricks App, with the LLM on the Databricks Foundation Model API / AI Gateway, Lakebase-backed tools, and MLflow/OpenTelemetry tracing into Unity Catalog. Also use when a LiveKit-on-Databricks deploy fails at build/launch, the agent worker won't start, function-tool calls raise NameError, or a call connects but no agent ever joins.
+description: Use when building, deploying, or debugging a real-time voice agent on Databricks — a LiveKit agent worker plus a browser token server packaged as one Databricks App, with the LLM on the Databricks Foundation Model API / Unity Gateway, Lakebase-backed tools, and MLflow/OpenTelemetry tracing into Unity Catalog. Also use when a LiveKit-on-Databricks deploy fails at build/launch, the agent worker won't start, function-tool calls raise NameError, or a call connects but no agent ever joins.
 ---
 
 # Building Voice Agents on Databricks
@@ -12,7 +12,7 @@ A real-time voice agent on Databricks is **two processes in one Databricks App c
 - a **web/token tier** — a tiny stdlib HTTP server that serves the browser page and mints LiveKit access tokens carrying agent-dispatch, and
 - a **LiveKit agent worker** — connects out to LiveKit Cloud and runs the speech pipeline (STT → LLM → TTS) plus tools.
 
-LiveKit Cloud is the only meeting point: browser ⇄ LiveKit SFU ⇄ worker over WebRTC/WebSocket. **The web tier never touches media** — it only serves the page and signs tokens. The LLM is a Databricks Foundation Model served over the **AI Gateway** (OpenAI-compatible), tools read **Lakebase** (Postgres), and every call exports **OpenTelemetry spans to MLflow / Unity Catalog**.
+LiveKit Cloud is the only meeting point: browser ⇄ LiveKit SFU ⇄ worker over WebRTC/WebSocket. **The web tier never touches media** — it only serves the page and signs tokens. The LLM is a Databricks Foundation Model served over the **Unity Gateway** (OpenAI-compatible), tools read **Lakebase** (Postgres), and every call exports **OpenTelemetry spans to MLflow / Unity Catalog**.
 
 ## When to use
 
@@ -27,7 +27,7 @@ LiveKit Cloud is the only meeting point: browser ⇄ LiveKit SFU ⇄ worker over
 
 ```
 Browser ──WebRTC──▶ LiveKit Cloud ◀──WebSocket── Agent worker (app/agent.py, `start`)
-   ▲                                                  │  STT (Deepgram) → LLM (FM/AI Gateway) → TTS
+   ▲                                                  │  STT (Deepgram) → LLM (FM/Unity Gateway) → TTS
    │ GET /api/token (signed, agent-dispatch)          │  tools → Lakebase ; OTel spans → MLflow/UC
    └──────── Web/token tier (app/web_server.py, :DATABRICKS_APP_PORT)
                     └── both launched by start_app.py (single container)
@@ -39,7 +39,7 @@ Browser ──WebRTC──▶ LiveKit Cloud ◀──WebSocket── Agent worke
 |---|---|---|
 | Single-container launcher | bind web port fast; boot worker in isolated `/tmp/agent-venv` | [deployment.md](references/deployment.md), [templates/start_app.py](templates/start_app.py) |
 | Token / web tier | stdlib HS256 JWT + `roomConfig` agent dispatch; unique room per visit | [agent-and-tools.md](references/agent-and-tools.md) |
-| Agent worker | connect → wait for participant → **build session after identity known**; FM over AI Gateway | [agent-and-tools.md](references/agent-and-tools.md) |
+| Agent worker | connect → wait for participant → **build session after identity known**; FM over Unity Gateway | [agent-and-tools.md](references/agent-and-tools.md) |
 | LLM | `openai.responses.LLM` at `{host}/ai-gateway/openai/v1` (Responses API, for tool-calling) | [agent-and-tools.md](references/agent-and-tools.md) |
 | Lakebase tools | `build_tools()` factory; pool from `WorkspaceClient` credential; fail-soft when `pool=None` | [agent-and-tools.md](references/agent-and-tools.md) |
 | Observability | LiveKit OTel → OTLP `/api/2.0/otel/v1/traces` + UC-table header → MLflow-native spans | [observability.md](references/observability.md) |

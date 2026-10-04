@@ -1,7 +1,7 @@
 """UG Voice Studio agent worker.
 
 Reuses ReferenceApp's boot/tracing/session pattern, REORDERED (spec §6): the loyalty tier —
-and therefore the routed UAIG model — is bound BEFORE the AgentSession is built, so
+and therefore the routed Unity Gateway model — is bound BEFORE the AgentSession is built, so
 each call runs on the tier's model. Generic read-only tools + a per-dataset,
 governance-wrapped system prompt. The LLM never receives the raw tier.
 """
