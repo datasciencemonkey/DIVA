@@ -1,0 +1,53 @@
+# Databricks App spec for a single-container LiveKit voice agent.
+# One container runs the stdlib web/token tier + the LiveKit worker, launched by
+# start_app.py. Credentials come from app SECRET resources backed by a secret
+# scope (never inline). Non-sensitive config uses `value`.
+#
+# Before this resolves, attach the secret resources to the app and grant the app
+# service principal READ on the scope (see references/deployment.md).
+command: ["python", "start_app.py"]
+
+env:
+  # --- runtime / agent identity (non-secret) ---
+  - name: PORT
+    value: "8000"
+  - name: AGENT_NAME
+    value: "my-agent"           # must match roomConfig.agents dispatch in the token
+
+  # --- secrets: valueFrom -> app secret resource -> secret scope ---
+  - name: LIVEKIT_URL
+    valueFrom: livekit-url
+  - name: LIVEKIT_API_KEY
+    valueFrom: livekit-api-key
+  - name: LIVEKIT_API_SECRET
+    valueFrom: livekit-api-secret
+  - name: DEEPGRAM_API_KEY        # or your STT/TTS provider key
+    valueFrom: deepgram-api-key
+  - name: DATABRICKS_TOKEN        # PAT; the app authenticates as this user
+    valueFrom: databricks-token
+
+  # --- Databricks workspace (non-secret) ---
+  - name: DATABRICKS_HOST
+    value: "https://your-workspace.cloud.databricks.com"
+
+  # --- Foundation Model served over the AI Gateway (non-secret) ---
+  - name: LLM_MODEL
+    value: "databricks-gpt-oss-120b"   # any Responses+tools-capable served model
+
+  # --- Lakebase (non-secret; the DB token is minted at runtime via the SDK) ---
+  - name: LAKEBASE_ENDPOINT
+    value: "projects/<project>/branches/<branch>/endpoints/<endpoint>"
+  - name: LAKEBASE_DATABASE
+    value: "databricks_postgres"
+
+  # --- MLflow / OTel tracing into Unity Catalog (all three or tracing disables) ---
+  - name: DATABRICKS_TRACE_CATALOG
+    value: "your_catalog"
+  - name: DATABRICKS_TRACE_SCHEMA
+    value: "your_schema"
+  - name: DATABRICKS_TRACE_TABLE_PREFIX
+    value: "voice"
+  - name: OTEL_SERVICE_NAME
+    value: "my-voice-agent"
+  - name: MLFLOW_EXPERIMENT_NAME       # needed only to read traces via the MLflow client (not for export)
+    value: "/Users/you@example.com/my-voice-agent"

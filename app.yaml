@@ -1,0 +1,71 @@
+# Databricks App spec for the Unity Gateway Voice Studio. One container runs the
+# stdlib web/token tier (app/web_server.py) and the LiveKit agent worker
+# (app/agent.py) side by side, launched by start_app.py (pure Python; the Apps
+# image has no Node). The web tier binds the port immediately; the worker boots
+# behind it in an isolated /tmp/agent-venv.
+#
+# Credentials come from app SECRET resources backed by the `ug-voice-studio`
+# secret scope (no secret values live in this file). Everything else is
+# non-sensitive config. The app authenticates to Databricks with the injected
+# PAT (DATABRICKS_TOKEN); start_app.py drops the runtime's OAuth SP creds so the
+# SDK has one unambiguous auth method (matches local behavior).
+command: ["python", "start_app.py"]
+
+env:
+  # --- runtime / agent identity (non-secret) ---
+  - name: PORT
+    value: "8000"
+  - name: AGENT_NAME
+    value: "ug-agent"
+
+  # --- secrets (valueFrom -> app secret resource -> ug-voice-studio scope) ---
+  - name: LIVEKIT_URL
+    valueFrom: livekit-url
+  - name: LIVEKIT_API_KEY
+    valueFrom: livekit-api-key
+  - name: LIVEKIT_API_SECRET
+    valueFrom: livekit-api-secret
+  - name: DEEPGRAM_API_KEY
+    valueFrom: deepgram-api-key
+  - name: DATABRICKS_TOKEN
+    valueFrom: database-token
+
+  # --- Databricks workspace (non-secret) ---
+  - name: DATABRICKS_HOST
+    value: "https://your-workspace.cloud.databricks.com"
+
+  # --- Lakebase (non-secret config; token minted at runtime via the SDK) ---
+  - name: LAKEBASE_ENDPOINT
+    value: "projects/your-project/branches/production/endpoints/primary"
+  - name: LAKEBASE_DATABASE
+    value: "databricks_postgres"
+  - name: UG_SCHEMA
+    value: "ug"
+
+  # --- UAIG tier->model routing map (non-secret) ---
+  - name: UG_MODEL_STANDARD
+    value: "system.ai.gpt-5-nano"
+  - name: UG_MODEL_PREMIUM
+    value: "system.ai.gpt-5-5"
+  - name: UG_MODEL_VIP
+    value: "system.ai.gpt-6-sol"
+  - name: UG_MODEL_FALLBACK
+    value: "system.ai.gpt-5-5"
+  - name: UG_EMBED_MODEL
+    value: "system.ai.gte-large-en"
+  - name: UG_GEN_MODEL
+    value: "system.ai.gpt-5-4"
+
+  # --- optional tracing (fail-soft if unavailable) ---
+  - name: OTEL_SERVICE_NAME
+    value: "ug-voice-agent"
+  - name: DATABRICKS_TRACE_CATALOG
+    value: "your_catalog"
+  - name: DATABRICKS_TRACE_SCHEMA
+    value: "your_schema"
+  - name: DATABRICKS_TRACE_TABLE_PREFIX
+    value: "ugvoice"
+  - name: MLFLOW_EXPERIMENT_NAME
+    value: "/Users/you@example.com/ugvoice"
+  - name: MLFLOW_TRACING_SQL_WAREHOUSE_ID
+    value: "your-sql-warehouse-id"

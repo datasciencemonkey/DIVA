@@ -1,0 +1,780 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="dark light" />
+<title>Studio Architecture</title>
+<meta name="description" content="How UAIG Voice Studio governs a single voice call end to end — LiveKit transport, a governed agent, the Unity AI Gateway (which exposes MCP), and a read-only Lakebase." />
+
+<!-- Apply the persisted theme before first paint so returning presenters never see a flash.
+     Dark is the default; only a stored "light" preference flips the attribute. Shares the
+     ug_theme key with the studio, so the choice carries across both pages. -->
+<script>
+  (function () {
+    try {
+      if (localStorage.getItem("ug_theme") === "light") {
+        document.documentElement.setAttribute("data-theme", "light");
+      }
+    } catch (e) { /* private mode — stay on the default dark theme */ }
+  })();
+</script>
+
+<!-- Same interface type as the studio (DM Sans, variable) with the system monospace stack for
+     data readouts, inherited from studio.css. GSAP is the only CDN lib here (no livekit-client). -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400..800;1,9..40,400..800&display=swap" />
+
+<link rel="stylesheet" href="studio.css" />
+
+<!-- Page-local styles. Everything inherits studio.css tokens so both themes work by construction:
+     colours are token references, never hardcoded hex. Nothing here re-declares a palette. -->
+<style>
+  /* ---- text-selection + caret, themed from the palette (browser surfaces still carry design) ---- */
+  ::selection { background: color-mix(in srgb, var(--accent) 26%, transparent); color: var(--text-hi); }
+
+  .arch-main { max-width: var(--maxw); margin: 0 auto; padding: clamp(28px, 5vw, 60px) var(--pad) 96px; }
+
+  /* ===== HERO ===== */
+  .arch-hero { max-width: 62ch; margin-bottom: clamp(30px, 4vw, 48px); }
+  .arch-title {
+    font-size: clamp(2rem, 4.4vw, 3.4rem);
+    font-weight: 800; line-height: 1.03; letter-spacing: -0.03em;
+    max-width: 20ch;
+  }
+  .arch-lede {
+    color: var(--text-mid); font-size: clamp(1rem, 1.35vw, 1.14rem);
+    line-height: 1.55; margin-top: 18px; max-width: 66ch;
+  }
+  .arch-lede b { color: var(--text-hi); font-weight: 600; }
+
+  /* ===== PILLAR LEGEND (a key, not a card grid) ===== */
+  .arch-legend {
+    list-style: none; margin: 26px 0 0; padding: 0;
+    display: flex; flex-wrap: wrap; gap: 10px 22px;
+  }
+  .arch-legend li {
+    display: flex; align-items: baseline; gap: 9px;
+    font-size: .82rem; color: var(--text-mid);
+  }
+  .arch-legend .lg-key {
+    display: inline-flex; align-items: center; gap: 7px;
+    color: var(--text-hi); font-weight: 600;
+  }
+  .arch-legend .lg-dot { width: 9px; height: 9px; border-radius: 3px; background: var(--hue); flex: 0 0 auto; }
+  .arch-legend [data-p="choice"]  { --hue: var(--c-choice); }
+  .arch-legend [data-p="control"] { --hue: var(--c-control); }
+  .arch-legend [data-p="context"] { --hue: var(--c-context); }
+  .arch-legend [data-p="costs"]   { --hue: var(--c-costs); }
+
+  /* ===== DIAGRAM STAGE — the centrepiece. On phones the wide SVG scrolls WITHIN this
+     frame (min-width forces internal overflow); the page itself never scrolls sideways. ===== */
+  .diagram-wrap { margin: clamp(26px, 4vw, 40px) 0 0; }
+  .diagram-stage {
+    position: relative;
+    border: 1px solid var(--hairline);
+    border-radius: var(--r-lg);
+    background: linear-gradient(180deg, var(--surface), var(--ink-2));
+    box-shadow: var(--shadow);
+    padding: 24px;
+    overflow: hidden;
+  }
+  .diagram-scroll {
+    overflow-x: auto; overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    scrollbar-color: var(--surface-3) transparent;
+    border-radius: var(--r-md);
+  }
+  .diagram-scroll:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  .diagram-scroll::-webkit-scrollbar { height: 10px; }
+  .diagram-scroll::-webkit-scrollbar-track { background: transparent; }
+  .diagram-scroll::-webkit-scrollbar-thumb {
+    background: var(--surface-3); border-radius: 999px;
+    border: 2px solid var(--ink-2);
+  }
+  .diagram-scroll::-webkit-scrollbar-thumb:hover { background: var(--hairline-strong); }
+  .arch-svg { display: block; width: 100%; min-width: 1040px; height: auto; overflow: visible; }
+  @media (max-width: 720px) { .diagram-stage { padding: 16px; } }
+  .arch-svg text { font-family: var(--font); }
+
+  /* scroll affordance — shown only where the diagram can't fit at once */
+  .diagram-hint {
+    display: none;
+    align-items: center; gap: 8px;
+    margin: 14px 2px 0; font-size: .78rem; color: var(--text-lo);
+  }
+  .diagram-hint svg { color: var(--accent-text); }
+  @media (max-width: 1120px) { .diagram-hint { display: inline-flex; } }
+
+  /* ---- SVG primitives (all colours are tokens; currentColor drives icons) ---- */
+  .d-node { fill: var(--surface); stroke: var(--hairline-strong); stroke-width: 1; }
+  .d-node--inset { fill: var(--ink-2); stroke: var(--hairline); }
+  .d-node--uaig {
+    fill: color-mix(in srgb, var(--accent) 8%, var(--surface));
+    stroke: color-mix(in srgb, var(--accent) 36%, var(--hairline-strong));
+  }
+  .d-node--lakebase {
+    fill: color-mix(in srgb, var(--c-context) 9%, var(--surface));
+    stroke: color-mix(in srgb, var(--c-context) 40%, var(--hairline-strong));
+  }
+  .d-node--mcp {
+    fill: color-mix(in srgb, var(--accent) 11%, var(--surface));
+    stroke: color-mix(in srgb, var(--accent) 40%, var(--hairline-strong));
+  }
+  .d-agent-shell { fill: color-mix(in srgb, var(--c-choice) 5%, var(--ink-2)); stroke: var(--hairline); stroke-width: 1; }
+
+  .d-title { fill: var(--text-hi); font-weight: 700; font-size: 17px; letter-spacing: -0.01em; }
+  .d-title--lg { font-size: 20px; font-weight: 800; letter-spacing: -0.02em; }
+  .d-role  { fill: var(--text-mid); font-size: 14px; letter-spacing: -0.005em; }
+  .d-note  { fill: var(--text-lo); font-size: 13px; }
+  .d-tag   { fill: var(--text-lo); font-size: 13px; font-weight: 600; letter-spacing: 0.04em; }
+  .d-mono  { font-family: var(--mono); font-size: 13.5px; letter-spacing: -0.02em; fill: var(--text-hi); }
+  .d-mono--mid { fill: var(--text-mid); }
+
+  /* pillar hue fills for icons, accent bars, and tags */
+  .f-choice  { fill: var(--c-choice); }
+  .f-control { fill: var(--c-control); }
+  .f-context { fill: var(--c-context); }
+  .f-costs   { fill: var(--c-costs); }
+  .f-lava    { fill: var(--accent); }
+  .t-choice  { fill: var(--c-choice); }
+  .t-control { fill: var(--c-control); }
+  .t-context { fill: var(--c-context); }
+  .t-costs   { fill: var(--c-costs); }
+  .t-lava    { fill: var(--accent-text); }
+
+  /* icons: authored strokes, one consistent weight, like the studio's icon set */
+  .d-ic { fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+  .ic-hi   { stroke: var(--text-hi); }
+  .ic-mid  { stroke: var(--text-mid); }
+  .ic-choice  { stroke: var(--c-choice); }
+  .ic-control { stroke: var(--c-control); }
+  .ic-context { stroke: var(--c-context); }
+  .ic-costs   { stroke: var(--c-costs); }
+  .ic-lava    { stroke: var(--accent); }
+
+  /* edges: drawn-in left→right. Solid = runtime call path; hued = a pillar's path. */
+  .d-edge { fill: none; stroke: var(--hairline-strong); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .e-lava    { stroke: var(--accent); }
+  .e-choice  { stroke: var(--c-choice); }
+  .e-control { stroke: var(--c-control); }
+  .e-context { stroke: var(--c-context); }
+  .e-costs   { stroke: var(--c-costs); }
+  /* one-time generation lane: a distinct, muted, dashed language — kept out of .d-edge
+     so the draw-in never rewrites its dash pattern */
+  .d-genedge { fill: none; stroke: var(--hairline-strong); stroke-width: 1.6; stroke-dasharray: 5 6; stroke-linecap: round; }
+
+  .edge-label { fill: var(--text-mid); font-size: 13px; letter-spacing: -0.005em; }
+  .edge-label--sm { font-size: 12.5px; fill: var(--text-lo); }
+
+  /* pill (routed models + lakebase functions) */
+  .d-pill { fill: var(--ink-2); stroke: var(--hairline); stroke-width: 1; }
+  .d-pill--choice  { stroke: color-mix(in srgb, var(--c-choice) 45%, var(--hairline)); }
+  .d-pill--context { stroke: color-mix(in srgb, var(--c-context) 45%, var(--hairline)); }
+  .d-pill--control { stroke: color-mix(in srgb, var(--c-control) 45%, var(--hairline)); }
+  /* the governed choice for this call — the one route that "locks in" */
+  .route-chosen { fill: none; stroke: var(--accent); stroke-width: 2; }
+
+  /* "TOOL" marker pill on the two governed tools */
+  .tool-tag { fill: color-mix(in srgb, var(--accent) 16%, transparent); stroke: color-mix(in srgb, var(--accent) 40%, transparent); stroke-width: 1; }
+  .tool-tag--ctx { fill: color-mix(in srgb, var(--c-context) 16%, transparent); stroke: color-mix(in srgb, var(--c-context) 42%, transparent); }
+  .tool-tag-tx { font-size: 12px; font-weight: 700; letter-spacing: 0.12em; }
+
+  /* travelling signal packet — the one looping motion; hidden until GSAP drives it.
+     A soft accent glow reads as a live signal rather than a stray dot. */
+  .d-packet {
+    fill: var(--accent); opacity: 0;
+    filter: drop-shadow(0 0 5px color-mix(in srgb, var(--accent) 65%, transparent));
+  }
+
+  /* stacked expansion under the MCP title — horizontal words fit the narrow band;
+     rotated text at this width either clipped or shrank below legibility */
+  .d-mcp-word { fill: var(--text-lo); font-size: 10.5px; font-weight: 600; letter-spacing: .055em; }
+
+  /* generation-lane panel */
+  .gen-panel { fill: color-mix(in srgb, var(--text-lo) 5%, var(--ink-2)); stroke: var(--hairline); stroke-width: 1; }
+
+  /* ===== GOVERNANCE LEDGER (one panel, hairline-divided rows — not a grid of cards) ===== */
+  .gov { margin: clamp(30px, 4.5vw, 52px) 0 0; }
+  .gov-h { font-size: clamp(1.2rem, 2vw, 1.5rem); font-weight: 700; letter-spacing: -0.02em; }
+  .gov-sub { color: var(--text-mid); font-size: .92rem; margin-top: 6px; max-width: 60ch; }
+  .gov-ledger {
+    margin-top: 20px;
+    border: 1px solid var(--hairline); border-radius: var(--r-lg);
+    background: linear-gradient(180deg, var(--surface), var(--ink-2));
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .gov-row {
+    display: grid; grid-template-columns: 44px 1fr; gap: 16px; align-items: start;
+    padding: 22px 26px;
+  }
+  .gov-row + .gov-row { border-top: 1px solid var(--hairline); }
+  .gov-ic {
+    width: 40px; height: 40px; border-radius: 11px; flex: 0 0 auto;
+    display: grid; place-items: center; color: var(--hue, var(--accent));
+    background: color-mix(in srgb, var(--hue, var(--accent)) 13%, transparent);
+    border: 1px solid color-mix(in srgb, var(--hue, var(--accent)) 30%, transparent);
+  }
+  .gov-row[data-p="control"] { --hue: var(--c-control); }
+  .gov-row[data-p="context"] { --hue: var(--c-context); }
+  .gov-row[data-p="costs"]   { --hue: var(--c-costs); }
+  .gov-body b { display: block; font-size: 1rem; font-weight: 700; letter-spacing: -0.01em; }
+  .gov-body p { color: var(--text-mid); font-size: .9rem; line-height: 1.5; margin-top: 4px; }
+  .gov-body .mono { color: var(--text-hi); font-size: .86em; }
+
+  /* ===== FOOTER NOTE ===== */
+  .arch-foot {
+    margin: clamp(28px, 4vw, 44px) 0 0;
+    padding: 22px 24px;
+    border: 1px solid var(--hairline); border-radius: var(--r-md);
+    background: var(--ink-2);
+    display: flex; gap: 16px; align-items: flex-start;
+  }
+  .arch-foot .foot-ic { color: var(--c-context); flex: 0 0 auto; margin-top: 1px; }
+  .arch-foot p { color: var(--text-mid); font-size: .88rem; line-height: 1.55; }
+  .arch-foot p b { color: var(--text-hi); font-weight: 600; }
+  .arch-foot .mono { color: var(--text-hi); }
+
+  /* ===== RESPONSIVE ===== */
+  @media (max-width: 720px) {
+    .gov-row { grid-template-columns: 36px 1fr; gap: 13px; padding: 18px; }
+    .gov-ic { width: 34px; height: 34px; border-radius: 9px; }
+  }
+
+  /* ===== REDUCED MOTION — land on the finished, legible frame, no packet ===== */
+  @media (prefers-reduced-motion: reduce) {
+    .d-packet { opacity: 0 !important; }
+    .arch-svg path, .arch-svg line, .arch-svg polyline, .arch-svg circle, .arch-svg rect { stroke-dashoffset: 0 !important; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ambient background: fixed aurora + hairline grid, purely decorative — identical to the studio -->
+<div class="bg" aria-hidden="true">
+  <div class="bg-aurora bg-aurora--a"></div>
+  <div class="bg-aurora bg-aurora--b"></div>
+  <div class="bg-grid"></div>
+  <div class="bg-vignette"></div>
+</div>
+
+<!-- ================= TOP BAR ================= -->
+<!-- Brand + theme toggle mirror the studio exactly. The centre (where the studio shows its
+     stepper) is intentionally left for the nav tab that lands during integration. -->
+<header class="topbar">
+  <a class="brand" href="index.html" aria-label="UAIG Voice Studio home">
+    <span class="brand-mark" aria-hidden="true">
+      <svg viewBox="0 0 32 32" width="26" height="26" fill="none">
+        <rect x="1.2" y="1.2" width="29.6" height="29.6" rx="8.5" stroke="currentColor" stroke-width="1.4" opacity=".55"/>
+        <g stroke="currentColor" stroke-width="2.1" stroke-linecap="round">
+          <line x1="9" y1="13" x2="9" y2="19"/>
+          <line x1="13.4" y1="9.5" x2="13.4" y2="22.5"/>
+          <line x1="18" y1="7" x2="18" y2="25"/>
+          <line x1="22.6" y1="11.5" x2="22.6" y2="20.5"/>
+        </g>
+      </svg>
+    </span>
+    <span class="brand-word">UAIG<span class="brand-dim"> Voice Studio</span></span>
+  </a>
+
+  <nav class="topbar-tabs" aria-label="Sections">
+    <a class="topbar-link" href="index.html" aria-label="Back to the studio">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="13" rx="2.2"/><path d="M3.5 9.5h17"/><path d="M9 20.5h6"/></svg>
+      <span class="tl-label">Studio</span>
+    </a>
+    <a class="topbar-link" href="architecture.html" aria-current="page" aria-label="Architecture (current section)">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="2.3"/><circle cx="18" cy="6" r="2.3"/><circle cx="12" cy="18" r="2.3"/><path d="M7.7 7.7l3.1 8.1"/><path d="M16.3 7.7l-3.1 8.1"/><path d="M8.3 6h7.4"/></svg>
+      <span class="tl-label">Architecture</span>
+    </a>
+  </nav>
+
+  <div style="flex:1 1 auto"></div>
+
+  <div class="topbar-right">
+    <button type="button" class="theme-toggle" id="themeToggle" aria-pressed="false" aria-label="Switch to light theme" title="Switch to light theme">
+      <svg class="ic-sun" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="4"/>
+        <path d="M12 2.5v2.2M12 19.3v2.2M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6"/>
+      </svg>
+      <svg class="ic-moon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M20.5 14.8A8 8 0 0 1 9.2 3.5a7 7 0 1 0 11.3 11.3z"/>
+      </svg>
+    </button>
+  </div>
+</header>
+
+<main class="arch-main">
+
+  <!-- ===== HERO ===== -->
+  <section class="arch-hero">
+    <h1 class="arch-title" data-anim>One call, <em>governed</em> from first word to last.</h1>
+    <p class="arch-lede" data-anim>
+      Every voice turn walks the same path: the caller's browser into a LiveKit room, an agent that
+      listens and speaks, then two governed tools. One is the <b>Unity AI Gateway</b> — which exposes
+      <b>Model Context Protocol</b> and routes each turn to the model a caller's tier has earned; the
+      other is <b>Lakebase</b>, the read-only store the assistant is allowed to know.
+    </p>
+    <ul class="arch-legend" data-anim aria-label="Pillar colour key">
+      <li data-p="choice"><span class="lg-key"><span class="lg-dot"></span>Choice</span> routing</li>
+      <li data-p="control"><span class="lg-key"><span class="lg-dot"></span>Control</span> governance</li>
+      <li data-p="context"><span class="lg-key"><span class="lg-dot"></span>Context</span> retrieval</li>
+      <li data-p="costs"><span class="lg-key"><span class="lg-dot"></span>Costs</span> metering</li>
+    </ul>
+  </section>
+
+  <!-- ===== THE DIAGRAM ===== -->
+  <div class="diagram-wrap" data-anim>
+    <div class="diagram-stage">
+     <div class="diagram-scroll" role="group" aria-label="Voice Studio architecture diagram" tabindex="0">
+      <!-- viewBox 1200 wide; min-width 1040 keeps rendered text >=11px even when scrolled on a phone.
+           Strokes render fully drawn by default (CSS); GSAP only ADDS the entrance when it's live. -->
+      <svg class="arch-svg draw-svg" viewBox="0 0 1200 880" role="img"
+           aria-label="Left to right: a caller in the browser reaches the Studio web tier, which mints a short-TTL LiveKit token carrying PII-free metadata and serves the SPA. The browser joins a LiveKit Cloud room whose token dispatch summons the agent worker. The agent runs Deepgram speech-to-text (nova-3), an LLM turn, and Deepgram text-to-speech (aura-2). The LLM turn calls the Unity AI Gateway, which exposes a Model Context Protocol interface, and routes to one of three models by the caller's governed tier. Two read-only tools reach Lakebase: read_loyalty_context returns the governed tier, and semantic_search retrieves knowledge with pgvector ANN and BM25. Token usage is metered as costs. Separately, one time per world, the studio drafts synthetic data through the gateway and embeds it into Lakebase.">
+
+        <!-- ============ EDGES (behind nodes) ============ -->
+        <g>
+          <!-- Caller <-> Studio (SPA + token request) -->
+          <path class="d-edge" d="M196 288 L232 288"/>
+          <path class="d-edge" d="M224 282 L232 288 L224 294"/>
+          <!-- Studio -> LiveKit (JWT + dispatch + metadata) -->
+          <path class="d-edge" d="M436 288 L470 288"/>
+          <path class="d-edge" d="M462 282 L470 288 L462 294"/>
+          <!-- LiveKit -> Agent : audio in (arcs up, lands on the STT top edge) -->
+          <path class="d-edge e-lava" d="M638 262 C 660 240, 676 222, 706 222"/>
+          <path class="d-edge e-lava" d="M698 215 L706 222 L698 229"/>
+          <!-- Agent -> LiveKit : audio out (leaves the TTS left edge, back to the caller) -->
+          <path class="d-edge e-lava" d="M700 434 C 664 432, 646 356, 638 310"/>
+          <path class="d-edge e-lava" d="M631 317 L638 310 L645 317"/>
+          <!-- STT -> LLM -> TTS (inside the agent) -->
+          <path class="d-edge" d="M786 246 L786 268"/>
+          <path class="d-edge" d="M780 262 L786 268 L792 262"/>
+          <path class="d-edge" d="M786 360 L786 382"/>
+          <path class="d-edge" d="M780 376 L786 382 L792 376"/>
+          <!-- LLM turn -> Unity AI Gateway : the inference call lands at the gateway's MCP interface -->
+          <path class="d-edge e-lava" d="M872 311 L926 311"/>
+          <path class="d-edge e-lava" d="M920 305 L926 311 L920 317"/>
+          <!-- governed tier -> model : Lakebase feeds the gateway's routing decision (Control -> Choice) -->
+          <path class="d-edge e-control" d="M1176 430 L1176 372"/>
+          <path class="d-edge e-control" d="M1170 380 L1176 372 L1182 380"/>
+          <!-- read-only tool calls : agent -> Lakebase -->
+          <path class="d-edge e-context" d="M872 378 C 910 440, 955 468, 1000 474"/>
+          <path class="d-edge e-context" d="M992 468 L1000 474 L995 482"/>
+          <path class="d-edge e-control" d="M900 484 C 940 508, 968 546, 1000 560"/>
+          <path class="d-edge e-control" d="M992 554 L1000 560 L995 568"/>
+          <!-- session usage -> Costs -->
+          <path class="d-edge e-costs" d="M786 494 L786 522"/>
+          <path class="d-edge e-costs" d="M780 516 L786 522 L792 516"/>
+        </g>
+
+        <!-- ============ EDGE LABELS — kept sparse; node text + hue carry the rest ============ -->
+        <g>
+          <text class="edge-label--sm" x="214" y="276" text-anchor="middle">SPA</text>
+          <text class="edge-label--sm t-lava" x="596" y="214">audio in</text>
+          <text class="edge-label--sm t-lava" x="596" y="374">audio out</text>
+          <text class="edge-label--sm t-control" x="1168" y="404" text-anchor="end">tier &#8594; model</text>
+        </g>
+
+        <!-- ============ NODES ============ -->
+
+        <!-- Caller -->
+        <g class="d-reveal">
+          <rect class="d-node" x="40" y="232" width="156" height="112" rx="15"/>
+          <g class="d-ic ic-hi" transform="translate(60,254)">
+            <rect x="4" y="0" width="9" height="15" rx="4.5"/>
+            <path d="M0.5 11a8 8 0 0 0 16 0"/>
+            <path d="M8.5 19v3M4.5 22h8"/>
+          </g>
+          <text class="d-title" x="88" y="270">Caller</text>
+          <text class="d-role" x="60" y="303">Browser + mic</text>
+          <text class="d-mono d-mono--mid" x="60" y="325">livekit-client</text>
+        </g>
+
+        <!-- Studio web tier -->
+        <g class="d-reveal">
+          <rect class="d-node" x="232" y="222" width="204" height="132" rx="15"/>
+          <g class="d-ic ic-hi" transform="translate(252,244)">
+            <rect x="0" y="1" width="18" height="16" rx="2.5"/>
+            <path d="M0 6h18"/>
+            <path d="M3.4 3.6h0M6 3.6h0"/>
+            <path d="M5 11l-2 2 2 2M9.5 15h4"/>
+          </g>
+          <text class="d-title" x="280" y="260">Studio web tier</text>
+          <text class="d-mono d-mono--mid" x="252" y="290">web_server.py</text>
+          <text class="d-role" x="252" y="312">Mints LiveKit JWT</text>
+          <text class="d-role" x="252" y="333">+ serves the SPA</text>
+        </g>
+
+        <!-- LiveKit Cloud -->
+        <g class="d-reveal">
+          <rect class="d-node" x="470" y="232" width="168" height="112" rx="15"/>
+          <g class="d-ic ic-hi" transform="translate(490,256)">
+            <path d="M5 16h9a4 4 0 0 0 .4-8A6 6 0 0 0 3 7.5 3.5 3.5 0 0 0 4 16z"/>
+          </g>
+          <text class="d-title" x="518" y="270">LiveKit Cloud</text>
+          <text class="d-role" x="490" y="303">Room + dispatch</text>
+          <text class="d-note" x="490" y="325">auto-summons agent</text>
+        </g>
+
+        <!-- Agent worker (tall shell grouping STT / LLM / TTS) -->
+        <g class="d-reveal">
+          <rect class="d-agent-shell" x="672" y="150" width="228" height="344" rx="18"/>
+          <g class="d-ic ic-choice" transform="translate(692,170)">
+            <rect x="0" y="3" width="18" height="13" rx="3"/>
+            <path d="M6 3V1.5M12 3V1.5M4 8h2M12 8h2M4 12h6"/>
+          </g>
+          <text class="d-title" x="720" y="186">Agent worker</text>
+          <text class="d-mono d-mono--mid" x="692" y="212">agent.py</text>
+
+          <!-- STT -->
+          <rect class="d-node d-node--inset" x="700" y="222" width="172" height="70" rx="12"/>
+          <g class="d-ic ic-lava" transform="translate(716,242)">
+            <path d="M0 15V11M4 15V7M8 16V4M12 15V8M16 15V11" stroke-width="2"/>
+          </g>
+          <text class="d-role" x="742" y="250" style="fill:var(--text-hi);font-weight:700">Deepgram STT</text>
+          <text class="d-mono t-lava" x="742" y="272">nova-3</text>
+
+          <!-- LLM turn (the pivot) -->
+          <rect class="d-node" x="700" y="312" width="172" height="72" rx="12" style="stroke:color-mix(in srgb, var(--accent) 40%, var(--hairline-strong))"/>
+          <g class="d-ic ic-lava" transform="translate(716,332)">
+            <circle cx="9" cy="9" r="7"/>
+            <path d="M9 5.4a2.2 2.2 0 0 1 2 3.2M9 12.6a2.2 2.2 0 0 1-2-3.2"/>
+          </g>
+          <text class="d-title" x="742" y="340">LLM turn</text>
+          <text class="d-mono d-mono--mid" x="742" y="362">openai.responses</text>
+
+          <!-- TTS -->
+          <rect class="d-node d-node--inset" x="700" y="404" width="172" height="70" rx="12"/>
+          <g class="d-ic ic-lava" transform="translate(716,424)">
+            <path d="M2 6v6h3l5 4V2L5 6z"/>
+            <path d="M13 6.5a4 4 0 0 1 0 5"/>
+          </g>
+          <text class="d-role" x="742" y="432" style="fill:var(--text-hi);font-weight:700">Deepgram TTS</text>
+          <text class="d-mono t-lava" x="742" y="454">aura-2</text>
+        </g>
+
+        <!-- Unity AI Gateway — BIG governed Tool. It EXPOSES a Model Context Protocol
+             interface (inner panel, left) and routes each turn to the model the caller's
+             governed tier has earned. MCP lives INSIDE the gateway, not as a separate hop. -->
+        <g class="d-reveal">
+          <rect class="d-node--uaig" x="926" y="140" width="258" height="232" rx="18"/>
+
+          <!-- MCP — the gateway's Model Context Protocol interface, inside the gateway -->
+          <rect class="d-node--mcp" x="938" y="192" width="68" height="140" rx="12"/>
+          <text class="d-title t-lava" x="972" y="228" text-anchor="middle" style="font-size:15px">MCP</text>
+          <text class="d-mcp-word" x="972" y="256" text-anchor="middle">MODEL</text>
+          <text class="d-mcp-word" x="972" y="274" text-anchor="middle">CONTEXT</text>
+          <text class="d-mcp-word" x="972" y="292" text-anchor="middle">PROTOCOL</text>
+
+          <!-- TOOL tag -->
+          <rect class="tool-tag" x="1120" y="152" width="52" height="22" rx="11"/>
+          <text class="tool-tag-tx t-lava" x="1146" y="167" text-anchor="middle">TOOL</text>
+          <g class="d-ic ic-lava" transform="translate(1016,156)">
+            <path d="M9 1.5l7 3v4.5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V4.5z"/>
+            <path d="M5.5 9l2.4 2.4L12.5 6.6"/>
+          </g>
+          <text class="d-title d-title--lg" x="1044" y="178">Unity AI</text>
+          <text class="d-title d-title--lg" x="1044" y="200">Gateway</text>
+          <text class="d-tag t-choice" x="1016" y="226">CHOICE &#183; ROUTING</text>
+
+          <!-- three routed models; the governed choice for this call is locked in on gpt-6-sol -->
+          <rect class="d-pill d-pill--choice" x="1016" y="236" width="152" height="38" rx="10"/>
+          <text class="d-mono" x="1028" y="253">gpt-6-sol</text>
+          <text class="d-note t-choice" x="1028" y="268">VIP</text>
+          <rect class="route-chosen" id="routeChosen" x="1013" y="233" width="158" height="44" rx="12"/>
+
+          <rect class="d-pill d-pill--choice" x="1016" y="282" width="152" height="38" rx="10"/>
+          <text class="d-mono d-mono--mid" x="1028" y="299">gpt-5-5</text>
+          <text class="d-note t-choice" x="1028" y="314">Premium</text>
+
+          <rect class="d-pill d-pill--choice" x="1016" y="328" width="152" height="38" rx="10"/>
+          <text class="d-mono d-mono--mid" x="1028" y="345">gpt-5-nano</text>
+          <text class="d-note t-choice" x="1028" y="360">Standard</text>
+        </g>
+
+        <!-- Lakebase — BIG governed Tool (read-only; Control tier + Context retrieval) -->
+        <g class="d-reveal">
+          <rect class="d-node--lakebase" x="1000" y="430" width="184" height="200" rx="18"/>
+          <rect class="tool-tag tool-tag--ctx" x="1120" y="442" width="52" height="22" rx="11"/>
+          <text class="tool-tag-tx t-context" x="1146" y="457" text-anchor="middle">TOOL</text>
+          <g class="d-ic ic-context" transform="translate(1016,446)">
+            <ellipse cx="9" cy="3.4" rx="7.5" ry="2.6"/>
+            <path d="M1.5 3.4v10.4c0 1.4 3.4 2.6 7.5 2.6s7.5-1.2 7.5-2.6V3.4"/>
+            <path d="M1.5 9c0 1.4 3.4 2.6 7.5 2.6S16.5 10.4 16.5 9"/>
+          </g>
+          <text class="d-title d-title--lg" x="1044" y="470">Lakebase</text>
+          <text class="d-role" x="1016" y="497">Governed, read-only store</text>
+
+          <!-- the two read-only functions the runtime actually calls -->
+          <rect class="d-pill d-pill--control" x="1016" y="508" width="152" height="42" rx="10"/>
+          <text class="d-mono" x="1028" y="525" style="font-size:12px">read_loyalty_context</text>
+          <text class="d-note t-control" x="1028" y="541">returns the governed tier</text>
+
+          <rect class="d-pill d-pill--context" x="1016" y="558" width="152" height="42" rx="10"/>
+          <text class="d-mono" x="1028" y="575">semantic_search</text>
+          <text class="d-note t-context" x="1028" y="591">pgvector ANN + BM25</text>
+
+          <text class="d-mono d-mono--mid" x="1016" y="620" style="font-size:12px">schema: ug</text>
+        </g>
+
+        <!-- Costs — live token metering off the agent's usage events -->
+        <g class="d-reveal">
+          <rect class="d-node" x="672" y="522" width="228" height="94" rx="15" style="stroke:color-mix(in srgb, var(--c-costs) 34%, var(--hairline-strong))"/>
+          <g class="d-ic ic-costs" transform="translate(692,542)">
+            <path d="M0 15V1M0 15h16M3 11l4-4 3 2 5-6"/>
+          </g>
+          <text class="d-title" x="720" y="556">Costs</text>
+          <text class="d-mono d-mono--mid" x="692" y="579" style="font-size:12px">session_usage_updated</text>
+          <!-- meter -->
+          <line x1="692" y1="598" x2="880" y2="598" stroke="var(--hairline-strong)" stroke-width="4" stroke-linecap="round"/>
+          <line x1="692" y1="598" x2="812" y2="598" stroke="var(--c-costs)" stroke-width="4" stroke-linecap="round"/>
+        </g>
+
+        <!-- ============ ONE-TIME GENERATION LANE (write-once; distinct dashed language) ============ -->
+        <g class="d-reveal">
+          <rect class="gen-panel" x="40" y="672" width="1144" height="176" rx="16"/>
+          <text class="d-title" x="66" y="706">One-time per world</text>
+          <text class="d-note" x="66" y="728">The generator is the only writer — every path a live call touches is read-only.</text>
+
+          <!-- lane nodes -->
+          <rect class="d-node d-node--inset" x="66" y="748" width="150" height="72" rx="12"/>
+          <text class="d-role" x="82" y="778" style="fill:var(--text-hi);font-weight:700">Studio</text>
+          <text class="d-note" x="82" y="798">generator</text>
+
+          <rect class="d-node d-node--inset" x="300" y="748" width="236" height="72" rx="12"/>
+          <text class="d-role" x="316" y="774" style="fill:var(--text-hi);font-weight:700">UAIG chat</text>
+          <text class="d-note" x="316" y="794">drafts docs &#183; customers &#183; records</text>
+
+          <rect class="d-node d-node--inset" x="620" y="748" width="196" height="72" rx="12"/>
+          <text class="d-role" x="636" y="774" style="fill:var(--text-hi);font-weight:700">FMAPI</text>
+          <text class="d-note" x="636" y="794">embeddings</text>
+
+          <rect class="d-node d-node--inset" x="900" y="748" width="196" height="72" rx="12"
+                style="stroke:color-mix(in srgb, var(--c-context) 34%, var(--hairline))"/>
+          <text class="d-role t-context" x="916" y="774" style="font-weight:700">Lakebase</text>
+          <text class="d-note" x="916" y="794">write-once &#183; schema ug</text>
+
+          <!-- dashed connectors -->
+          <path class="d-genedge" d="M216 784 L300 784"/>
+          <path class="d-genedge" d="M536 784 L620 784"/>
+          <path class="d-genedge" d="M816 784 L900 784"/>
+        </g>
+
+        <!-- the live-call spine: an invisible authored path threading caller -> studio ->
+             LiveKit -> (audio in) STT -> LLM -> MCP -> the governed route. The signal packet
+             rides it via MotionPathPlugin so the loop tracks the drawn topology exactly. -->
+        <path id="spinePath" aria-hidden="true" fill="none" stroke="none"
+              d="M118 288 L554 288 C616 288 648 258 668 240 C682 228 692 222 706 222 C738 222 772 240 786 257 L786 350 C828 350 846 311 872 311 L943 311 C972 311 984 290 998 254 C1022 246 1062 246 1088 254"/>
+        <!-- travelling signal packet — one looping motion along the spine above -->
+        <circle class="d-packet" id="flowPacket" cx="0" cy="0" r="6"/>
+      </svg>
+     </div>
+    </div>
+
+    <p class="diagram-hint">
+      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l-4 6 4 6"/><path d="M15 6l4 6-4 6"/></svg>
+      Drag to explore the full flow
+    </p>
+  </div>
+
+  <!-- ===== GOVERNANCE LEDGER ===== -->
+  <section class="gov" aria-labelledby="govH">
+    <h2 class="gov-h" id="govH">What "governed" guarantees</h2>
+    <p class="gov-sub">Four invariants hold on every call, enforced by the tools and the token, never by the conversation.</p>
+
+    <div class="gov-ledger">
+      <div class="gov-row" data-p="control">
+        <span class="gov-ic" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+        </span>
+        <div class="gov-body">
+          <b>Tier comes from a governed lookup</b>
+          <p>The caller's tier is read from Lakebase via <span class="mono">read_loyalty_context</span> and drives routing at the gateway. The caller is never told or asked their tier, and it never comes from anything they say.</p>
+        </div>
+      </div>
+
+      <div class="gov-row" data-p="context">
+        <span class="gov-ic" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H18a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6.5A2.5 2.5 0 0 1 4 18.5z"/><path d="M8 7h7"/><path d="M8 11h5"/></svg>
+        </span>
+        <div class="gov-body">
+          <b>Every runtime tool is read-only</b>
+          <p>Both tools the assistant can call (<span class="mono">semantic_search</span> and <span class="mono">record_lookup</span>) only read. A live call can retrieve knowledge and a caller's own records, but it can never write.</p>
+        </div>
+      </div>
+
+      <div class="gov-row" data-p="context">
+        <span class="gov-ic" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M16 16l4.5 4.5"/><path d="M8 11h6M11 8v6" opacity=".55"/></svg>
+        </span>
+        <div class="gov-body">
+          <b>Abstain, never fabricate</b>
+          <p>When retrieval returns nothing, or the store is degraded, the tool returns empty and the assistant says it doesn't have that information. Grounded answers only; no invented policies, fares, or balances.</p>
+        </div>
+      </div>
+
+      <div class="gov-row" data-p="costs">
+        <span class="gov-ic" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5a8.5 8.5 0 1 0 8.5 8.5"/><path d="M12 3.5V12l6 3"/></svg>
+        </span>
+        <div class="gov-body">
+          <b>Dispatch tokens carry PII-free metadata</b>
+          <p>The short-TTL LiveKit token embeds only <span class="mono">{data_generation_id, customer_id}</span>: identifiers, not identity. Token usage is metered per turn for the Costs pillar, so no caller name ever rides the wire.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== FOOTER NOTE ===== -->
+  <div class="arch-foot">
+    <span class="foot-ic" aria-hidden="true">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="7" ry="2.6"/><path d="M5 6v12c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6V6"/><path d="M5 12c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6"/></svg>
+    </span>
+    <p>
+      <b>Two writes, then read-only forever.</b> One time per world, the studio drafts synthetic
+      documents, customers, and records through the gateway and embeds them into Lakebase
+      (<span class="mono">schema ug</span>) with FMAPI. After that, every path a live call touches
+      (routing, retrieval, tier lookup) only reads.
+    </p>
+  </div>
+
+</main>
+
+<!-- CDN libs (cdnjs, same origin as the studio's GSAP): core + MotionPathPlugin, which the
+     signal packet needs to ride the authored spine. No livekit-client here. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/MotionPathPlugin.min.js"></script>
+<script>
+/* =============================================================================
+   Studio Architecture — page logic. Mirrors the studio's motion language:
+   one exponential ease-out (power3.out), draws that resolve from the already-drawn
+   default frame, and a single looping signal packet that rides the authored spine.
+   Degrades to the finished, legible frame with no GSAP and honours
+   prefers-reduced-motion.
+   ========================================================================== */
+(() => {
+  "use strict";
+
+  const $  = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+
+  const REDUCED  = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const g        = window.gsap;
+  const HAS_GSAP = typeof g !== "undefined" && !REDUCED;
+
+  /* ---- localStorage, always guarded (private mode never throws) ---- */
+  const store = {
+    get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* private mode */ } },
+  };
+
+  /* ---- theme: shares the ug_theme key with the studio so the choice carries across ---- */
+  const THEME_KEY = "ug_theme";
+  const currentTheme = () =>
+    document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
+  function applyTheme(theme) {
+    const t = theme === "light" ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", t);
+    const btn = $("#themeToggle");
+    if (!btn) return;
+    const isLight = t === "light";
+    const label = isLight ? "Switch to dark theme" : "Switch to light theme";
+    btn.setAttribute("aria-pressed", String(isLight));
+    btn.setAttribute("aria-label", label);
+    btn.title = label;
+  }
+  function initTheme() {
+    applyTheme(store.get(THEME_KEY) === "light" ? "light" : "dark");
+    const btn = $("#themeToggle");
+    if (btn) btn.addEventListener("click", () => {
+      const next = currentTheme() === "light" ? "dark" : "light";
+      applyTheme(next);
+      store.set(THEME_KEY, next);
+    });
+  }
+
+  /* ---- motion helpers (same shapes as studio.js) ---- */
+  function pathLen(el) { try { return (el.getTotalLength && el.getTotalLength()) || 0; } catch (e) { return 0; } }
+
+  function animIn(els, { y = 18, stagger = 0.07, delay = 0, dur = 0.6 } = {}) {
+    els = els.filter(Boolean);
+    if (!els.length) return;
+    if (!HAS_GSAP) { els.forEach((e) => { e.style.opacity = ""; e.style.transform = ""; }); return; }
+    g.fromTo(els,
+      { opacity: 0, y, filter: "blur(6px)" },
+      { opacity: 1, y: 0, filter: "blur(0px)", duration: dur, stagger, delay, ease: "power3.out", clearProps: "filter,transform" });
+  }
+
+  /* Authored-SVG draw-on: strokes are fully drawn by default (CSS), so this only ADDS the
+     entrance when GSAP is live. Excludes the signal packet and anything with no length. */
+  function drawIn(nodes, { dur = 0.7, stagger = 0.045, delay = 0, ease = "power3.out" } = {}) {
+    if (!HAS_GSAP) return;
+    nodes = Array.from(nodes || []).filter((n) => n && !n.classList.contains("d-packet") && pathLen(n) > 0.5);
+    if (!nodes.length) return;
+    g.set(nodes, { strokeDasharray: (i, el) => pathLen(el), strokeDashoffset: (i, el) => pathLen(el) });
+    g.to(nodes, { strokeDashoffset: 0, duration: dur, stagger, delay, ease,
+      clearProps: "strokeDasharray,strokeDashoffset" });
+  }
+
+  /* Reveal grouped nodes with a soft rise — transform + opacity only. */
+  function revealNodes(nodes, { dur = 0.6, stagger = 0.06, delay = 0 } = {}) {
+    nodes = Array.from(nodes || []).filter(Boolean);
+    if (!nodes.length) return;
+    if (!HAS_GSAP) { nodes.forEach((n) => { n.style.opacity = ""; }); return; }
+    g.fromTo(nodes,
+      { opacity: 0, y: 14 },
+      { opacity: 1, y: 0, duration: dur, stagger, delay, ease: "power3.out", clearProps: "transform,opacity" });
+  }
+
+  /* The reserved lock-in accent (a gentle overshoot) — the governed route for this call. */
+  function lockRoute() {
+    if (!HAS_GSAP) return;
+    const chosen = $("#routeChosen");
+    if (!chosen) return;
+    g.fromTo(chosen,
+      { opacity: 0, scale: 0.92 },
+      { opacity: 1, scale: 1, duration: 0.55, delay: 1.15, ease: "back.out(2)", svgOrigin: "1092 255", clearProps: "transform" });
+  }
+
+  /* One looping signal packet down the live call spine: caller -> studio -> LiveKit ->
+     STT -> LLM -> MCP -> gateway. Rides the authored #spinePath via MotionPathPlugin so
+     the motion tracks the drawn edges instead of cutting across the boxes. */
+  function startFlowPacket() {
+    if (!HAS_GSAP || !window.MotionPathPlugin) return;
+    const pk = $("#flowPacket");
+    const spine = $("#spinePath");
+    if (!pk || !spine) return;
+    g.registerPlugin(window.MotionPathPlugin);
+    const tl = g.timeline({ repeat: -1, repeatDelay: 1.15, delay: 1.7 });
+    tl.set(pk, { opacity: 0 });
+    tl.to(pk, { opacity: 1, duration: 0.3, ease: "power1.out" });
+    tl.to(pk, {
+      motionPath: { path: spine, alignOrigin: [0.5, 0.5] },
+      duration: 4.6, ease: "power1.inOut",
+    }, 0.05);
+    tl.to(pk, { opacity: 0, duration: 0.35, ease: "power1.in" }, "-=0.45");
+  }
+
+  function boot() {
+    initTheme();
+    animIn($$("[data-anim]"), { y: 22, stagger: 0.08, dur: 0.7, delay: 0.04 });
+    if (HAS_GSAP) {
+      // ambient aurora drift — identical language to the studio
+      g.to(".bg-aurora--a", { xPercent: 8,  yPercent: 6,  duration: 18, repeat: -1, yoyo: true, ease: "sine.inOut" });
+      g.to(".bg-aurora--b", { xPercent: -6, yPercent: -8, duration: 22, repeat: -1, yoyo: true, ease: "sine.inOut" });
+      // diagram: reveal nodes, draw the edges left-to-right, lock the chosen route, loop the packet
+      revealNodes($$(".d-reveal"), { delay: 0.15, stagger: 0.05 });
+      drawIn($$(".d-edge"), { delay: 0.4, stagger: 0.028, dur: 0.8 });
+      lockRoute();
+      startFlowPacket();
+    }
+  }
+
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+})();
+</script>
+</body>
+</html>

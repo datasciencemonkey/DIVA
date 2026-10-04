@@ -1,0 +1,14 @@
+# Platform-env deps for the stdlib web tier (app/web_server.py) ONLY.
+# Kept MINIMAL and loosely pinned so the Databricks Apps build can always
+# resolve them (exact pins like requests==2.34.2 may be absent from the
+# platform index and fail the build). The heavy LiveKit worker stack stays in
+# agent-requirements.txt, installed into an isolated /tmp/agent-venv by
+# start_app.py so it never touches the platform env.
+#
+# requests: needed at import (web_server -> generate -> embeddings -> gateway).
+# psycopg + pool: Lakebase pool at runtime (NOT preinstalled on Apps).
+# databricks-sdk: WorkspaceClient (pinned to the version whose w.postgres API this code uses).
+requests
+psycopg[binary]
+psycopg-pool
+databricks-sdk==0.133.0
