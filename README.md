@@ -3,13 +3,13 @@
 **A blueprint for running real-time voice agents on Databricks.**
 
 You open a browser, click call, and talk to an AI support agent. That's the whole demo. Underneath, the
-agent's models run through **Unity AI Gateway**. Its answers come from **Lakebase Postgres** using
+agent's models run through **Unity Gateway**. Its answers come from **Lakebase Postgres** using
 [**Lakebase Search**](https://www.databricks.com/blog/lakebase-search-state-art-full-text-and-vector-search-postgres)
 (`lakebase_vector` ANN + `lakebase_text` BM25). Every call gets traced into **Unity Catalog / MLflow**, and the
 whole thing ships as **one Databricks App**. **LiveKit** carries the audio; **Deepgram** handles speech-to-text
 and text-to-speech.
 
-The reference implementation is the **Unity Gateway Voice Studio**. It walks through Unity AI Gateway's 4 pillars
+The reference implementation is the **Unity Gateway Voice Studio**. It walks through Unity Gateway's 4 pillars
 (Choice, Control, Context, Costs) using a LiveKit customer-support agent: loyalty tier picks the model, tools read
 from Lakebase, and each fictional company gets its own generated dataset. Fork it, point it at your workspace,
 and swap in your own data, prompts and tools.
@@ -22,8 +22,8 @@ without you having to explain them. More in **[Agent skill](#agent-skill)** belo
 
 | Pillar | What you see | How it's built |
 |---|---|---|
-| **Choice** | Different callers get different models | The app maps the caller's loyalty tier (Standard / Premium / VIP) to a model through env vars; Unity AI Gateway serves it |
-| **Control** | Governed, observable LLM calls | Every chat and embedding call goes through Unity AI Gateway; OpenTelemetry spans land in a Unity Catalog table and show up as MLflow traces |
+| **Choice** | Different callers get different models | The app maps the caller's loyalty tier (Standard / Premium / VIP) to a model through env vars; Unity Gateway serves it |
+| **Control** | Governed, observable LLM calls | Every chat and embedding call goes through Unity Gateway; OpenTelemetry spans land in a Unity Catalog table and show up as MLflow traces |
 | **Context** | Answers grounded in real data | Read-only tools over Lakebase: `semantic_search` ([**Lakebase Search**](https://www.databricks.com/blog/lakebase-search-state-art-full-text-and-vector-search-postgres) ANN, `lakebase_vector`) and `record_lookup` (only the caller's own records) |
 | **Costs** | Spend you can watch | Token usage streams to the UI as the call goes, with a cost projection |
 
@@ -42,7 +42,7 @@ steps 5–9 run on every call. The longer walkthrough lives in [`docs/architectu
     | [3]     ^ [8]           |                                |
     v         |               |                                |            Databricks workspace
 +------------------+          | +----------------------------+ |          +----------------------+
-| LiveKit Cloud    |--[4]---->| | Agent worker               | |-[6][7]-->| Unity AI Gateway     |
+| LiveKit Cloud    |--[4]---->| | Agent worker               | |-[6][7]-->| Unity Gateway        |
 | WebRTC SFU       |<=[6][8]=>| | agent.py (LiveKit Agents)  | |          | /responses (LLM)     |
 | + agent dispatch |          | |                            | |          | /embeddings          |
 +------------------+          | | [5] bind: tier -> model    | |          +----------------------+
@@ -61,13 +61,13 @@ steps 5–9 run on every call. The longer walkthrough lives in [`docs/architectu
 
 [0] Before any call - generate a world (studio "Generate" step):
 
-    Browser --POST /api/generate--> Web tier --draft + embed--> Unity AI Gateway
+    Browser --POST /api/generate--> Web tier --draft + embed--> Unity Gateway
                                        |
                                        +--write in 1 txn (data_generation_id)--> Lakebase Postgres
 ```
 
 0. **Generate a world.** Make up a company, a role and a system prompt. The generator drafts documents,
-   customers and records through Unity AI Gateway, embeds them, and writes everything to Lakebase in one
+   customers and records through Unity Gateway, embeds them, and writes everything to Lakebase in one
    transaction under a fresh `data_generation_id`. The indexes are
    [Lakebase Search](https://www.databricks.com/blog/lakebase-search-state-art-full-text-and-vector-search-postgres):
    `lakebase_ann` (cosine ANN via `lakebase_vector`) and `lakebase_bm25` (BM25 via `lakebase_text`).
@@ -113,7 +113,7 @@ the repo and open the workspace. Then ask your agent things like:
 |---|---|---|
 | **Deploy DIVA (or your fork) as a Databricks App** | Compiles worker deps for Apps Python 3.11, attaches secret resources, grants the app SP, runs `databricks sync --full`, then `apps deploy` | [deployment.md](skills/building-voice-agents-on-databricks/references/deployment.md) |
 | **Package a LiveKit worker + browser token server in one container** | Uses the `start_app.py` / `app.yaml` templates: the web tier grabs the port right away, the worker boots in `/tmp/agent-venv` | [templates/](skills/building-voice-agents-on-databricks/templates/) |
-| **Wire the LLM through Unity AI Gateway** | Builds `openai.responses.LLM` against `{host}/ai-gateway/openai/v1` with tools, once the participant identity is known | [agent-and-tools.md](skills/building-voice-agents-on-databricks/references/agent-and-tools.md) |
+| **Wire the LLM through Unity Gateway** | Builds `openai.responses.LLM` against `{host}/ai-gateway/openai/v1` with tools, once the participant identity is known | [agent-and-tools.md](skills/building-voice-agents-on-databricks/references/agent-and-tools.md) |
 | **Add Lakebase-backed voice tools** | A `build_tools(pool, ctx)` factory that fails soft when `pool=None`, scopes lookups to the customer, and skips `from __future__ import annotations` | [agent-and-tools.md](skills/building-voice-agents-on-databricks/references/agent-and-tools.md) |
 | **Mint LiveKit tokens with agent dispatch** | Stdlib HS256 JWT, a unique room per visit, `roomConfig.agents` matching the worker name | [agent-and-tools.md](skills/building-voice-agents-on-databricks/references/agent-and-tools.md) |
 | **Trace every call into MLflow / Unity Catalog** | LiveKit OTel to Databricks OTLP `/api/2.0/otel/v1/traces` with a UC-table header; quietly skips if unset | [observability.md](skills/building-voice-agents-on-databricks/references/observability.md) |
@@ -130,7 +130,7 @@ The call connects but no agent joins. Follow the skill.
 
 ## Prerequisites
 
-- A Databricks workspace with Unity AI Gateway (chat models for the tiers and for generation, plus an embedding
+- A Databricks workspace with Unity Gateway (chat models for the tiers and for generation, plus an embedding
   model) and a Lakebase database with [Lakebase Search](https://www.databricks.com/blog/lakebase-search-state-art-full-text-and-vector-search-postgres)
   turned on (`lakebase_vector` + `lakebase_text`).
 - A LiveKit project (LiveKit Cloud works fine) and a Deepgram API key.
@@ -200,7 +200,7 @@ If you're sharing DIVA with someone, these are the posts and docs worth sending 
 - [AI governance at Data + AI Summit 2026: What's new with Unity Gateway](https://www.databricks.com/blog/ai-governance-data-ai-summit-2026-whats-new-unity-ai-gateway)
 - [Unity Gateway: Governance Layer for Agentic AI](https://www.databricks.com/blog/ai-gateway-governance-layer-agentic-ai)
 - [What's new in Unity Gateway: service policies, guardrails, observability, and cost controls](https://www.databricks.com/blog/whats-new-unity-ai-gateway-service-policies-guardrails-observability-and-cost-controls-ai)
-- [Governing coding agent sprawl with Unity AI Gateway](https://www.databricks.com/blog/governing-coding-agent-sprawl-unity-ai-gateway): Cursor, Codex and Claude Code going through the same gateway DIVA uses
+- [Governing coding agent sprawl with Unity Gateway](https://www.databricks.com/blog/governing-coding-agent-sprawl-unity-ai-gateway): Cursor, Codex and Claude Code going through the same gateway DIVA uses
 - Docs: [Unity Gateway](https://docs.databricks.com/aws/en/unity-gateway/) · [AI governance with Unity Gateway](https://docs.databricks.com/aws/en/ai-gateway/)
 
 **Databricks Apps**
