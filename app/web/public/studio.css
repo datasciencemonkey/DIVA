@@ -970,13 +970,23 @@ body[data-connected="true"] .mic-signal { color: var(--accent); }
 .topbar      { transition: border-color var(--dur-3) var(--ease-signature), box-shadow var(--dur-3) var(--ease-signature); }
 .brand-mark  { transition: color var(--dur-3) var(--ease-signature); }
 .pillar[data-pillar="control"] { transition: border-color var(--dur-3) var(--ease-signature), box-shadow var(--dur-3) var(--ease-signature); }
+/* The nightfall wash (DESIGN §3.1) is the scene's sky: a pumpkin lantern glow rising from the bottom-left, a
+   spectral-violet pool over the moon at the top-right, a faint ember warmth under the top-left cobweb, the old
+   low-right violet for depth, and a slow darkening toward the floor. It is ONE gradient declared here (not swapped
+   in under the mode): gradients can't be interpolated, so a different picture under the attribute would pop to
+   the old one at full opacity on the first frame of the exit fade. Opacity does the whole enter / exit. */
 .bg::before {
+  --hw-night: rgba(6, 3, 14, .36);
   content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0;
   background:
-    radial-gradient(ellipse 60% 55% at 8% 0%,    color-mix(in srgb, var(--hw-orange) 20%, transparent), transparent 70%),
-    radial-gradient(ellipse 58% 60% at 96% 100%, color-mix(in srgb, var(--hw-violet) 26%, transparent), transparent 70%);
+    radial-gradient(ellipse 66% 52% at 3% 106%,  color-mix(in srgb, var(--hw-orange) 32%, transparent), transparent 70%),
+    radial-gradient(ellipse 52% 50% at 95% -4%,  color-mix(in srgb, var(--hw-violet) 32%, transparent), transparent 70%),
+    radial-gradient(ellipse 40% 36% at 0% 0%,    color-mix(in srgb, var(--hw-orange) 12%, transparent), transparent 70%),
+    radial-gradient(ellipse 58% 60% at 96% 100%, color-mix(in srgb, var(--hw-violet) 18%, transparent), transparent 70%),
+    linear-gradient(to bottom, transparent 30%, var(--hw-night));
   transition: opacity var(--dur-3) var(--ease-signature);
 }
+:root[data-theme="light"] .bg::before { --hw-night: rgba(84, 44, 136, .10); }   /* parchment dusk: an aubergine haze, not a grey one */
 /* the pillar's 2px top line (.pillar::before, amber) gets a pumpkin→violet twin that fades in over it */
 .pillar[data-pillar="control"]::after {
   content: ""; position: absolute; inset: 0 0 auto 0; height: 2px; pointer-events: none; opacity: 0;
@@ -1162,6 +1172,184 @@ body {
 .bg-aurora--a { transition: opacity var(--dur-3) var(--ease-signature); }
 
 /* =============================================================================
+   HALLOWEEN ATMOSPHERE SCENE (docs/halloween-ui/DESIGN.md §3) — .hw-atmos in index.html
+   The sky the seasonal skin sits in: a moon, two fog banks, seven embers, three bats and a cobweb in each
+   top corner. All decoration (aria-hidden, pointer-events:none), painted behind every piece of content,
+   over .bg and its nightfall wash (.bg::before). Density is deliberate; if in doubt, fewer.
+   - Reach: architecture.html shares this stylesheet but has no .hw-atmos, and the element is display:none
+     in every standard call, so nothing here renders, paints, promotes a layer or runs a loop outside the
+     mode. Only the reveal and will-change hang off body[data-voice-mode="halloween"].
+   - Enter / exit: opacity 0->1 and back on the house ease, with `display` riding the same transition
+     (transition-behavior: allow-discrete + @starting-style). The scene therefore stays rendered, and keeps
+     drifting, for the whole exit fade and only then drops to display:none, which is what stops every loop.
+     A browser without those gets an instant swap, never a broken one. For the same reason the loops are
+     declared on .hw-atmos descendants, not on the body attribute: hung off the attribute they would all
+     freeze and snap to rest on the first frame of the exit, mid-fade.
+   - Motion: transform and opacity only, one animation per element, nothing that lays out or repaints.
+     There is no filter and no animated shadow anywhere: every soft edge is gradient falloff (so there is no
+     blur pass on a moving layer either), and the halos are radial gradients. Periods are long and mostly
+     prime (the aurora's trick), so the scene never visibly repeats.
+   - Reduced motion: the block at the end of this file holds a static frame (moon, fog at rest, cobwebs)
+     and drops the embers and bats.
+   Colour comes from the --hw-* tokens, so Harvest (light) follows for free; the few scene-only values
+   (moon, haze, bats) are declared once per theme on .hw-atmos.
+   ========================================================================== */
+.hw-atmos {
+  /* "Midnight": a pale-gold moon, violet haze, violet bats */
+  --hw-moon-core: #F3E5BD;
+  --hw-moon-rim:  #CDB47C;
+  --hw-moon-glow: rgba(255, 224, 150, .22);
+  --hw-haze:      rgba(180, 152, 255, .21);
+  --hw-bat:       color-mix(in srgb, var(--hw-violet) 62%, transparent);
+
+  /* same plane as .bg but later in the DOM, so it paints over it and under all content */
+  position: fixed; inset: 0; z-index: -1;
+  overflow: hidden; contain: strict; pointer-events: none;
+  display: none; opacity: 0;
+  transition: opacity var(--dur-3) var(--ease-signature), display var(--dur-3) allow-discrete;
+}
+:root[data-theme="light"] .hw-atmos {
+  /* "Harvest": a harvest moon in pumpkin-gold, violet haze, aubergine bats on parchment */
+  --hw-moon-core: #FFE0B2;
+  --hw-moon-rim:  #F0A458;
+  --hw-moon-glow: color-mix(in srgb, var(--hw-orange) 26%, transparent);
+  --hw-haze:      rgba(107, 63, 209, .11);
+  --hw-bat:       color-mix(in srgb, var(--hw-violet) 48%, transparent);
+}
+body[data-voice-mode="halloween"] .hw-atmos { display: block; opacity: 1; }
+@starting-style { body[data-voice-mode="halloween"] .hw-atmos { opacity: 0; } }
+
+.hw-defs { position: absolute; width: 0; height: 0; overflow: hidden; }   /* the <defs> sprite: nothing to see */
+.hw-embers, .hw-bats { position: absolute; inset: 0; }
+
+/* moon: a lit disc with three faint maria, inside a wide soft halo. Static; the halo is a radial gradient.
+   The cards are opaque, so a moon dropped at a fixed offset would be sliced by the content column's straight edge
+   on most screens. It is instead sized to, and centred in, the free strip right of that column (--hw-margin), and
+   tucks to the edge, smaller, where the strip is narrow. */
+.hw-moon {
+  --hw-margin: calc(max(0px, (100vw - var(--maxw)) / 2) + clamp(18px, 3.5vw, 40px));   /* mirrors .stage's gutter */
+  --hw-moon-d: clamp(72px, calc(var(--hw-margin) - 40px), 168px);
+  position: absolute; top: clamp(82px, 13vh, 150px);
+  width: var(--hw-moon-d); aspect-ratio: 1;
+  right: max(16px, calc((var(--hw-margin) - var(--hw-moon-d)) / 2));
+}
+.hw-moon::before, .hw-moon::after { content: ""; position: absolute; border-radius: 50%; }
+.hw-moon::before {   /* halo, painted first so the disc sits on it */
+  inset: -105%;
+  background: radial-gradient(circle, var(--hw-moon-glow) 0%, color-mix(in srgb, var(--hw-violet) 18%, transparent) 34%, transparent 64%);
+}
+.hw-moon::after {    /* disc, lit from the upper left */
+  inset: 0;
+  background:
+    radial-gradient(circle at 63% 29%, rgba(104, 84, 48, .22) 0 6.5%, transparent 7.5%),
+    radial-gradient(circle at 35% 61%, rgba(104, 84, 48, .17) 0 10%,  transparent 11%),
+    radial-gradient(circle at 60% 77%, rgba(104, 84, 48, .15) 0 5.5%, transparent 6.5%),
+    radial-gradient(circle at 34% 30%, var(--hw-moon-core), var(--hw-moon-rim) 100%);
+}
+
+/* fog: two wide banks of overlapping soft ellipses that drift sideways and back. Each ellipse fades out well
+   inside its band, so no edge of the band ever shows; a bank is wider than the screen by as much as it drifts. */
+.hw-fog { position: absolute; left: -6vw; width: 112vw; }
+.hw-fog--a {
+  bottom: -10vh; height: 46vh;
+  background:
+    radial-gradient(ellipse 20% 44% at 17% 60%, var(--hw-haze), transparent 74%),
+    radial-gradient(ellipse 20% 36% at 38% 46%, color-mix(in srgb, var(--hw-haze) 75%, transparent), transparent 72%),
+    radial-gradient(ellipse 24% 48% at 63% 62%, var(--hw-haze), transparent 74%),
+    radial-gradient(ellipse 17% 34% at 84% 48%, color-mix(in srgb, var(--hw-haze) 70%, transparent), transparent 72%);
+  animation: hw-fog-drift-a 47s ease-in-out infinite alternate;
+}
+.hw-fog--b {
+  bottom: 16vh; height: 32vh;
+  background:
+    radial-gradient(ellipse 19% 42% at 22% 48%, color-mix(in srgb, var(--hw-haze) 70%, transparent), transparent 72%),
+    radial-gradient(ellipse 23% 46% at 52% 44%, color-mix(in srgb, var(--hw-haze) 85%, transparent), transparent 74%),
+    radial-gradient(ellipse 17% 38% at 80% 54%, color-mix(in srgb, var(--hw-haze) 65%, transparent), transparent 72%);
+  animation: hw-fog-drift-b 61s ease-in-out infinite alternate;
+}
+@keyframes hw-fog-drift-a { from { transform: translate3d(-6vw, 0, 0); } to { transform: translate3d(6vw, 0, 0); } }
+@keyframes hw-fog-drift-b { from { transform: translate3d(6vw, 0, 0); } to { transform: translate3d(-6vw, 0, 0); } }
+
+/* embers: a soft pumpkin / violet speck rising and fading, each on its own slow period and phase (a negative
+   delay pre-rolls it, so the scene is already alive on the first frame). Per-ember values are the custom
+   properties below: --x position, --s size, --c colour, --d period, --t phase, --dx sideways wander. */
+.hw-ember {
+  position: absolute; bottom: -3vh; left: var(--x);
+  width: var(--s); height: var(--s); border-radius: 50%;
+  background: radial-gradient(circle, var(--c) 0%, var(--c) 16%, color-mix(in srgb, var(--c) 38%, transparent) 40%, transparent 70%);
+  opacity: 0;
+  animation: hw-ember-rise var(--d) linear var(--t) infinite;
+}
+.hw-ember:nth-child(1) { --x:  6%; --s: 14px; --c: var(--hw-orange); --d: 23s; --t:  -4s; --dx:  2.4vw; }
+.hw-ember:nth-child(2) { --x: 17%; --s: 10px; --c: var(--hw-violet); --d: 31s; --t: -19s; --dx: -1.8vw; }
+.hw-ember:nth-child(3) { --x: 29%; --s: 12px; --c: var(--hw-orange); --d: 19s; --t: -11s; --dx:  2.0vw; }
+.hw-ember:nth-child(4) { --x: 44%; --s:  9px; --c: var(--hw-violet); --d: 37s; --t:  -8s; --dx: -2.6vw; }
+.hw-ember:nth-child(5) { --x: 61%; --s: 13px; --c: var(--hw-orange); --d: 27s; --t: -22s; --dx:  1.6vw; }
+.hw-ember:nth-child(6) { --x: 76%; --s: 10px; --c: var(--hw-violet); --d: 29s; --t:  -2s; --dx: -2.2vw; }
+.hw-ember:nth-child(7) { --x: 90%; --s: 12px; --c: var(--hw-orange); --d: 21s; --t: -15s; --dx:  1.4vw; }
+@keyframes hw-ember-rise {
+  0%   { transform: translate3d(0, 0, 0);                                opacity: 0; }
+  10%  {                                                                 opacity: .9; }
+  38%  { transform: translate3d(calc(var(--dx) * -.7), -30vh, 0); }
+  66%  { transform: translate3d(calc(var(--dx) * .9),  -56vh, 0);        opacity: .55; }
+  100% { transform: translate3d(calc(var(--dx) * -.3), -82vh, 0);        opacity: 0; }
+}
+
+/* bats: a glimpse, not a swarm. Each crosses the sky once per (long) period, in the first ~30% of it, then waits
+   off-screen; the nearest (largest) is the fastest, the farthest the slowest. The path is a shallow sine built
+   into the keyframes (bob + micro-tilt), so it stays ONE transform animation per element. The first bat is
+   pre-rolled so there is already one in flight when the scene opens. --y lane, --w size, --o peak opacity.
+   The flying element is an HTML box with the inline <svg> inside it: Chrome won't composite a transform animation
+   on an <svg> root (measured: TRANSFORM_RELATED_PROPERTY_CANNOT_BE_ACCELERATED_ON_TARGET, so it ran on the main
+   thread), but it does for the <div>. */
+.hw-bat {
+  position: absolute; top: var(--y); left: 0;
+  width: var(--w); aspect-ratio: 64 / 30;
+  color: var(--hw-bat);
+  opacity: 0;
+  animation: hw-bat-cross var(--d) linear var(--t) infinite;
+}
+.hw-bat svg { display: block; width: 100%; height: 100%; fill: currentColor; }
+.hw-bat:nth-child(1) { --y: 22vh; --w: 44px; --o: .62; --d:  71s; --t:  -5s; }
+.hw-bat:nth-child(2) { --y: 38vh; --w: 30px; --o: .48; --d:  89s; --t: -52s; }
+.hw-bat:nth-child(3) { --y: 14vh; --w: 24px; --o: .40; --d: 103s; --t: -83s; }
+@keyframes hw-bat-cross {
+  0%    { transform: translate3d(-14vw,  0,     0) rotate(-6deg); opacity: 0; }
+  1.5%  {                                                         opacity: var(--o); }
+  5%    { transform: translate3d(  1vw, -2.4vh, 0) rotate( 5deg); }
+  9%    { transform: translate3d( 18vw,  1.2vh, 0) rotate(-5deg); }
+  13%   { transform: translate3d( 36vw, -2.2vh, 0) rotate( 5deg); }
+  17%   { transform: translate3d( 54vw,  1.4vh, 0) rotate(-5deg); }
+  21%   { transform: translate3d( 72vw, -2vh,   0) rotate( 5deg); }
+  25%   { transform: translate3d( 90vw,  1vh,   0) rotate(-5deg); opacity: var(--o); }
+  30%   { transform: translate3d(112vw, -1vh,   0) rotate( 4deg); opacity: 0; }
+  100%  { transform: translate3d(112vw, -1vh,   0) rotate( 4deg); opacity: 0; }
+}
+
+/* cobweb corners: one authored web (index.html <defs>), drawn with the hairline token so it tracks the theme,
+   mirrored for the top-right. Static. non-scaling-stroke keeps it a true hairline at any size. */
+.hw-cobweb {
+  position: absolute; top: 0; width: clamp(120px, 14vw, 210px); aspect-ratio: 1;
+  fill: none; stroke: var(--hairline-strong); stroke-width: 1;
+}
+.hw-cobweb--tl { left: 0; }
+.hw-cobweb--tr { right: 0; transform: scaleX(-1); }
+
+/* promote the moving layers only while the mode is live (the exit fade keeps its animations, hence its layers,
+   until display:none lands; after that nothing is left to promote) */
+body[data-voice-mode="halloween"] .hw-fog                   { will-change: transform; }
+body[data-voice-mode="halloween"] :is(.hw-ember, .hw-bat)   { will-change: transform, opacity; }
+
+/* small screens: a thinner sky, same picture. There is no free margin here, so the moon sits behind the hero title:
+   it is dimmed to a ghost so the title's light text keeps its contrast over it (worst case measured 4.7:1 in Midnight;
+   the title is large text, which needs 3:1). */
+@media (max-width: 720px) {
+  .hw-moon { top: 76px; right: 18px; width: 84px; opacity: .38; }
+  .hw-cobweb { width: 104px; }
+  .hw-ember:nth-child(n + 5), .hw-bat:nth-child(n + 2) { display: none; }
+}
+
+/* =============================================================================
    RESPONSIVE
    ========================================================================== */
 @media (max-width: 1080px) {
@@ -1208,4 +1396,11 @@ body {
   .bg::before, .pillar[data-pillar="control"]::after { transition: none; }
   /* Halloween cross-fade: the <body> token transition and the .bg-aurora--a fade sit on real elements, so the blanket
      `*` rule above already makes enter / exit an instant swap — only pseudo-elements need an explicit rule. */
+  /* Halloween atmosphere: hold a static, finished frame. The moon and cobwebs never move and the fog banks sit
+     parked at rest; the embers and bats are movement with no state to preserve, so they go (as .hm-flow does above).
+     Everything the scene animates is a real element, so the blanket rule already reaches it and makes the scene's own
+     fade an instant swap; `animation: none` makes "nothing is running" explicit, and will-change has nothing to promote. */
+  .hw-fog, .hw-ember, .hw-bat { animation: none; }
+  .hw-embers, .hw-bats { display: none; }
+  body[data-voice-mode="halloween"] :is(.hw-fog, .hw-ember, .hw-bat) { will-change: auto; }
 }
