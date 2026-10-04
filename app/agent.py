@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import sys
 from pathlib import Path
@@ -25,7 +26,7 @@ from dotenv import load_dotenv
 load_dotenv(_REPO_ROOT / ".env.local", override=False)
 
 from livekit import agents
-from livekit.agents import AgentServer, AgentSession
+from livekit.agents import APIConnectOptions, AgentServer, AgentSession
 from livekit.agents.telemetry import set_tracer_provider
 from livekit.plugins import deepgram, openai
 from livekit.plugins import elevenlabs  # noqa: F401  — importing registers the plugin on the subprocess
@@ -43,6 +44,8 @@ from app.voice_mode import VoiceModeController
 from app.voice_profiles import build_tts, resolve_profiles
 
 server = AgentServer()
+
+logger = logging.getLogger(__name__)
 
 _AGENT_NAME = os.environ.get("AGENT_NAME", "ug-agent")
 
@@ -97,6 +100,77 @@ def _bridge_sink(evidence_sink_async):
     Without this bridge the controller would create a coroutine and never await it, and NO voice_mode evidence
     would be published."""
     return lambda fragment: asyncio.ensure_future(evidence_sink_async(fragment))
+
+
+# T11 prewarm (spec §7.1 / Plan 5 Halloween-UI). ElevenLabs opens its WebSocket on first use and the stock
+# `TTS.prewarm()` is a no-op there, so a `prewarm()` call alone does not shrink the first-utterance gap. We
+# open (and immediately close) a streaming connection on the earliest cue so the vendor WS/TLS handshake is
+# paid ahead of the switch; the TTS's own HTTP session then stays warm for the rest of the call. A hung
+# vendor must not stall the warm: one short attempt, no retry.
+_PREWARM_CONN_OPTIONS = APIConnectOptions(max_retry=0, timeout=5.0)
+
+
+async def warm_tts_connection(tts_obj, conn_options: APIConnectOptions = _PREWARM_CONN_OPTIONS) -> None:
+    """Best-effort warm of a TTS's streaming connection: open a stream, end input with no text (so nothing
+    is synthesized or billed), drain it, and let the context manager close it. NEVER raises — a vendor hiccup
+    here must stay outside the session's error counter (C10) and must not break a turn."""
+    try:
+        stream = tts_obj.stream(conn_options=conn_options)
+    except Exception:  # noqa: BLE001 - could not even open a stream; nothing to warm
+        logger.warning("prewarm: opening the TTS warm stream failed", exc_info=True)
+        return
+    try:
+        async with stream:
+            try:
+                stream.end_input()
+            except Exception:  # noqa: BLE001 - some streams connect lazily; the open above already warmed it
+                pass
+            async for _ in stream:  # drain any frames the empty request yields, then the ctx closes the WS
+                pass
+    except asyncio.CancelledError:
+        raise  # a shutdown cancel must propagate, not be swallowed
+    except Exception:  # noqa: BLE001 - the warm is cosmetic; a vendor error is logged and ignored
+        logger.warning("prewarm: the TTS warm stream errored (ignored)", exc_info=True)
+
+
+class _HalloweenPrewarmer:
+    """The `on_cue` hook (spec §7.3): on the EARLIEST cue it builds + warms the Halloween TTS so the first
+    spooky utterance is not slow, then keeps the connection warm for the rest of the call. Idempotent (it
+    warms once; later cues are no-ops), best-effort, and NEVER raises — the controller calls this synchronously
+    inside a turn that must never raise. The actual WS warm runs on a background task so the turn is not
+    blocked; the task is held (so it is not GC'd) and cancelled at shutdown."""
+
+    def __init__(self, get_tts, *, conn_options: APIConnectOptions = _PREWARM_CONN_OPTIONS, schedule=None):
+        self._get_tts = get_tts                     # () -> tts.TTS | None (builds + caches the halloween TTS)
+        self._conn_options = conn_options
+        self._schedule = schedule or asyncio.ensure_future
+        self._warmed = False
+        self._task = None
+
+    def __call__(self) -> None:
+        if self._warmed:
+            return                                  # keep-warm: warm once, do not re-open on every cue
+        try:
+            tts_obj = self._get_tts()
+            if tts_obj is None:
+                return                              # not ready yet; a later cue may retry (not latched)
+            prewarm = getattr(tts_obj, "prewarm", None)
+            if callable(prewarm):
+                prewarm()                           # harmless for ElevenLabs; correct for vendors that use it
+            self._task = self._schedule(warm_tts_connection(tts_obj, self._conn_options))
+            self._warmed = True                     # latch only after a successful schedule
+        except Exception:  # noqa: BLE001 - prewarm is best-effort; it must never break a turn
+            logger.warning("prewarm: scheduling the Halloween warm failed", exc_info=True)
+
+    async def aclose(self) -> None:
+        """Cancel and drain the warm task at shutdown (fail-soft)."""
+        task = self._task
+        if task is not None and not task.done():
+            task.cancel()
+            try:
+                await task
+            except BaseException:  # noqa: BLE001 - draining a cancellation on the way out
+                pass
 
 
 @server.rtc_session(agent_name=_AGENT_NAME)
@@ -170,18 +244,16 @@ async def entrypoint(ctx: agents.JobContext):
             persona=profile.persona, expressive_tags=tuple(sorted(profile.tags)),
             voice_requests=ai_decide_on)
 
-    studio_agent = None   # built below; the on_cue prewarm closes over it (invoked only during a live turn)
+    studio_agent = None   # built below; the prewarm's get_tts closes over it (invoked only during a live turn)
 
-    def _prewarm_halloween() -> None:
-        """On a cue, build + warm the Halloween profile TTS so the first spooky utterance is not slow."""
-        try:
-            if studio_agent is not None:
-                tts_obj = studio_agent._tts_for(profiles["halloween"])
-                prewarm = getattr(tts_obj, "prewarm", None)
-                if callable(prewarm):
-                    prewarm()
-        except Exception:  # noqa: BLE001 - prewarm is best-effort; it must never break a turn
-            pass
+    def _get_halloween_tts():
+        """Build + cache the Halloween profile TTS for the prewarm (None until the StudioAgent exists)."""
+        if studio_agent is None:
+            return None
+        return studio_agent._tts_for(profiles["halloween"])
+
+    # T11: warm the ElevenLabs connection on the earliest cue and keep it warm for the call (best-effort).
+    prewarmer = _HalloweenPrewarmer(_get_halloween_tts)
 
     controller = VoiceModeController(
         classifier=decider,
@@ -189,7 +261,7 @@ async def entrypoint(ctx: agents.JobContext):
         instructions_for=_instructions_for,
         evidence_sink=controller_sink,
         tracer=decide_tracer,
-        on_cue=_prewarm_halloween,
+        on_cue=prewarmer,
         enabled=ai_decide_on,
         cue_wait_s=float(os.environ.get("UG_DECIDE_CUE_WAIT_S") or "0.8"),
     )
@@ -297,6 +369,10 @@ async def entrypoint(ctx: agents.JobContext):
     #     controller drains its background classify/announce tasks; the decider closes its HTTP client; the
     #     cached profile TTS instances are aclose()d. All fail-soft. ---
     async def _close_voice() -> None:
+        try:
+            await prewarmer.aclose()   # cancel the warm task before the TTS it is warming is closed
+        except Exception:  # noqa: BLE001
+            pass
         try:
             await controller.aclose()
         except Exception:  # noqa: BLE001

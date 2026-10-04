@@ -37,7 +37,7 @@ from typing import Any
 
 from app.expressive import strip_tags
 from app.voice_profiles import VoiceProfile
-from src.agent_prompt import ANNOUNCE_OFF, ANNOUNCE_ON, OFF_NOTE, ON_NOTE
+from src.agent_prompt import ANNOUNCE_OFF, ANNOUNCE_ON, BRIDGE_ON, OFF_NOTE, ON_NOTE
 from src.policy.voice_mode import (
     HALLOWEEN,
     STANDARD,
@@ -374,6 +374,14 @@ class VoiceModeController:
         updates the steady instructions for later turns; announced updates steady then queues one
         `generate_reply`. Then publishes evidence and emits the span."""
         before, after = decision.mode_before, decision.mode_after
+
+        # T11 verbal bridge: on a SAME-TURN enter, speak a short themed line in the CURRENT (outgoing) voice
+        # to cover the incoming ElevenLabs voice's cold-start. Emitted BEFORE the mode flip (so it targets the
+        # outgoing voice) and only here: the announced path's reply already carried the model's own
+        # "One moment…" (VOICE_REQUESTS), and an exit's incoming standard voice has no cold-start.
+        if path == _SAME_TURN and after == HALLOWEEN:
+            self._emit_bridge(agent)
+
         self.state.mode = after
         self.state.transitions += 1
         if after == HALLOWEEN:
@@ -400,6 +408,21 @@ class VoiceModeController:
             return
         from livekit.agents.voice.generation import update_instructions
         update_instructions(turn_ctx, instructions=instructions, add_if_missing=True)
+
+    def _emit_bridge(self, agent) -> None:
+        """Speak the fixed T11 bridge line (`BRIDGE_ON`) through the session so the incoming voice's
+        cold-start is covered by the OUTGOING voice (this runs before the mode flips). Fire-and-forget and
+        fully guarded: a session without `say`, or a `say` that raises, must never break the switch or the
+        turn (the turn-never-raises invariant). The line is cosmetic, so it never joins the chat context."""
+        try:
+            session = getattr(agent, "session", None)
+            say = getattr(session, "say", None)
+            if not callable(say):
+                return
+            say(BRIDGE_ON, add_to_chat_ctx=False)
+            _say(f"bridge spoken ({self.state.mode} voice) to cover the cold-start")
+        except Exception:  # noqa: BLE001 - the bridge is best-effort; the switch continues regardless
+            logger.warning("voice_mode bridge failed; the switch continues", exc_info=True)
 
     # ---------------------------------------------------------------- evidence (§7.2) + span (§7.11)
 

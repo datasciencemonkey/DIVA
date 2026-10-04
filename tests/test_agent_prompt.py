@@ -1,4 +1,4 @@
-from src.agent_prompt import (ANNOUNCE_OFF, ANNOUNCE_ON, HALLOWEEN_PERSONA, OFF_NOTE, ON_NOTE,
+from src.agent_prompt import (ANNOUNCE_OFF, ANNOUNCE_ON, BRIDGE_ON, HALLOWEEN_PERSONA, OFF_NOTE, ON_NOTE,
                               VOICE_REQUESTS, build_instructions)
 
 _D_WARM = {"recognition_tone": "warm", "be_proactive": True, "thoroughness": "thorough", "offer_human_escalation": True}
@@ -92,3 +92,30 @@ def test_added_prompt_text_carries_no_tier_words():
     assert all(w not in out for w in _TIER_WORDS)
     for note in (ON_NOTE, OFF_NOTE, ANNOUNCE_ON, ANNOUNCE_OFF):
         assert note.strip() and all(w not in note.lower() for w in _TIER_WORDS)
+
+
+# --- T11: the verbal-bridge line (controller-spoken) + its reconciliation with the switch notes ---
+
+def test_bridge_on_is_a_short_tier_free_one_moment_cue():
+    # The controller speaks BRIDGE_ON itself (not the model), so it is a fixed, short, single-line cue.
+    assert BRIDGE_ON.strip() == BRIDGE_ON and BRIDGE_ON                 # trimmed, non-empty
+    assert "\n" not in BRIDGE_ON                                        # a single spoken line
+    assert len(BRIDGE_ON) <= 80                                        # short enough to just cover a cold-start
+    assert "one moment" in BRIDGE_ON.lower()                            # a "One moment…"-class cue
+    assert all(w not in BRIDGE_ON.lower() for w in _TIER_WORDS)         # never leaks a tier word
+    # Not a bracketed expressive cue (it is spoken in the OUTGOING standard voice, which performs no tags).
+    assert "[" not in BRIDGE_ON and "]" not in BRIDGE_ON
+
+
+def test_bridge_reconciles_with_the_switch_notes_no_double_up():
+    # The controller's bridge is the sole "One moment…"-class cue on the SAME-TURN enter, so the same-turn
+    # notes must tell the model NOT to also say "One moment" (no double-up with the bridge/flourish).
+    assert 'do not say "one moment"' in ON_NOTE.lower()
+    assert 'do not say "one moment"' in OFF_NOTE.lower()
+    # The ANNOUNCED / ask path is the model's own bridge: VOICE_REQUESTS still has the model say "One moment…"
+    # (so the controller adds no bridge there). The announcements add no "One moment".
+    assert "one moment" in VOICE_REQUESTS.lower()
+    assert "one moment" not in ANNOUNCE_ON.lower() and "one moment" not in ANNOUNCE_OFF.lower()
+    # BRIDGE_ON must not appear baked into any built prompt — it is spoken by the controller, never prompted.
+    assert BRIDGE_ON not in build_instructions("s", _D_NEUTRAL, persona=HALLOWEEN_PERSONA,
+                                               expressive_tags=("whispers",), voice_requests=True)

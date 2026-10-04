@@ -51,6 +51,18 @@ VOICE_REQUESTS = (
     '"One moment…" and keep helping with the rest of what they asked.'
 )
 
+# T11 verbal bridge (spec §7.3 / Plan 5 Halloween-UI). The CONTROLLER speaks this fixed line via
+# session.say() at the instant it commits a SAME-TURN switch INTO Halloween, in the CURRENT (outgoing)
+# voice, so the incoming ElevenLabs voice's cold-start is not dead air. It is the single "One moment…"-class
+# cue for that path, and it reconciles with the notes below rather than doubling them:
+#   - ON_NOTE already tells the model NOT to say "One moment" and to open straight into its spooky flourish,
+#     so the system's bridge (outgoing voice) and the model's flourish (new voice) never collide.
+#   - The ANNOUNCED path needs no controller bridge: that reply already went out in the outgoing voice and
+#     VOICE_REQUESTS had the model say its own "One moment…", which covers the gap before ANNOUNCE_ON lands.
+#   - Exits need no bridge: the incoming standard (Deepgram) voice has no cold-start.
+# Kept short and tier-word-free, like the notes. It is spoken, never added to the chat context.
+BRIDGE_ON = "One moment… let me set the scene."
+
 # Same-turn switch: the controller appends one of these (after a blank line) to the steady instructions
 # for THIS reply only; later turns use the updated steady instructions on their own. The note therefore
 # lands AFTER the governance block for that one reply, so each ends by re-asserting the rules (G11).

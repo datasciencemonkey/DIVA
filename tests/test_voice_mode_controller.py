@@ -21,7 +21,7 @@ from livekit.agents.voice.generation import INSTRUCTIONS_MESSAGE_ID
 from app.expressive import SPOOKY_TAGS
 from app.voice_mode import VoiceModeController, VoiceModeState
 from app.voice_profiles import VoiceProfile
-from src.agent_prompt import ANNOUNCE_OFF, ANNOUNCE_ON, HALLOWEEN_PERSONA, OFF_NOTE, ON_NOTE
+from src.agent_prompt import ANNOUNCE_OFF, ANNOUNCE_ON, BRIDGE_ON, HALLOWEEN_PERSONA, OFF_NOTE, ON_NOTE
 from src.policy.voice_mode import HALLOWEEN, STANDARD, IntentVerdict
 
 # ---------------------------------------------------------------------------------------
@@ -60,9 +60,20 @@ class FakeClassifier:
 class FakeSession:
     def __init__(self):
         self.replies: list[str | None] = []
+        self.said: list = []                              # T11: one entry per session.say() (the bridge)
+        self.mode_getter = None                           # a test may snapshot controller.state.mode here
+        self.say_raises: BaseException | None = None      # a test may force say() to blow up
 
     def generate_reply(self, *, instructions=None, **kwargs):
         self.replies.append(instructions)
+        return SimpleNamespace()  # a stand-in SpeechHandle; the controller never awaits it
+
+    def say(self, text, *, audio=None, allow_interruptions=None, add_to_chat_ctx=True):
+        if self.say_raises is not None:
+            raise self.say_raises
+        self.said.append(SimpleNamespace(
+            text=text, add_to_chat_ctx=add_to_chat_ctx,
+            mode_at_call=self.mode_getter() if self.mode_getter else None))
         return SimpleNamespace()  # a stand-in SpeechHandle; the controller never awaits it
 
 
@@ -502,3 +513,99 @@ def test_state_defaults_are_one_per_call():
     assert state.last_agent_line == ""
     assert state.tags_spoken == 0 and state.turn_seq == 0
     assert state.last is None
+
+
+# ---------------------------------------------------------------------------------------
+# T11 verbal bridge: spoken once per SAME-TURN enter, in the OUTGOING voice, and never breaks the turn
+# ---------------------------------------------------------------------------------------
+async def test_same_turn_enter_speaks_one_bridge_in_the_outgoing_voice():
+    fake = FakeClassifier({"verdict": ENTER})
+    controller = make_controller(fake)
+    agent = FakeAgent()
+    agent.session.mode_getter = lambda: controller.state.mode   # snapshot the mode at say()-time
+    turn_ctx = llm.ChatContext.empty()
+
+    await controller.on_turn(agent, turn_ctx, user_msg("make it spooky"))
+
+    assert controller.state.mode == HALLOWEEN                    # the switch still happened
+    assert len(agent.session.said) == 1                           # exactly one bridge per switch
+    bridge = agent.session.said[0]
+    assert bridge.text == BRIDGE_ON
+    assert bridge.add_to_chat_ctx is False                        # cosmetic: never joins the chat context
+    assert bridge.mode_at_call == STANDARD                        # spoken BEFORE the flip -> outgoing voice
+    # Reconciliation: the new-voice reply still carries ON_NOTE (the flourish), alongside the system bridge.
+    patched = turn_ctx.get_by_id(INSTRUCTIONS_MESSAGE_ID)
+    assert ON_NOTE in patched.text_content
+
+
+async def test_same_turn_exit_speaks_no_bridge():
+    # Exiting to the standard (Deepgram) voice has no cold-start, so no bridge is spoken.
+    fake = FakeClassifier({"verdict": EXIT})
+    controller = make_controller(fake, mode=HALLOWEEN)
+    agent = FakeAgent()
+    turn_ctx = llm.ChatContext.empty()
+
+    await controller.on_turn(agent, turn_ctx, user_msg("go back to your normal voice"))
+
+    assert controller.state.mode == STANDARD
+    assert agent.session.said == []                               # no bridge on exit
+
+
+async def test_announced_enter_speaks_no_controller_bridge():
+    # On the announced path the reply already went out in the outgoing voice with the model's own
+    # "One moment…" (VOICE_REQUESTS); the controller must NOT add a second bridge.
+    fake = FakeClassifier({"verdict": ENTER, "delay": 0.1})       # answers just after the cue budget
+    controller = make_controller(fake, cue_wait_s=0.02)
+    agent = FakeAgent()
+
+    await controller.on_turn(agent, llm.ChatContext.empty(), user_msg("change your voice to something creepy"))
+    assert controller.state.mode == STANDARD                      # deferred to the announced path
+    assert agent.session.said == []                               # no same-turn bridge
+
+    await controller._late_task                                    # the announced switch lands
+    assert controller.state.mode == HALLOWEEN
+    assert agent.session.replies == [ANNOUNCE_ON]                  # the announcement, not a bridge
+    assert agent.session.said == []                               # still no controller bridge
+
+
+async def test_bridge_failure_never_breaks_the_switch():
+    # session.say blowing up must be swallowed; the switch (mode flip + ON note + steady) still completes.
+    fake = FakeClassifier({"verdict": ENTER})
+    controller = make_controller(fake)
+    agent = FakeAgent()
+    agent.session.say_raises = RuntimeError("say exploded")
+    turn_ctx = llm.ChatContext.empty()
+
+    await controller.on_turn(agent, turn_ctx, user_msg("make it spooky"))   # must not raise
+
+    assert controller.state.mode == HALLOWEEN                     # the switch still happened
+    assert controller.state.transitions == 1
+    assert agent.session.said == []                               # nothing recorded (say raised)
+    patched = turn_ctx.get_by_id(INSTRUCTIONS_MESSAGE_ID)
+    assert ON_NOTE in patched.text_content                        # the reply note still applied
+    assert agent.steady == ["INSTR[halloween]"]                   # later-turn steady still updated
+
+
+async def test_bridge_tolerates_a_session_without_say():
+    # A session object that does not expose say() must not crash the switch (getattr guard).
+    fake = FakeClassifier({"verdict": ENTER})
+    controller = make_controller(fake)
+    agent = FakeAgent()
+    agent.session = SimpleNamespace(generate_reply=lambda **kw: SimpleNamespace())   # no .say attribute
+    turn_ctx = llm.ChatContext.empty()
+
+    await controller.on_turn(agent, turn_ctx, user_msg("make it spooky"))   # must not raise
+
+    assert controller.state.mode == HALLOWEEN
+
+
+async def test_disabled_speaks_no_bridge():
+    fake = FakeClassifier({"verdict": ENTER})
+    controller = make_controller(fake, enabled=False)
+    agent = FakeAgent()
+
+    controller.prefetch("make it spooky")
+    await controller.on_turn(agent, llm.ChatContext.empty(), user_msg("make it spooky"))
+
+    assert agent.session.said == []                               # the kill switch disables the bridge too
+    assert controller.state.mode == STANDARD
