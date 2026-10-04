@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="color-scheme" content="dark light" />
 <title>Studio Architecture</title>
-<meta name="description" content="How UG Voice Studio governs a single voice call end to end — LiveKit transport, a governed agent, the Unity Gateway (which exposes MCP), and a read-only Lakebase." />
+<meta name="description" content="How UG Voice Studio governs a single voice call end to end — LiveKit transport, an agent that picks its model from the caller's tier, per-turn AI Decide for the voice mode, Unity Gateway model serving, and a read-only Lakebase." />
 
 <!-- Apply the persisted theme before first paint so returning presenters never see a flash.
      Dark is the default; only a stored "light" preference flips the attribute. Shares the
@@ -37,7 +37,7 @@
   .arch-main { max-width: var(--maxw); margin: 0 auto; padding: clamp(28px, 5vw, 60px) var(--pad) 96px; }
 
   /* ===== HERO ===== */
-  .arch-hero { max-width: 62ch; margin-bottom: clamp(30px, 4vw, 48px); }
+  .arch-hero { max-width: 70ch; margin-bottom: clamp(30px, 4vw, 48px); }
   .arch-title {
     font-size: clamp(2rem, 4.4vw, 3.4rem);
     font-weight: 800; line-height: 1.03; letter-spacing: -0.03em;
@@ -67,6 +67,23 @@
   .arch-legend [data-p="control"] { --hue: var(--c-control); }
   .arch-legend [data-p="context"] { --hue: var(--c-context); }
   .arch-legend [data-p="costs"]   { --hue: var(--c-costs); }
+
+  /* ===== STACK STRIP: what the reference implementation is built on (chips, not a card grid) ===== */
+  .arch-stack {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px;
+    margin: 22px 0 0;
+  }
+  .stack-lead { font-size: .82rem; color: var(--text-mid); }
+  .stack-lead a { color: var(--text-hi); font-weight: 700; text-decoration-color: color-mix(in srgb, var(--accent) 60%, transparent); text-underline-offset: 3px; }
+  .stack-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+  .stack-list li {
+    display: inline-flex; align-items: baseline; gap: 7px;
+    padding: 6px 12px; border-radius: 999px;
+    border: 1px solid var(--hairline); background: var(--surface);
+    font-size: .78rem; color: var(--text-mid);
+  }
+  .stack-list li b { color: var(--text-hi); font-weight: 600; }
+  .stack-note { flex-basis: 100%; font-size: .78rem; color: var(--text-lo); }
 
   /* ===== DIAGRAM STAGE — the centrepiece. On phones the wide SVG scrolls WITHIN this
      frame (min-width forces internal overflow); the page itself never scrolls sideways. ===== */
@@ -111,7 +128,7 @@
   /* ---- SVG primitives (all colours are tokens; currentColor drives icons) ---- */
   .d-node { fill: var(--surface); stroke: var(--hairline-strong); stroke-width: 1; }
   .d-node--inset { fill: var(--ink-2); stroke: var(--hairline); }
-  .d-node--uaig {
+  .d-node--gateway {
     fill: color-mix(in srgb, var(--accent) 8%, var(--surface));
     stroke: color-mix(in srgb, var(--accent) 36%, var(--hairline-strong));
   }
@@ -119,9 +136,10 @@
     fill: color-mix(in srgb, var(--c-context) 9%, var(--surface));
     stroke: color-mix(in srgb, var(--c-context) 40%, var(--hairline-strong));
   }
-  .d-node--mcp {
-    fill: color-mix(in srgb, var(--accent) 11%, var(--surface));
-    stroke: color-mix(in srgb, var(--accent) 40%, var(--hairline-strong));
+  /* Control-pillar nodes: the voice-mode policy, the AI Decide service, the trace sink */
+  .d-node--control {
+    fill: color-mix(in srgb, var(--c-control) 8%, var(--surface));
+    stroke: color-mix(in srgb, var(--c-control) 42%, var(--hairline-strong));
   }
   .d-agent-shell { fill: color-mix(in srgb, var(--c-choice) 5%, var(--ink-2)); stroke: var(--hairline); stroke-width: 1; }
 
@@ -169,18 +187,32 @@
   .edge-label { fill: var(--text-mid); font-size: 13px; letter-spacing: -0.005em; }
   .edge-label--sm { font-size: 12.5px; fill: var(--text-lo); }
 
-  /* pill (routed models + lakebase functions) */
+  /* pill (served models, voices, lakebase functions) */
   .d-pill { fill: var(--ink-2); stroke: var(--hairline); stroke-width: 1; }
   .d-pill--choice  { stroke: color-mix(in srgb, var(--c-choice) 45%, var(--hairline)); }
   .d-pill--context { stroke: color-mix(in srgb, var(--c-context) 45%, var(--hairline)); }
   .d-pill--control { stroke: color-mix(in srgb, var(--c-control) 45%, var(--hairline)); }
-  /* the governed choice for this call — the one route that "locks in" */
+  .d-pill--lava    { stroke: color-mix(in srgb, var(--accent) 42%, var(--hairline)); }
+  /* the alternate decision engine: configured via UG_DECIDE_ENGINE, never an automatic failover */
+  .d-pill--alt     { stroke-dasharray: 4 4; stroke: var(--hairline-strong); }
+  /* the governed choice for this call — the one model the app picked, which "locks in" */
   .route-chosen { fill: none; stroke: var(--accent); stroke-width: 2; }
 
-  /* "TOOL" marker pill on the two governed tools */
+  /* small tag pills: "READ-ONLY" on Lakebase, "DATABRICKS APP" on the two tiers that share one container */
   .tool-tag { fill: color-mix(in srgb, var(--accent) 16%, transparent); stroke: color-mix(in srgb, var(--accent) 40%, transparent); stroke-width: 1; }
   .tool-tag--ctx { fill: color-mix(in srgb, var(--c-context) 16%, transparent); stroke: color-mix(in srgb, var(--c-context) 42%, transparent); }
   .tool-tag-tx { font-size: 12px; font-weight: 700; letter-spacing: 0.12em; }
+  .app-badge { fill: color-mix(in srgb, var(--accent) 12%, var(--surface)); stroke: color-mix(in srgb, var(--accent) 42%, transparent); stroke-width: 1; }
+  .app-badge-tx { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; }
+
+  /* Studio UI panel: the four C's tiles. Control is lit because the voice mode lands there. */
+  .d-tile { fill: var(--ink-2); stroke: var(--hairline); stroke-width: 1; }
+  .d-tile--control {
+    fill: color-mix(in srgb, var(--c-control) 11%, var(--ink-2));
+    stroke: color-mix(in srgb, var(--c-control) 52%, var(--hairline));
+  }
+  .d-tile-h { font-size: 13px; font-weight: 700; letter-spacing: -0.005em; }
+  .d-tile-s { fill: var(--text-mid); font-size: 12.5px; }
 
   /* travelling signal packet — the one looping motion; hidden until GSAP drives it.
      A soft accent glow reads as a live signal rather than a stray dot. */
@@ -188,10 +220,6 @@
     fill: var(--accent); opacity: 0;
     filter: drop-shadow(0 0 5px color-mix(in srgb, var(--accent) 65%, transparent));
   }
-
-  /* stacked expansion under the MCP title — horizontal words fit the narrow band;
-     rotated text at this width either clipped or shrank below legibility */
-  .d-mcp-word { fill: var(--text-lo); font-size: 10.5px; font-weight: 600; letter-spacing: .055em; }
 
   /* generation-lane panel */
   .gen-panel { fill: color-mix(in srgb, var(--text-lo) 5%, var(--ink-2)); stroke: var(--hairline); stroke-width: 1; }
@@ -327,16 +355,27 @@
   <section class="arch-hero">
     <h1 class="arch-title" data-anim>One call, <em>governed</em> from first word to last.</h1>
     <p class="arch-lede" data-anim>
-      Every voice turn walks the same path: the caller's browser into a LiveKit room, an agent that
-      listens and speaks, then two governed tools. One is the <b>Unity Gateway</b> — which exposes
-      <b>Model Context Protocol</b> and routes each turn to the model a caller's tier has earned; the
-      other is <b>Lakebase</b>, the read-only store the assistant is allowed to know — retrieval is
+      Every voice turn walks the same path: the caller's browser into a LiveKit room, then an agent
+      that listens and speaks. The agent picks its model from the caller's tier, in the app, and
+      reaches it through the <b>Unity Gateway</b>, Databricks' governed access to model serving.
+      Each turn, <b>AI Decide</b> works out, outside the conversational model, whether the caller
+      wants the spooky voice. The assistant's knowledge comes from <b>Lakebase</b>, the read-only
+      store it is allowed to know — retrieval is
       <a href="https://www.databricks.com/blog/lakebase-search-state-art-full-text-and-vector-search-postgres">Lakebase Search</a>
       (<span class="mono">lakebase_vector</span> ANN).
     </p>
+    <div class="arch-stack" data-anim>
+      <span class="stack-lead">Built on <a href="https://docs.databricks.com/aws/en/agents/custom-agents/agent-bricks-cli">Agent Bricks</a></span>
+      <ul class="stack-list" aria-label="Databricks stack">
+        <li><b>Databricks Apps</b> one container for the web tier and the agent</li>
+        <li><b>Unity Gateway</b> governed access to model serving</li>
+        <li><b>Lakebase</b> the read-only store and its search index</li>
+      </ul>
+      <span class="stack-note">The agent itself is a LiveKit Agents worker.</span>
+    </div>
     <ul class="arch-legend" data-anim aria-label="Pillar colour key">
       <li data-p="choice"><span class="lg-key"><span class="lg-dot"></span>Choice</span> routing</li>
-      <li data-p="control"><span class="lg-key"><span class="lg-dot"></span>Control</span> governance</li>
+      <li data-p="control"><span class="lg-key"><span class="lg-dot"></span>Control</span> governance, voice mode</li>
       <li data-p="context"><span class="lg-key"><span class="lg-dot"></span>Context</span> retrieval</li>
       <li data-p="costs"><span class="lg-key"><span class="lg-dot"></span>Costs</span> metering</li>
     </ul>
@@ -346,247 +385,328 @@
   <div class="diagram-wrap" data-anim>
     <div class="diagram-stage">
      <div class="diagram-scroll" role="group" aria-label="Voice Studio architecture diagram" tabindex="0">
-      <!-- viewBox 1200 wide; min-width 1040 keeps rendered text >=11px even when scrolled on a phone.
+      <!-- viewBox 1200 wide; min-width 1040 keeps even the small labels legible when scrolled on a phone.
            Strokes render fully drawn by default (CSS); GSAP only ADDS the entrance when it's live. -->
-      <svg class="arch-svg draw-svg" viewBox="0 0 1200 880" role="img"
-           aria-label="Left to right: a caller in the browser reaches the Studio web tier, which mints a short-TTL LiveKit token carrying PII-free metadata and serves the SPA. The browser joins a LiveKit Cloud room whose token dispatch summons the agent worker. The agent runs Deepgram speech-to-text (nova-3), an LLM turn, and Deepgram text-to-speech (aura-2). The LLM turn calls the Unity Gateway, which exposes a Model Context Protocol interface, and routes to one of three models by the caller's governed tier. Two read-only tools reach Lakebase: read_loyalty_context returns the governed tier, and semantic_search retrieves knowledge with Lakebase Search ANN. Token usage is metered as costs. Separately, one time per world, the studio drafts synthetic data through the gateway and embeds it into Lakebase.">
+      <svg class="arch-svg draw-svg" viewBox="0 0 1200 992" role="img"
+           aria-label="Left to right: a caller in the browser reaches the Studio web tier, which mints a short-TTL LiveKit token carrying PII-free metadata and serves the SPA. The browser joins a LiveKit Cloud room whose token dispatch summons the agent worker, which runs in the same Databricks App container as the web tier. In the agent, Deepgram speech-to-text (nova-3) feeds the voice-mode policy. Each turn, outside the conversational model, the policy asks Databricks AI Decide (ai_decide, or by configuration a Unity Gateway chat model) whether the caller wants to enter or exit the spooky voice; the policy changes the mode at most once per turn and an explicit exit always wins. The LLM turn uses a model the app itself picks with route_for(tier) from the caller's governed tier, and calls it through the Unity Gateway, which gives governed access to the Standard, Premium and VIP models. Replies are spoken by Deepgram aura-2 in the standard voice, or by ElevenLabs eleven_v3_conversational with inline expressive tags in Halloween mode. Read-only tools reach Lakebase: read_loyalty_context returns the governed tier, semantic_search retrieves knowledge with Lakebase Search ANN, and record_lookup returns the caller's own records. The agent streams evidence to the Studio UI's four pillars, where the voice mode shows on the Control pillar, and flushes spans, including ug.ai_decide, to Unity Catalog as MLflow traces. Token usage is metered as costs. Separately, one time per world, the studio drafts synthetic data through the gateway and embeds it into Lakebase.">
 
-        <!-- ============ EDGES (behind nodes) ============ -->
-        <g>
-          <!-- Caller <-> Studio (SPA + token request) -->
-          <path class="d-edge" d="M196 288 L232 288"/>
-          <path class="d-edge" d="M224 282 L232 288 L224 294"/>
-          <!-- Studio -> LiveKit (JWT + dispatch + metadata) -->
-          <path class="d-edge" d="M436 288 L470 288"/>
-          <path class="d-edge" d="M462 282 L470 288 L462 294"/>
-          <!-- LiveKit -> Agent : audio in (arcs up, lands on the STT top edge) -->
-          <path class="d-edge e-lava" d="M638 262 C 660 240, 676 222, 706 222"/>
-          <path class="d-edge e-lava" d="M698 215 L706 222 L698 229"/>
-          <!-- Agent -> LiveKit : audio out (leaves the TTS left edge, back to the caller) -->
-          <path class="d-edge e-lava" d="M700 434 C 664 432, 646 356, 638 310"/>
-          <path class="d-edge e-lava" d="M631 317 L638 310 L645 317"/>
-          <!-- STT -> LLM -> TTS (inside the agent) -->
-          <path class="d-edge" d="M786 246 L786 268"/>
-          <path class="d-edge" d="M780 262 L786 268 L792 262"/>
-          <path class="d-edge" d="M786 360 L786 382"/>
-          <path class="d-edge" d="M780 376 L786 382 L792 376"/>
-          <!-- LLM turn -> Unity Gateway : the inference call lands at the gateway's MCP interface -->
-          <path class="d-edge e-lava" d="M872 311 L926 311"/>
-          <path class="d-edge e-lava" d="M920 305 L926 311 L920 317"/>
-          <!-- governed tier -> model : Lakebase feeds the gateway's routing decision (Control -> Choice) -->
-          <path class="d-edge e-control" d="M1176 430 L1176 372"/>
-          <path class="d-edge e-control" d="M1170 380 L1176 372 L1182 380"/>
-          <!-- read-only tool calls : agent -> Lakebase -->
-          <path class="d-edge e-context" d="M872 378 C 910 440, 955 468, 1000 474"/>
-          <path class="d-edge e-context" d="M992 468 L1000 474 L995 482"/>
-          <path class="d-edge e-control" d="M900 484 C 940 508, 968 546, 1000 560"/>
-          <path class="d-edge e-control" d="M992 554 L1000 560 L995 568"/>
-          <!-- session usage -> Costs -->
-          <path class="d-edge e-costs" d="M786 494 L786 522"/>
-          <path class="d-edge e-costs" d="M780 516 L786 522 L792 516"/>
-        </g>
+              <!-- ============ NODES ============ -->
 
-        <!-- ============ EDGE LABELS — kept sparse; node text + hue carry the rest ============ -->
-        <g>
-          <text class="edge-label--sm" x="214" y="276" text-anchor="middle">SPA</text>
-          <text class="edge-label--sm t-lava" x="596" y="214">audio in</text>
-          <text class="edge-label--sm t-lava" x="596" y="374">audio out</text>
-          <text class="edge-label--sm t-control" x="1168" y="404" text-anchor="end">tier &#8594; model</text>
-        </g>
+              <!-- Studio UI — the four C's panel in the browser. The voice mode lands on the Control tile. -->
+              <g class="d-reveal">
+                <rect class="d-node" x="40" y="28" width="396" height="156" rx="16"/>
+                <g class="d-ic ic-hi" transform="translate(60,44)">
+                  <rect x="0" y="0" width="7.5" height="7.5" rx="1.6"/>
+                  <rect x="10.5" y="0" width="7.5" height="7.5" rx="1.6"/>
+                  <rect x="0" y="10.5" width="7.5" height="7.5" rx="1.6"/>
+                  <rect x="10.5" y="10.5" width="7.5" height="7.5" rx="1.6"/>
+                </g>
+                <text class="d-title" x="88" y="60">Studio UI</text>
+                <text class="d-note" x="420" y="60" text-anchor="end">in the browser</text>
+                <rect class="d-tile" x="58" y="78" width="174" height="42" rx="10"/>
+                <rect class="f-choice" x="59" y="87" width="3" height="24" rx="1.5"/>
+                <text class="d-tile-h t-choice" x="72" y="96">Choice</text>
+                <text class="d-tile-s" x="72" y="112">the model this tier got</text>
+                <rect class="d-tile d-tile--control" x="244" y="78" width="174" height="42" rx="10"/>
+                <rect class="f-control" x="245" y="87" width="3" height="24" rx="1.5"/>
+                <text class="d-tile-h t-control" x="258" y="96">Control</text>
+                <text class="d-tile-s" x="258" y="112">Voice mode &#183; AI Decide</text>
+                <rect class="d-tile" x="58" y="128" width="174" height="42" rx="10"/>
+                <rect class="f-context" x="59" y="137" width="3" height="24" rx="1.5"/>
+                <text class="d-tile-h t-context" x="72" y="146">Context</text>
+                <text class="d-tile-s" x="72" y="162">what retrieval returned</text>
+                <rect class="d-tile" x="244" y="128" width="174" height="42" rx="10"/>
+                <rect class="f-costs" x="245" y="137" width="3" height="24" rx="1.5"/>
+                <text class="d-tile-h t-costs" x="258" y="146">Costs</text>
+                <text class="d-tile-s" x="258" y="162">tokens per turn</text>
+              </g>
 
-        <!-- ============ NODES ============ -->
+              <!-- Caller -->
+              <g class="d-reveal">
+                <rect class="d-node" x="40" y="232" width="156" height="112" rx="15"/>
+                <g class="d-ic ic-hi" transform="translate(60,254)">
+                  <rect x="4" y="0" width="9" height="15" rx="4.5"/>
+                  <path d="M0.5 11a8 8 0 0 0 16 0"/>
+                  <path d="M8.5 19v3M4.5 22h8"/>
+                </g>
+                <text class="d-title" x="88" y="270">Caller</text>
+                <text class="d-role" x="60" y="303">Browser + mic</text>
+                <text class="d-mono d-mono--mid" x="60" y="325">livekit-client</text>
+              </g>
 
-        <!-- Caller -->
-        <g class="d-reveal">
-          <rect class="d-node" x="40" y="232" width="156" height="112" rx="15"/>
-          <g class="d-ic ic-hi" transform="translate(60,254)">
-            <rect x="4" y="0" width="9" height="15" rx="4.5"/>
-            <path d="M0.5 11a8 8 0 0 0 16 0"/>
-            <path d="M8.5 19v3M4.5 22h8"/>
-          </g>
-          <text class="d-title" x="88" y="270">Caller</text>
-          <text class="d-role" x="60" y="303">Browser + mic</text>
-          <text class="d-mono d-mono--mid" x="60" y="325">livekit-client</text>
-        </g>
+              <!-- Studio web tier — runs in the Databricks App, beside the agent -->
+              <g class="d-reveal">
+                <rect class="d-node" x="232" y="222" width="204" height="132" rx="15"/>
+                <g class="d-ic ic-hi" transform="translate(252,244)">
+                  <rect x="0" y="1" width="18" height="16" rx="2.5"/>
+                  <path d="M0 6h18"/>
+                  <path d="M3.4 3.6h0M6 3.6h0"/>
+                  <path d="M5 11l-2 2 2 2M9.5 15h4"/>
+                </g>
+                <text class="d-title" x="280" y="260">Studio web tier</text>
+                <text class="d-mono d-mono--mid" x="252" y="290">web_server.py</text>
+                <text class="d-role" x="252" y="312">Mints LiveKit JWT</text>
+                <text class="d-role" x="252" y="333">+ serves the SPA</text>
+                <rect class="app-badge" x="298" y="212" width="126" height="20" rx="10"/>
+                <text class="app-badge-tx t-lava" x="361" y="226" text-anchor="middle">DATABRICKS APP</text>
+              </g>
 
-        <!-- Studio web tier -->
-        <g class="d-reveal">
-          <rect class="d-node" x="232" y="222" width="204" height="132" rx="15"/>
-          <g class="d-ic ic-hi" transform="translate(252,244)">
-            <rect x="0" y="1" width="18" height="16" rx="2.5"/>
-            <path d="M0 6h18"/>
-            <path d="M3.4 3.6h0M6 3.6h0"/>
-            <path d="M5 11l-2 2 2 2M9.5 15h4"/>
-          </g>
-          <text class="d-title" x="280" y="260">Studio web tier</text>
-          <text class="d-mono d-mono--mid" x="252" y="290">web_server.py</text>
-          <text class="d-role" x="252" y="312">Mints LiveKit JWT</text>
-          <text class="d-role" x="252" y="333">+ serves the SPA</text>
-        </g>
+              <!-- LiveKit Cloud -->
+              <g class="d-reveal">
+                <rect class="d-node" x="470" y="232" width="168" height="112" rx="15"/>
+                <g class="d-ic ic-hi" transform="translate(490,256)">
+                  <path d="M5 16h9a4 4 0 0 0 .4-8A6 6 0 0 0 3 7.5 3.5 3.5 0 0 0 4 16z"/>
+                </g>
+                <text class="d-title" x="518" y="270">LiveKit Cloud</text>
+                <text class="d-role" x="490" y="303">Room + dispatch</text>
+                <text class="d-note" x="490" y="325">auto-summons agent</text>
+              </g>
 
-        <!-- LiveKit Cloud -->
-        <g class="d-reveal">
-          <rect class="d-node" x="470" y="232" width="168" height="112" rx="15"/>
-          <g class="d-ic ic-hi" transform="translate(490,256)">
-            <path d="M5 16h9a4 4 0 0 0 .4-8A6 6 0 0 0 3 7.5 3.5 3.5 0 0 0 4 16z"/>
-          </g>
-          <text class="d-title" x="518" y="270">LiveKit Cloud</text>
-          <text class="d-role" x="490" y="303">Room + dispatch</text>
-          <text class="d-note" x="490" y="325">auto-summons agent</text>
-        </g>
+              <!-- Agent worker (tall shell: the per-turn pipeline STT -> Voice mode -> LLM -> TTS) -->
+              <g class="d-reveal">
+                <rect class="d-agent-shell" x="672" y="20" width="256" height="542" rx="18"/>
+                <g class="d-ic ic-choice" transform="translate(692,40)">
+                  <rect x="0" y="3" width="18" height="13" rx="3"/>
+                  <path d="M6 3V1.5M12 3V1.5M4 8h2M12 8h2M4 12h6"/>
+                </g>
+                <text class="d-title" x="720" y="56">Agent worker</text>
+                <text class="d-mono d-mono--mid" x="692" y="82">agent.py</text>
+                <rect class="app-badge" x="790" y="10" width="126" height="20" rx="10"/>
+                <text class="app-badge-tx t-lava" x="853" y="24" text-anchor="middle">DATABRICKS APP</text>
 
-        <!-- Agent worker (tall shell grouping STT / LLM / TTS) -->
-        <g class="d-reveal">
-          <rect class="d-agent-shell" x="672" y="150" width="228" height="344" rx="18"/>
-          <g class="d-ic ic-choice" transform="translate(692,170)">
-            <rect x="0" y="3" width="18" height="13" rx="3"/>
-            <path d="M6 3V1.5M12 3V1.5M4 8h2M12 8h2M4 12h6"/>
-          </g>
-          <text class="d-title" x="720" y="186">Agent worker</text>
-          <text class="d-mono d-mono--mid" x="692" y="212">agent.py</text>
+                <!-- STT -->
+                <rect class="d-node d-node--inset" x="686" y="96" width="228" height="56" rx="12"/>
+                <g class="d-ic ic-lava" transform="translate(702,115)">
+                  <path d="M0 15V11M4 15V7M8 16V4M12 15V8M16 15V11" stroke-width="2"/>
+                </g>
+                <text class="d-role" x="728" y="120" style="fill:var(--text-hi);font-weight:700">Deepgram STT</text>
+                <text class="d-mono t-lava" x="728" y="140">nova-3</text>
 
-          <!-- STT -->
-          <rect class="d-node d-node--inset" x="700" y="222" width="172" height="70" rx="12"/>
-          <g class="d-ic ic-lava" transform="translate(716,242)">
-            <path d="M0 15V11M4 15V7M8 16V4M12 15V8M16 15V11" stroke-width="2"/>
-          </g>
-          <text class="d-role" x="742" y="250" style="fill:var(--text-hi);font-weight:700">Deepgram STT</text>
-          <text class="d-mono t-lava" x="742" y="272">nova-3</text>
+                <!-- Voice mode — the deterministic policy. It asks AI Decide every turn, OUTSIDE the LLM. -->
+                <rect class="d-node d-node--control" x="686" y="170" width="228" height="100" rx="12"/>
+                <g class="d-ic ic-control" transform="translate(702,188)">
+                  <circle cx="9" cy="3" r="2.2"/>
+                  <circle cx="3.6" cy="15" r="2.2"/>
+                  <circle cx="14.4" cy="15" r="2.2"/>
+                  <path d="M9 5.2v3.3M9 8.5L4.6 13M9 8.5l4.4 4.5"/>
+                </g>
+                <text class="d-title" x="728" y="194">Voice mode</text>
+                <text class="d-tag t-control" x="902" y="194" text-anchor="end" style="font-size:11px">POLICY</text>
+                <text class="d-mono t-control" x="702" y="220" style="font-size:12.5px">standard &#8644; halloween</text>
+                <text class="d-note" x="702" y="240">outside the LLM, every turn</text>
+                <text class="d-note" x="702" y="258">&#8804;1 change/turn &#183; exit wins</text>
 
-          <!-- LLM turn (the pivot) -->
-          <rect class="d-node" x="700" y="312" width="172" height="72" rx="12" style="stroke:color-mix(in srgb, var(--accent) 40%, var(--hairline-strong))"/>
-          <g class="d-ic ic-lava" transform="translate(716,332)">
-            <circle cx="9" cy="9" r="7"/>
-            <path d="M9 5.4a2.2 2.2 0 0 1 2 3.2M9 12.6a2.2 2.2 0 0 1-2-3.2"/>
-          </g>
-          <text class="d-title" x="742" y="340">LLM turn</text>
-          <text class="d-mono d-mono--mid" x="742" y="362">openai.responses</text>
+                <!-- LLM turn (the pivot) — the app picks the model here; the gateway only serves it -->
+                <rect class="d-node" x="686" y="288" width="228" height="92" rx="12" style="stroke:color-mix(in srgb, var(--accent) 40%, var(--hairline-strong))"/>
+                <g class="d-ic ic-lava" transform="translate(702,305)">
+                  <circle cx="9" cy="9" r="7"/>
+                  <path d="M9 5.4a2.2 2.2 0 0 1 2 3.2M9 12.6a2.2 2.2 0 0 1-2-3.2"/>
+                </g>
+                <text class="d-title" x="728" y="312">LLM turn</text>
+                <text class="d-mono d-mono--mid" x="728" y="332">openai.responses</text>
+                <rect class="d-pill d-pill--choice" x="700" y="344" width="200" height="26" rx="8"/>
+                <text class="d-mono t-choice" x="712" y="361" style="font-size:12.5px">model = route_for(tier)</text>
 
-          <!-- TTS -->
-          <rect class="d-node d-node--inset" x="700" y="404" width="172" height="70" rx="12"/>
-          <g class="d-ic ic-lava" transform="translate(716,424)">
-            <path d="M2 6v6h3l5 4V2L5 6z"/>
-            <path d="M13 6.5a4 4 0 0 1 0 5"/>
-          </g>
-          <text class="d-role" x="742" y="432" style="fill:var(--text-hi);font-weight:700">Deepgram TTS</text>
-          <text class="d-mono t-lava" x="742" y="454">aura-2</text>
-        </g>
+                <!-- TTS — the voice follows the mode: Deepgram (standard) or ElevenLabs (Halloween) -->
+                <rect class="d-node d-node--inset" x="686" y="398" width="228" height="148" rx="12"/>
+                <g class="d-ic ic-lava" transform="translate(702,414)">
+                  <path d="M2 6v6h3l5 4V2L5 6z"/>
+                  <path d="M13 6.5a4 4 0 0 1 0 5"/>
+                </g>
+                <text class="d-role" x="728" y="422" style="fill:var(--text-hi);font-weight:700">TTS &#183; voice by mode</text>
+                <rect class="d-pill" x="700" y="438" width="200" height="30" rx="8"/>
+                <text class="d-mono" x="712" y="457" style="font-size:12.5px">Deepgram aura-2</text>
+                <text class="d-tag" x="888" y="457" text-anchor="end" style="font-size:11px">STANDARD</text>
+                <rect class="d-pill d-pill--lava" x="700" y="476" width="200" height="60" rx="8"/>
+                <text class="d-role" x="712" y="494" style="fill:var(--text-hi);font-weight:700;font-size:13.5px">ElevenLabs</text>
+                <text class="d-tag t-lava" x="888" y="494" text-anchor="end" style="font-size:11px">HALLOWEEN</text>
+                <text class="d-mono" x="712" y="511" style="font-size:12px">eleven_v3_conversational</text>
+                <text class="d-note" x="712" y="526" style="font-size:12px">inline tags: [whispers] [sighs]</text>
+              </g>
 
-        <!-- Unity Gateway — BIG governed Tool. It EXPOSES a Model Context Protocol
-             interface (inner panel, left) and routes each turn to the model the caller's
-             governed tier has earned. MCP lives INSIDE the gateway, not as a separate hop. -->
-        <g class="d-reveal">
-          <rect class="d-node--uaig" x="926" y="140" width="258" height="232" rx="18"/>
+              <!-- Costs — live token metering off the agent's usage events -->
+              <g class="d-reveal">
+                <rect class="d-node" x="436" y="482" width="196" height="92" rx="15" style="stroke:color-mix(in srgb, var(--c-costs) 34%, var(--hairline-strong))"/>
+                <g class="d-ic ic-costs" transform="translate(456,500)">
+                  <path d="M0 15V1M0 15h16M3 11l4-4 3 2 5-6"/>
+                </g>
+                <text class="d-title" x="484" y="514">Costs</text>
+                <text class="d-mono d-mono--mid" x="456" y="537" style="font-size:12px">session_usage_updated</text>
+                <line x1="456" y1="556" x2="612" y2="556" stroke="var(--hairline-strong)" stroke-width="4" stroke-linecap="round"/>
+                <line x1="456" y1="556" x2="552" y2="556" stroke="var(--c-costs)" stroke-width="4" stroke-linecap="round"/>
+              </g>
 
-          <!-- MCP — the gateway's Model Context Protocol interface, inside the gateway -->
-          <rect class="d-node--mcp" x="938" y="192" width="68" height="140" rx="12"/>
-          <text class="d-title t-lava" x="972" y="228" text-anchor="middle" style="font-size:15px">MCP</text>
-          <text class="d-mcp-word" x="972" y="256" text-anchor="middle">MODEL</text>
-          <text class="d-mcp-word" x="972" y="274" text-anchor="middle">CONTEXT</text>
-          <text class="d-mcp-word" x="972" y="292" text-anchor="middle">PROTOCOL</text>
+              <!-- Traces — spans flush over OTLP to a Unity Catalog table and read as MLflow traces -->
+              <text class="d-tag" x="960" y="30">DATABRICKS WORKSPACE</text>
+              <g class="d-reveal">
+                <rect class="d-node d-node--control" x="960" y="40" width="224" height="84" rx="16"/>
+                <g class="d-ic ic-control" transform="translate(976,55)">
+                  <path d="M1 3h9M4 8h12M7 13h9"/>
+                </g>
+                <text class="d-title" x="1004" y="69">Traces</text>
+                <text class="d-note" x="976" y="90" style="font-size:12.5px">OTLP &#8594; Unity Catalog &#8594; MLflow</text>
+                <text class="d-mono t-control" x="976" y="109" style="font-size:11.5px">ug.ai_decide &#183; ug.voice_*</text>
+              </g>
 
-          <!-- TOOL tag -->
-          <rect class="tool-tag" x="1120" y="152" width="52" height="22" rx="11"/>
-          <text class="tool-tag-tx t-lava" x="1146" y="167" text-anchor="middle">TOOL</text>
-          <g class="d-ic ic-lava" transform="translate(1016,156)">
-            <path d="M9 1.5l7 3v4.5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V4.5z"/>
-            <path d="M5.5 9l2.4 2.4L12.5 6.6"/>
-          </g>
-          <text class="d-title d-title--lg" x="1044" y="178">Unity AI</text>
-          <text class="d-title d-title--lg" x="1044" y="200">Gateway</text>
-          <text class="d-tag t-choice" x="1016" y="226">CHOICE &#183; ROUTING</text>
+              <!-- Databricks AI Decide — the default decision engine (an AI Function). The alternate engine is a Unity Gateway chat model. -->
+              <g class="d-reveal">
+                <rect class="d-node d-node--control" x="960" y="142" width="224" height="136" rx="18"/>
+                <g class="d-ic ic-control" transform="translate(976,158)">
+                  <circle cx="9" cy="3" r="2.2"/>
+                  <circle cx="3.6" cy="15" r="2.2"/>
+                  <circle cx="14.4" cy="15" r="2.2"/>
+                  <path d="M9 5.2v3.3M9 8.5L4.6 13M9 8.5l4.4 4.5"/>
+                </g>
+                <text class="d-title d-title--lg" x="1004" y="175">AI Decide</text>
+                <text class="d-note" x="976" y="198">Databricks AI Function</text>
+                <text class="d-mono t-control" x="976" y="218" style="font-size:12.5px">enter &#183; exit &#183; none</text>
+                <rect class="d-pill d-pill--alt" x="972" y="228" width="200" height="40" rx="10"/>
+                <text class="d-mono d-mono--mid" x="984" y="244" style="font-size:12px">alt engine: uaig_chat</text>
+                <text class="d-note" x="984" y="260" style="font-size:12px">a Unity Gateway chat model</text>
+              </g>
 
-          <!-- three routed models; the governed choice for this call is locked in on gpt-6-sol -->
-          <rect class="d-pill d-pill--choice" x="1016" y="236" width="152" height="38" rx="10"/>
-          <text class="d-mono" x="1028" y="253">gpt-6-sol</text>
-          <text class="d-note t-choice" x="1028" y="268">VIP</text>
-          <rect class="route-chosen" id="routeChosen" x="1013" y="233" width="158" height="44" rx="12"/>
+              <!-- Unity Gateway — governed access to Databricks model serving. It does NOT route: the agent picks the
+                   model with route_for(tier) from UG_MODEL_STANDARD / PREMIUM / VIP, and the gateway serves that one. -->
+              <g class="d-reveal">
+                <rect class="d-node--gateway" x="960" y="298" width="224" height="234" rx="18"/>
+                <g class="d-ic ic-lava" transform="translate(976,314)">
+                  <path d="M9 1.5l7 3v4.5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V4.5z"/>
+                  <path d="M5.5 9l2.4 2.4L12.5 6.6"/>
+                </g>
+                <text class="d-title d-title--lg" x="1004" y="331">Unity Gateway</text>
+                <text class="d-tag t-choice" x="976" y="354">CHOICE &#183; MODEL SERVING</text>
+                <text class="d-note" x="976" y="372" style="font-size:12px">serves the model the app picks</text>
+                <rect class="d-pill d-pill--choice" x="976" y="382" width="192" height="40" rx="10"/>
+                <text class="d-mono" x="988" y="399">gpt-6-sol</text>
+                <text class="d-note t-choice" x="1156" y="399" text-anchor="end">VIP</text>
+                <text class="d-mono d-mono--mid" x="988" y="415" style="font-size:12px">UG_MODEL_VIP</text>
+                <rect class="route-chosen" id="routeChosen" x="973" y="379" width="198" height="46" rx="12"/>
+                <rect class="d-pill d-pill--choice" x="976" y="430" width="192" height="40" rx="10"/>
+                <text class="d-mono d-mono--mid" x="988" y="447">gpt-5-5</text>
+                <text class="d-note t-choice" x="1156" y="447" text-anchor="end">Premium</text>
+                <text class="d-mono d-mono--mid" x="988" y="463" style="font-size:12px">UG_MODEL_PREMIUM</text>
+                <rect class="d-pill d-pill--choice" x="976" y="478" width="192" height="40" rx="10"/>
+                <text class="d-mono d-mono--mid" x="988" y="495">gpt-5-nano</text>
+                <text class="d-note t-choice" x="1156" y="495" text-anchor="end">Standard</text>
+                <text class="d-mono d-mono--mid" x="988" y="511" style="font-size:12px">UG_MODEL_STANDARD</text>
+              </g>
 
-          <rect class="d-pill d-pill--choice" x="1016" y="282" width="152" height="38" rx="10"/>
-          <text class="d-mono d-mono--mid" x="1028" y="299">gpt-5-5</text>
-          <text class="d-note t-choice" x="1028" y="314">Premium</text>
+              <!-- Lakebase — governed, READ-ONLY store (Control tier lookup + Context retrieval). Postgres with Lakebase Search. -->
+              <g class="d-reveal">
+                <rect class="d-node--lakebase" x="664" y="616" width="520" height="116" rx="18"/>
+                <g class="d-ic ic-context" transform="translate(682,630)">
+                  <ellipse cx="9" cy="3.4" rx="7.5" ry="2.6"/>
+                  <path d="M1.5 3.4v10.4c0 1.4 3.4 2.6 7.5 2.6s7.5-1.2 7.5-2.6V3.4"/>
+                  <path d="M1.5 9c0 1.4 3.4 2.6 7.5 2.6S16.5 10.4 16.5 9"/>
+                </g>
+                <text class="d-title d-title--lg" x="710" y="647">Lakebase</text>
+                <rect class="tool-tag tool-tag--ctx" x="816" y="630" width="132" height="22" rx="11"/>
+                <text class="tool-tag-tx t-context" x="882" y="645" text-anchor="middle">READ-ONLY</text>
+                <text class="d-mono d-mono--mid" x="1166" y="646" text-anchor="end" style="font-size:12px">Postgres &#183; schema ug</text>
+                <rect class="d-pill d-pill--control" x="680" y="668" width="156" height="48" rx="10"/>
+                <text class="d-mono" x="690" y="687" style="font-size:11.5px">read_loyalty_context</text>
+                <text class="d-note t-control" x="690" y="705" style="font-size:12px">governed tier</text>
+                <rect class="d-pill d-pill--context" x="848" y="668" width="156" height="48" rx="10"/>
+                <text class="d-mono" x="858" y="687" style="font-size:11.5px">semantic_search</text>
+                <text class="d-note t-context" x="858" y="705" style="font-size:12px">Lakebase Search ANN</text>
+                <rect class="d-pill d-pill--context" x="1016" y="668" width="156" height="48" rx="10"/>
+                <text class="d-mono" x="1026" y="687" style="font-size:11.5px">record_lookup</text>
+                <text class="d-note t-context" x="1026" y="705" style="font-size:12px">caller's own records</text>
+              </g>
 
-          <rect class="d-pill d-pill--choice" x="1016" y="328" width="152" height="38" rx="10"/>
-          <text class="d-mono d-mono--mid" x="1028" y="345">gpt-5-nano</text>
-          <text class="d-note t-choice" x="1028" y="360">Standard</text>
-        </g>
+              <!-- ============ ONE-TIME GENERATION LANE (write-once; distinct dashed language) ============ -->
+              <g class="d-reveal">
+                <rect class="gen-panel" x="40" y="792" width="1144" height="176" rx="16"/>
+                <text class="d-title" x="66" y="826">One-time per world</text>
+                <text class="d-note" x="66" y="848">The generator is the only writer &#8212; every path a live call touches is read-only.</text>
 
-        <!-- Lakebase — BIG governed Tool (read-only; Control tier + Context retrieval) -->
-        <g class="d-reveal">
-          <rect class="d-node--lakebase" x="1000" y="430" width="184" height="200" rx="18"/>
-          <rect class="tool-tag tool-tag--ctx" x="1120" y="442" width="52" height="22" rx="11"/>
-          <text class="tool-tag-tx t-context" x="1146" y="457" text-anchor="middle">TOOL</text>
-          <g class="d-ic ic-context" transform="translate(1016,446)">
-            <ellipse cx="9" cy="3.4" rx="7.5" ry="2.6"/>
-            <path d="M1.5 3.4v10.4c0 1.4 3.4 2.6 7.5 2.6s7.5-1.2 7.5-2.6V3.4"/>
-            <path d="M1.5 9c0 1.4 3.4 2.6 7.5 2.6S16.5 10.4 16.5 9"/>
-          </g>
-          <text class="d-title d-title--lg" x="1044" y="470">Lakebase</text>
-          <text class="d-role" x="1016" y="497">Governed, read-only store</text>
+                <!-- lane nodes -->
+                <rect class="d-node d-node--inset" x="66" y="868" width="150" height="72" rx="12"/>
+                <text class="d-role" x="82" y="898" style="fill:var(--text-hi);font-weight:700">Studio</text>
+                <text class="d-note" x="82" y="918">generator</text>
 
-          <!-- the two read-only functions the runtime actually calls -->
-          <rect class="d-pill d-pill--control" x="1016" y="508" width="152" height="42" rx="10"/>
-          <text class="d-mono" x="1028" y="525" style="font-size:12px">read_loyalty_context</text>
-          <text class="d-note t-control" x="1028" y="541">returns the governed tier</text>
+                <rect class="d-node d-node--inset" x="300" y="868" width="236" height="72" rx="12"/>
+                <text class="d-role" x="316" y="894" style="fill:var(--text-hi);font-weight:700">Unity Gateway chat</text>
+                <text class="d-note" x="316" y="914">drafts docs &#183; customers &#183; records</text>
 
-          <rect class="d-pill d-pill--context" x="1016" y="558" width="152" height="42" rx="10"/>
-          <text class="d-mono" x="1028" y="575">semantic_search</text>
-          <text class="d-note t-context" x="1028" y="591">Lakebase Search ANN</text>
+                <rect class="d-node d-node--inset" x="620" y="868" width="196" height="72" rx="12"/>
+                <text class="d-role" x="636" y="894" style="fill:var(--text-hi);font-weight:700">FMAPI</text>
+                <text class="d-note" x="636" y="914">embeddings</text>
 
-          <text class="d-mono d-mono--mid" x="1016" y="620" style="font-size:12px">schema: ug</text>
-        </g>
+                <rect class="d-node d-node--inset" x="900" y="868" width="196" height="72" rx="12" style="stroke:color-mix(in srgb, var(--c-context) 34%, var(--hairline))"/>
+                <text class="d-role t-context" x="916" y="894" style="font-weight:700">Lakebase</text>
+                <text class="d-note" x="916" y="914">write-once &#183; schema ug</text>
 
-        <!-- Costs — live token metering off the agent's usage events -->
-        <g class="d-reveal">
-          <rect class="d-node" x="672" y="522" width="228" height="94" rx="15" style="stroke:color-mix(in srgb, var(--c-costs) 34%, var(--hairline-strong))"/>
-          <g class="d-ic ic-costs" transform="translate(692,542)">
-            <path d="M0 15V1M0 15h16M3 11l4-4 3 2 5-6"/>
-          </g>
-          <text class="d-title" x="720" y="556">Costs</text>
-          <text class="d-mono d-mono--mid" x="692" y="579" style="font-size:12px">session_usage_updated</text>
-          <!-- meter -->
-          <line x1="692" y1="598" x2="880" y2="598" stroke="var(--hairline-strong)" stroke-width="4" stroke-linecap="round"/>
-          <line x1="692" y1="598" x2="812" y2="598" stroke="var(--c-costs)" stroke-width="4" stroke-linecap="round"/>
-        </g>
+                <!-- dashed connectors -->
+                <path class="d-genedge" d="M216 904 L300 904"/>
+                <path class="d-genedge" d="M536 904 L620 904"/>
+                <path class="d-genedge" d="M816 904 L900 904"/>
+              </g>
 
-        <!-- ============ ONE-TIME GENERATION LANE (write-once; distinct dashed language) ============ -->
-        <g class="d-reveal">
-          <rect class="gen-panel" x="40" y="672" width="1144" height="176" rx="16"/>
-          <text class="d-title" x="66" y="706">One-time per world</text>
-          <text class="d-note" x="66" y="728">The generator is the only writer — every path a live call touches is read-only.</text>
+              <!-- ============ EDGES (painted over the node fills so every arrowhead lands visibly on its target) ============ -->
+              <g>
+                <!-- Caller <-> Studio web tier (SPA + token request) -->
+                <path class="d-edge" d="M196 288 L232 288"/>
+                <path class="d-edge" d="M224 294 L232 288 L224 282"/>
+                <!-- Studio web tier -> LiveKit (JWT + dispatch + metadata) -->
+                <path class="d-edge" d="M436 288 L470 288"/>
+                <path class="d-edge" d="M462 294 L470 288 L462 282"/>
+                <!-- LiveKit -> Agent : audio in (arcs up to the STT left edge) -->
+                <path class="d-edge e-lava" d="M638 262 C664 262, 662 124, 686 124"/>
+                <path class="d-edge e-lava" d="M678 130 L686 124 L678 118"/>
+                <!-- Agent -> LiveKit : audio out (leaves the TTS left edge, back to the caller) -->
+                <path class="d-edge e-lava" d="M686 452 C660 450, 644 392, 638 326"/>
+                <path class="d-edge e-lava" d="M645 333 L638 326 L633 335"/>
+                <!-- turn pipeline inside the agent: STT -> Voice mode -> LLM -> TTS -->
+                <path class="d-edge" d="M800 153 L800 170"/>
+                <path class="d-edge" d="M794 162 L800 170 L806 162"/>
+                <path class="d-edge e-control" d="M800 271 L800 288"/>
+                <path class="d-edge e-control" d="M794 280 L800 288 L806 280"/>
+                <path class="d-edge" d="M800 381 L800 398"/>
+                <path class="d-edge" d="M794 390 L800 398 L806 390"/>
+                <!-- Voice mode -> Databricks AI Decide : classify enter / exit / none, every turn -->
+                <path class="d-edge e-control" d="M914 222 L960 222"/>
+                <path class="d-edge e-control" d="M952 228 L960 222 L952 216"/>
+                <!-- LLM turn -> Unity Gateway : the model the APP picked with route_for(tier) -->
+                <path class="d-edge e-lava" d="M914 338 C942 338, 948 402, 976 402"/>
+                <path class="d-edge e-lava" d="M968 408 L976 402 L968 396"/>
+                <!-- agent -> traces (OTLP) -->
+                <path class="d-edge" d="M928 82 L960 82"/>
+                <path class="d-edge" d="M952 88 L960 82 L952 76"/>
+                <!-- agent -> Studio UI : PII-free evidence (data channel) -->
+                <path class="d-edge" d="M672 58 C600 58, 520 100, 438 100"/>
+                <path class="d-edge" d="M446 94 L438 100 L446 106"/>
+                <!-- agent -> Costs (usage events) -->
+                <path class="d-edge e-costs" d="M672 528 L634 528"/>
+                <path class="d-edge e-costs" d="M642 522 L634 528 L642 534"/>
+                <!-- Lakebase -> agent : governed tier at bind (read_loyalty_context) -->
+                <path class="d-edge e-control" d="M752 616 L752 564"/>
+                <path class="d-edge e-control" d="M758 572 L752 564 L746 572"/>
+                <!-- agent -> Lakebase : read-only tools (semantic_search, record_lookup) -->
+                <path class="d-edge e-context" d="M884 562 C884 592, 926 584, 926 614"/>
+                <path class="d-edge e-context" d="M920 606 L926 614 L932 606"/>
+                <path class="d-edge e-context" d="M908 562 C908 586, 1094 582, 1094 614"/>
+                <path class="d-edge e-context" d="M1088 606 L1094 614 L1100 606"/>
+              </g>
 
-          <!-- lane nodes -->
-          <rect class="d-node d-node--inset" x="66" y="748" width="150" height="72" rx="12"/>
-          <text class="d-role" x="82" y="778" style="fill:var(--text-hi);font-weight:700">Studio</text>
-          <text class="d-note" x="82" y="798">generator</text>
+              <!-- ============ EDGE LABELS — kept sparse; node text + hue carry the rest ============ -->
+              <g>
+                <text class="edge-label--sm" x="214" y="276" text-anchor="middle">SPA</text>
+                <text class="edge-label--sm t-lava" x="598" y="206">audio in</text>
+                <text class="edge-label--sm t-lava" x="634" y="396" text-anchor="end">audio out</text>
+                <text class="edge-label--sm" x="556" y="72" text-anchor="middle">evidence</text>
+                <text class="edge-label--sm t-control" x="762" y="596">tier at bind</text>
+                <text class="edge-label--sm t-context" x="1004" y="572" text-anchor="middle">read-only tools</text>
+              </g>
 
-          <rect class="d-node d-node--inset" x="300" y="748" width="236" height="72" rx="12"/>
-          <text class="d-role" x="316" y="774" style="fill:var(--text-hi);font-weight:700">Unity Gateway chat</text>
-          <text class="d-note" x="316" y="794">drafts docs &#183; customers &#183; records</text>
-
-          <rect class="d-node d-node--inset" x="620" y="748" width="196" height="72" rx="12"/>
-          <text class="d-role" x="636" y="774" style="fill:var(--text-hi);font-weight:700">FMAPI</text>
-          <text class="d-note" x="636" y="794">embeddings</text>
-
-          <rect class="d-node d-node--inset" x="900" y="748" width="196" height="72" rx="12"
-                style="stroke:color-mix(in srgb, var(--c-context) 34%, var(--hairline))"/>
-          <text class="d-role t-context" x="916" y="774" style="font-weight:700">Lakebase</text>
-          <text class="d-note" x="916" y="794">write-once &#183; schema ug</text>
-
-          <!-- dashed connectors -->
-          <path class="d-genedge" d="M216 784 L300 784"/>
-          <path class="d-genedge" d="M536 784 L620 784"/>
-          <path class="d-genedge" d="M816 784 L900 784"/>
-        </g>
-
-        <!-- the live-call spine: an invisible authored path threading caller -> studio ->
-             LiveKit -> (audio in) STT -> LLM -> MCP -> the governed route. The signal packet
-             rides it via MotionPathPlugin so the loop tracks the drawn topology exactly. -->
-        <path id="spinePath" aria-hidden="true" fill="none" stroke="none"
-              d="M118 288 L554 288 C616 288 648 258 668 240 C682 228 692 222 706 222 C738 222 772 240 786 257 L786 350 C828 350 846 311 872 311 L943 311 C972 311 984 290 998 254 C1022 246 1062 246 1088 254"/>
-        <!-- travelling signal packet — one looping motion along the spine above -->
-        <circle class="d-packet" id="flowPacket" cx="0" cy="0" r="6"/>
-      </svg>
+              <!-- the live-call spine: an invisible authored path threading caller -> studio -> LiveKit ->
+                   (audio in) STT -> Voice mode -> LLM -> the model the app picked at the gateway. The signal packet
+                   rides it via MotionPathPlugin so the loop tracks the drawn topology exactly. -->
+              <path id="spinePath" aria-hidden="true" fill="none" stroke="none"
+                    d="M118 288 L554 288 C 600 288, 610 262, 638 262 C 664 262, 662 124, 686 124 L 788 124 C 800 124, 800 130, 800 142 L 800 326 C 800 335, 806 338, 818 338 L 914 338 C 942 338, 948 402, 976 402 L 1172 402"/>
+              <!-- travelling signal packet — one looping motion along the spine above -->
+              <circle class="d-packet" id="flowPacket" cx="0" cy="0" r="6"/>
+            </svg>
      </div>
     </div>
 
@@ -599,7 +719,7 @@
   <!-- ===== STEP BY STEP: plain-text diagram, numbered in call order ===== -->
   <section class="steps" aria-labelledby="stepsH">
     <h2 class="gov-h" id="stepsH">Step by step: how a call connects</h2>
-    <p class="gov-sub">Numbers mark the order things happen: step 0 runs once per world, steps 1–4 establish the connection, and 5–9 run on every call.</p>
+    <p class="gov-sub">Numbers mark the order things happen: step 0 runs once per world, steps 1–4 establish the connection, and 5–9 run on every call. Step 6 repeats on every caller turn and holds the one decision the boxes don't show, so it gets its own sequence under the diagram.</p>
     <pre class="steps-pre" tabindex="0" aria-label="Plain-text architecture diagram">                              +- Databricks App (1 container) -+
 +------------------+          | +----------------------------+ |
 | Browser          |--[1][2]-&gt;| | Web / token tier           | |
@@ -613,42 +733,62 @@
 | WebRTC SFU       |&lt;=[6][8]=&gt;| | agent.py (LiveKit Agents)  | |          | /responses (LLM)     |
 | + agent dispatch |          | |                            | |          | /embeddings          |
 +------------------+          | | [5] bind: tier -&gt; model    | |          +----------------------+
-                              | | [6] STT -&gt; LLM -&gt; TTS      | |
-                              | | [7] tools: semantic_search | |          +----------------------+
-                              | |            record_lookup   | |--[5]----&gt;| Lakebase Postgres    |
-                              | | [8] publish evidence       | |--[7]----&gt;| customers, records   |
-                              | | [9] flush OTLP spans       | |          | Lakebase Search ANN  |
+                              | |                            | |
++------------------+          | | [6] STT -&gt; LLM -&gt; TTS      | |          +----------------------+
+| Deepgram         |&lt;===[6]==&gt;| | [6] voice mode: AI Decide  | |--[6]----&gt;| Databricks AI Decide |
+| STT nova-3       |          | |    standard  -&gt; Deepgram   | |          | enter / exit / none  |
+| TTS aura-2       |          | |    halloween -&gt; ElevenLabs | |          | (or a Gateway model) |
 +------------------+          | |                            | |          +----------------------+
-| Deepgram         |&lt;===[6]==&gt;| |                            | |
-| STT nova-3       |          | |                            | |          +----------------------+
-| TTS aura-2       |          | |                            | |--[9]----&gt;| Unity Catalog table  |
-+------------------+          | +----------------------------+ |          | -&gt; MLflow traces     |
-                              | start_app.py boots both tiers  |          +----------------------+
+                              | | [7] tools: semantic_search | |
++------------------+          | |            record_lookup   | |          +----------------------+
+| ElevenLabs       |&lt;===[6]==&gt;| |                            | |--[5]----&gt;| Lakebase Postgres    |
+| TTS eleven_v3    |          | | [8] publish evidence       | |--[7]----&gt;| customers, records   |
+| (Halloween only) |          | |                            | |          | Lakebase Search ANN  |
++------------------+          | | [9] flush OTLP spans       | |          +----------------------+
+                              | |                            | |
+                              | |                            | |          +----------------------+
+                              | |                            | |--[9]----&gt;| Unity Catalog table  |
+                              | |                            | |          | -&gt; MLflow traces     |
+                              | +----------------------------+ |          +----------------------+
+                              | start_app.py boots both tiers  |
                               +--------------------------------+
 
 [0] Before any call - generate a world (studio "Generate" step):
 
     Browser --POST /api/generate--&gt; Web tier --draft + embed--&gt; Unity Gateway
                                        |
-                                       +--write in 1 txn (data_generation_id)--&gt; Lakebase Postgres</pre>
+                                       +--write in 1 txn (data_generation_id)--&gt; Lakebase Postgres
+
+[6] One caller turn, voice-mode path (AI Decide runs beside the LLM, never inside it):
+
+    STT final transcript --&gt; AI Decide starts in the background (enter / exit / none)
+    end of turn ----------&gt; a cue, or already in Halloween mode? wait up to 0.8 s for the answer
+         |
+         +-- in time ---------&gt; policy says switch --&gt; SAME-TURN: this reply is in the new voice
+         |
+         +-- late or failed --&gt; an explicit command in the words? the rule-based check switches
+                                SAME-TURN as well. Otherwise this reply uses the current voice
+                                and, if the answer was only late, when it lands:
+                                |-- policy says switch, no newer turn ended --&gt; ANNOUNCED switch
+                                '-- a newer turn already ended ---------------&gt; dropped</pre>
     <ol class="steps-list" start="0">
       <li><b>Generate a world.</b> Name a fictional company, a role and a system prompt. The generator drafts documents, customers and records through Unity Gateway, embeds them, and writes them to Lakebase in one transaction under a fresh <span class="mono">data_generation_id</span>. Indexes are <a href="https://www.databricks.com/blog/lakebase-search-state-art-full-text-and-vector-search-postgres">Lakebase Search</a>: <span class="mono">lakebase_ann</span> (cosine ANN via <span class="mono">lakebase_vector</span>) and <span class="mono">lakebase_bm25</span> (BM25 via <span class="mono">lakebase_text</span>).</li>
       <li><b>Load the studio.</b> The browser fetches the studio from the web tier and lists the worlds stored in Lakebase.</li>
       <li><b>Start a call.</b> The web tier mints a short-lived LiveKit token (<span class="mono">GET /api/token</span>) that carries <span class="mono">data_generation_id</span> and <span class="mono">customer_id</span>, and dispatches the agent into a fresh room.</li>
       <li><b>Join the room.</b> The browser connects to LiveKit Cloud over WebRTC with that token.</li>
       <li><b>Dispatch the agent.</b> LiveKit hands the job to the agent worker, which stays registered as <span class="mono">ug-agent</span> over a WebSocket.</li>
-      <li><b>Bind and route.</b> The agent worker looks up the caller's tier in Lakebase (never from speech), and <span class="mono">route_for(tier)</span> picks the model. The model never sees the tier.</li>
-      <li><b>Talk.</b> Deepgram STT → the routed LLM through the gateway's Responses API → Deepgram TTS.</li>
+      <li><b>Bind and route.</b> The agent worker looks up the caller's tier in Lakebase (never from speech), and <span class="mono">route_for(tier)</span> picks the model from the <span class="mono">UG_MODEL_*</span> map. That choice is app logic: Unity Gateway only serves the model it names. The model never sees the tier.</li>
+      <li><b>Talk.</b> Deepgram STT (nova-3) turns speech into text and the routed LLM answers through the gateway's Responses API. A TTS voice speaks the reply: Deepgram (aura-2) in the standard voice, ElevenLabs (<span class="mono">eleven_v3_conversational</span>, with inline expressive tags) once the call is in Halloween mode, or a darker Deepgram voice if ElevenLabs isn't configured. Which voice applies is decided on every caller turn, outside the LLM: Databricks AI Decide classifies what the caller wants (<span class="mono">enter</span>, <span class="mono">exit</span> or <span class="mono">none</span>) and a deterministic policy applies it, with at most one change per turn and an explicit exit always winning. <span class="mono">UG_DECIDE_ENGINE=uaig_chat</span> swaps in a Unity Gateway chat model as the classifier.</li>
       <li><b>Ground.</b> <span class="mono">semantic_search</span> is <a href="https://www.databricks.com/blog/lakebase-search-state-art-full-text-and-vector-search-postgres">Lakebase Search</a> ANN (<span class="mono">ORDER BY embedding &lt;=&gt; $q</span> on the <span class="mono">lakebase_ann</span> index), with the question embedded through the gateway first; <span class="mono">record_lookup</span> is plain SQL and only returns the caller's own records. Both tools are scoped to the bound dataset.</li>
-      <li><b>Show.</b> PII-free evidence (routing decision, retrieval hits, token usage) streams to the UI over the LiveKit data channel.</li>
-      <li><b>Trace.</b> The spans flush over OTLP into a Unity Catalog table, where they read as MLflow traces.</li>
+      <li><b>Show.</b> PII-free evidence (routing decision, retrieval hits, token usage, voice mode) streams to the UI over the LiveKit data channel, and the studio renders it as the Choice / Control / Context / Costs pillars. The voice mode shows on the Control pillar as a live &ldquo;Voice mode · AI Decide&rdquo; row.</li>
+      <li><b>Trace.</b> The spans flush over OTLP into a Unity Catalog table, where they read as MLflow traces. Each voice-mode change adds a <span class="mono">ug.ai_decide</span> span, and the root span carries <span class="mono">ug.voice_mode</span>, <span class="mono">ug.voice_mode_transitions</span>, <span class="mono">ug.voice_degraded</span>, <span class="mono">ug.decide_engine</span> and <span class="mono">ug.expressive_tags</span>.</li>
     </ol>
   </section>
 
   <!-- ===== GOVERNANCE LEDGER ===== -->
   <section class="gov" aria-labelledby="govH">
     <h2 class="gov-h" id="govH">What "governed" guarantees</h2>
-    <p class="gov-sub">Four invariants hold on every call, enforced by the tools and the token, never by the conversation.</p>
+    <p class="gov-sub">Six guarantees hold on every call, enforced by code, the tools and the token, never by the conversation.</p>
 
     <div class="gov-ledger">
       <div class="gov-row" data-p="control">
@@ -657,7 +797,7 @@
         </span>
         <div class="gov-body">
           <b>Tier comes from a governed lookup</b>
-          <p>The caller's tier is read from Lakebase via <span class="mono">read_loyalty_context</span> and drives routing at the gateway. The caller is never told or asked their tier, and it never comes from anything they say.</p>
+          <p>The caller's tier is read from Lakebase via <span class="mono">read_loyalty_context</span> and picks the model inside the agent, with <span class="mono">route_for(tier)</span> over the <span class="mono">UG_MODEL_*</span> map. The gateway only serves the model it is asked for. The caller is never told or asked their tier, and it never comes from anything they say.</p>
         </div>
       </div>
 
@@ -690,6 +830,26 @@
           <p>The short-TTL LiveKit token embeds only <span class="mono">{data_generation_id, customer_id}</span>: identifiers, not identity. Token usage is metered per turn for the Costs pillar, so no caller name ever rides the wire.</p>
         </div>
       </div>
+
+      <div class="gov-row" data-p="control">
+        <span class="gov-ic" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2.4"/><circle cx="5.5" cy="19" r="2.4"/><circle cx="18.5" cy="19" r="2.4"/><path d="M12 7.4v4.4M12 11.8L6.8 16.8M12 11.8l5.2 5"/></svg>
+        </span>
+        <div class="gov-body">
+          <b>AI Decide picks the voice, never the treatment</b>
+          <p>Voice mode is decided every turn outside the conversational LLM, and it never changes the routed model, the directives or escalation (G9). AI Decide sees only the caller's words, the agent's previous line and the current mode: never the tier, name, customer id, dataset prompt or retrieved documents (G10). A deterministic policy makes at most one change per turn, and an explicit exit is always honored (G12).</p>
+        </div>
+      </div>
+
+      <div class="gov-row" data-p="control">
+        <span class="gov-ic" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5l7 3v5c0 4.4-3 7.6-7 9-4-1.4-7-4.6-7-9v-5z"/><path d="M9 12.2h6"/></svg>
+        </span>
+        <div class="gov-body">
+          <b>The persona can't break the rules</b>
+          <p>The spooky persona sits before the governance block, and facts are spoken exactly as the tools return them (G11). Expressive tags such as <span class="mono">[whispers]</span> are performed by the voice, never read aloud and never shown in the transcript (G13). Every mode change is a <span class="mono">ug.ai_decide</span> span and a live row on the Control pillar.</p>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -702,7 +862,8 @@
       <b>Two writes, then read-only forever.</b> One time per world, the studio drafts synthetic
       documents, customers, and records through the gateway and embeds them into Lakebase
       (<span class="mono">schema ug</span>) with FMAPI. After that, every path a live call touches
-      (routing, retrieval, tier lookup) only reads.
+      (routing, retrieval, tier lookup) only reads, and the voice mode is per-call state that is
+      never written to Lakebase.
     </p>
   </div>
 
@@ -794,19 +955,23 @@
       { opacity: 1, y: 0, duration: dur, stagger, delay, ease: "power3.out", clearProps: "transform,opacity" });
   }
 
-  /* The reserved lock-in accent (a gentle overshoot) — the governed route for this call. */
+  /* The reserved lock-in accent (a gentle overshoot) — the model the app picked for this call.
+     svgOrigin is the centre of the ring (#routeChosen) so it scales in place. */
   function lockRoute() {
     if (!HAS_GSAP) return;
     const chosen = $("#routeChosen");
     if (!chosen) return;
+    const bb = chosen.getBBox();
     g.fromTo(chosen,
       { opacity: 0, scale: 0.92 },
-      { opacity: 1, scale: 1, duration: 0.55, delay: 1.15, ease: "back.out(2)", svgOrigin: "1092 255", clearProps: "transform" });
+      { opacity: 1, scale: 1, duration: 0.55, delay: 1.15, ease: "back.out(2)",
+        svgOrigin: (bb.x + bb.width / 2) + " " + (bb.y + bb.height / 2), clearProps: "transform" });
   }
 
   /* One looping signal packet down the live call spine: caller -> studio -> LiveKit ->
-     STT -> LLM -> MCP -> gateway. Rides the authored #spinePath via MotionPathPlugin so
-     the motion tracks the drawn edges instead of cutting across the boxes. */
+     STT -> voice mode -> LLM turn -> the model the app picked at the gateway. Rides the
+     authored #spinePath via MotionPathPlugin so the motion tracks the drawn edges instead of
+     cutting across the boxes. */
   function startFlowPacket() {
     if (!HAS_GSAP || !window.MotionPathPlugin) return;
     const pk = $("#flowPacket");
