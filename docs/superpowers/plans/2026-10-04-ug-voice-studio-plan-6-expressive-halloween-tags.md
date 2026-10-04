@@ -32,7 +32,7 @@ The input classes most likely to bite, each with the test that pins it:
 1. **The model writes a cue with the wrong case or spacing** (`[Whispers]`, `[ building   tension ]`): it must be performed as the canonical tag, never silently lost, never leaking brackets. T2: `test_case_and_spacing_from_the_model_are_forgiven`, `test_inner_spacing_of_a_multi_word_tag_is_collapsed`.
 2. **The model puts a cue inside a fact** (`Order 48[sighs]213`): the audio would pause mid-number. T3 writes the rule and the example around it; T4: `test_measure_flags_a_cue_that_splits_a_fact`.
 3. **A caller passes tags the palette does not know** (older tests, a custom vocabulary): listed under "Other cues", never a crash. T3: `test_tags_the_palette_does_not_know_are_listed_as_other_cues`.
-4. **The vocabulary is empty or lacks a whole category** (non-v3 model, fallback voice, or the bake-off removed a group): no cue section, or no worked example, never an empty heading. T3: `test_no_example_when_the_voice_lacks_a_whole_category`, `test_standard_and_fallback_prompts_carry_no_cue_section_and_no_brackets`.
+4. **The vocabulary is empty, tiny, or lacks a whole category** (non-v3 model, fallback voice, or the bake-off removed a group): no cue section at all when empty; worked examples borrow cues from other groups, never from outside the vocabulary, and disappear below three cues; never an empty heading. T3: `test_examples_borrow_cues_when_a_category_is_missing_but_never_leave_the_vocabulary`, `test_no_example_with_fewer_than_three_cues`, `test_standard_and_fallback_prompts_carry_no_cue_section_and_no_brackets`.
 5. **A bracketed stage direction or an unknown cue reaches the TTS stream** (`[whispers menacingly into the microphone]`, `[explosion]`): dropped from audio and transcript. Existing G13 tests stay green; T2: `test_canonicalising_never_widens_what_can_be_spoken`; T4: `test_measure_counts_stage_directions`.
 
 ---
@@ -930,7 +930,7 @@ If ` M uv.lock` appears, `git restore -- uv.lock`.
 
 **Interfaces:**
 - Consumes (T2): `from src.expressive_palette import GROUP_HINTS, OTHER, OTHER_HINT, grouped` and `PALETTE`, `flatten` in tests.
-- Produces (for T4): `build_instructions(..., expressive_tags=...)` unchanged in signature; its cue section now contains, in order: the header `--- Expressive cues ---`, one line per group `"{GROUP_HINTS[category]}: [tag] [tag] ..."` (or `"Other cues: ..."`), the line `Rules for cues:` and its bullets, then (only when the voice has a tag in each of `volume`, `emotion` and `pacing`) two lines beginning `Example of the delivery` and `Example of a story beat`. `ON_NOTE`, `OFF_NOTE`, `ANNOUNCE_*`, `BRIDGE_ON`, `VOICE_REQUESTS` are **unchanged**: the steady instructions already carry the cue rules, and both notes end "Follow the rules above."
+- Produces (for T4): `build_instructions(..., expressive_tags=...)` unchanged in signature; its cue section now contains, in order: the header `--- Expressive cues ---`, one line per group `"{GROUP_HINTS[category]}: [tag] [tag] ..."` (or `"Other cues: ..."`), the line `Rules for cues:` and its bullets, then (whenever the voice has at least three cues) two lines beginning `Example of the delivery` and `Example of a story beat`. `ON_NOTE`, `OFF_NOTE`, `ANNOUNCE_*`, `BRIDGE_ON`, `VOICE_REQUESTS` are **unchanged**: the steady instructions already carry the cue rules, and both notes end "Follow the rules above."
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -989,9 +989,16 @@ def test_the_worked_examples_use_only_cues_the_voice_has():
     assert used and used <= vocab
 
 
-def test_no_example_when_the_voice_lacks_a_whole_category():
-    only_volume = tuple(PALETTE.get("volume", ())) or (flatten()[0],)
-    assert "Example of the delivery" not in _cues(only_volume)
+def test_examples_borrow_cues_when_a_category_is_missing_but_never_leave_the_vocabulary():
+    three = flatten()[:3]                      # typically all one category: the other slots must borrow
+    lines = [l for l in _cues(three).splitlines()
+             if l.startswith(("Example of the delivery", "Example of a story beat"))]
+    assert len(lines) == 2
+    assert {c for l in lines for c in re.findall(r"\[([^\]]+)\]", l)} <= set(three)
+
+
+def test_no_example_with_fewer_than_three_cues():
+    assert "Example of" not in _cues(flatten()[:2])
 
 
 def test_standard_and_fallback_prompts_carry_no_cue_section_and_no_brackets():
@@ -1061,8 +1068,9 @@ _CUE_RULES = (
     "- To build suspense, use short sentences, a cue, a pause (…), then the reveal."
 )
 
-# The worked examples teach only cues the voice really has: per slot, the first cue from a preference list that the
-# voice performs, else the first cue of that group; if any slot is empty there is no example.
+# The worked examples teach only cues the voice really has. Each slot takes the first cue, in this order, that is not
+# already used: a preferred cue the voice performs, else a cue of the slot's group, else any cue it has. With fewer
+# than three cues there is no example.
 _EXAMPLE_SLOTS = (
     ("volume", ("whispers", "whisper", "soft")),
     ("emotion", ("mischievously", "menacing", "sinister", "dismissive")),
@@ -1072,9 +1080,11 @@ _EXAMPLE_SLOTS = (
 
 def _examples(available: frozenset[str], groups: list[tuple[str, tuple[str, ...]]]) -> list[str]:
     by_group = dict(groups)
-    picks = []
+    everything = [t for _, members in groups for t in members]
+    picks: list[str] = []
     for category, preferred in _EXAMPLE_SLOTS:
-        tag = next((t for t in preferred if t in available), None) or next(iter(by_group.get(category, ())), None)
+        options = [t for t in preferred if t in available] + list(by_group.get(category, ())) + everything
+        tag = next((t for t in options if t not in picks), None)
         if tag is None:
             return []
         picks.append(tag)
@@ -1160,9 +1170,9 @@ ORDER = chk.SCENARIOS[2]            # the "order" scenario, with facts
 
 def test_measure_counts_cues_words_and_distinct_cues():
     m = chk.measure("[whispers] The door opened. [building tension] Nobody was there.", VOCAB)
-    assert (m.cues, m.words) == (2, 7)
+    assert (m.cues, m.words) == (2, 6)
     assert m.distinct == {"whispers", "building tension"}
-    assert m.per_100 == pytest.approx(100 * 2 / 7)
+    assert m.per_100 == pytest.approx(100 * 2 / 6)
 
 
 def test_measure_separates_exact_spelling_from_canonicalised_spelling():
