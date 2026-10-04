@@ -1,4 +1,4 @@
-"""FMAPI embeddings over UAIG (bring-your-own embeddings for lakebase_ann).
+"""FMAPI embeddings over Unity Gateway (bring-your-own embeddings for lakebase_ann).
 
 EMBED_MODEL / EMBED_DIM verified in docs/discovery/embeddings-and-index-contract.md
 (databricks-gte-large-en, dim 1024).

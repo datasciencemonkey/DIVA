@@ -40,7 +40,7 @@ async def entrypoint(ctx: agents.JobContext):
 
     session = AgentSession(
         stt=deepgram.STT(model="nova-3"),
-        llm=openai.responses.LLM(              # Databricks Foundation Model over the AI Gateway
+        llm=openai.responses.LLM(              # Databricks Foundation Model over the Unity Gateway
             model=os.environ["LLM_MODEL"],
             api_key=os.environ["DATABRICKS_TOKEN"],
             base_url=f'{os.environ["DATABRICKS_HOST"]}/ai-gateway/openai/v1',

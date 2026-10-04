@@ -1,4 +1,4 @@
-"""Synthetic dataset generator (spec §9). Dogfoods UAIG (chat) + FMAPI (embeddings).
+"""Synthetic dataset generator (spec §9). Dogfoods Unity Gateway (chat) + FMAPI (embeddings).
 
 The generator is the only writer in v1; the agent's runtime tools stay read-only.
 `build_rows` is pure (unit-tested); `generate_dataset` does the live I/O.
@@ -80,7 +80,7 @@ async def generate_dataset(
     pool,
     progress: Callable[[str, dict], None] | None = None,
 ) -> str:
-    """Draft (UAIG) -> build rows -> embed (FMAPI) -> write in one transaction ->
+    """Draft (Unity Gateway) -> build rows -> embed (FMAPI) -> write in one transaction ->
     register. Transactional: a failure leaves datasets.status='failed', never partial.
 
     ``progress`` is an optional narration hook invoked with (stage, detail) as the

@@ -35,7 +35,7 @@ os.environ.pop("DATABRICKS_CLIENT_ID", None)
 os.environ.pop("DATABRICKS_CLIENT_SECRET", None)
 
 # The runtime may inject DATABRICKS_HOST without a scheme; the agent + gateway
-# build URLs from it (AI gateway base, OTLP endpoint).
+# build URLs from it (Unity Gateway base, OTLP endpoint).
 _host = os.environ.get("DATABRICKS_HOST", "")
 if _host and not _host.startswith("http"):
     os.environ["DATABRICKS_HOST"] = f"https://{_host}"

@@ -67,7 +67,7 @@ databricks secrets put-acl my-voice-agent "$SP" READ --profile "$PROFILE"
 
 ## Auth note: PAT vs service principal
 
-`start_app.py` pops `DATABRICKS_CLIENT_ID`/`DATABRICKS_CLIENT_SECRET` so the injected **PAT** (`DATABRICKS_TOKEN`) is the SDK's single auth method — the app then acts as your user everywhere (Lakebase, AI Gateway, LLM), matching local dev and avoiding SP-permission gaps. Apps inject SP OAuth too, and the SDK errors on ambiguous auth if both are present. (A fully SP-based setup is possible but requires granting the SP Lakebase + gateway access.)
+`start_app.py` pops `DATABRICKS_CLIENT_ID`/`DATABRICKS_CLIENT_SECRET` so the injected **PAT** (`DATABRICKS_TOKEN`) is the SDK's single auth method — the app then acts as your user everywhere (Lakebase, Unity Gateway, LLM), matching local dev and avoiding SP-permission gaps. Apps inject SP OAuth too, and the SDK errors on ambiguous auth if both are present. (A fully SP-based setup is possible but requires granting the SP Lakebase + gateway access.)
 
 ## Upload + deploy
 

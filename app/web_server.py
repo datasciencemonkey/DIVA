@@ -320,7 +320,7 @@ def _ensure_guardrail(prompt: str) -> str:
 
 
 def _draft_system_prompt(company: str, role: str) -> str:
-    """Draft a company-tailored voice-agent system prompt via UAIG, governance-enforced.
+    """Draft a company-tailored voice-agent system prompt via Unity Gateway, governance-enforced.
     Fail-soft: any gateway error or empty draft falls back to a deterministic template."""
     try:
         resp = complete_json(

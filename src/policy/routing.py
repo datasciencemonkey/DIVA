@@ -21,7 +21,7 @@ _ENV_BY_TIER = {
 @dataclass(frozen=True)
 class RoutingDecision:
     tier: str          # governance signal — used to build directives, never sent to the LLM
-    model: str         # UAIG-served conversational model for this session
+    model: str         # Unity Gateway-served conversational model for this session
     directives: dict   # LLM-safe behavior flags only (no tier/loyalty/spend)
 
 
