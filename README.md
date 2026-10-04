@@ -28,20 +28,66 @@ patterns without re-learning the traps. See **[Agent skill](#agent-skill)** belo
 
 ## How a call works
 
-1. **Generate a world.** Name a fictional company, a role and a system prompt. The generator drafts documents,
+Numbers mark the order things happen: step 0 runs once per world, steps 1–4 establish the connection, and 5–9
+run on every call. The full walkthrough is in [`docs/architecture.md`](docs/architecture.md).
+
+```text
+                              +- Databricks App (1 container) -+
++------------------+          | +----------------------------+ |
+| Browser          |--[1][2]->| | Web / token tier           | |
+| studio UI        |<---JWT---| | web_server.py              | |
+| livekit-client   |          | | GET /   GET /api/token     | |
++------------------+          | +----------------------------+ |
+    | [3]     ^ [8]           |                                |
+    v         |               |                                |            Databricks workspace
++------------------+          | +----------------------------+ |          +----------------------+
+| LiveKit Cloud    |--[4]---->| | Agent worker               | |-[6][7]-->| Unity AI Gateway     |
+| WebRTC SFU       |<=[6][8]=>| | agent.py (LiveKit Agents)  | |          | /responses (LLM)     |
+| + agent dispatch |          | |                            | |          | /embeddings          |
++------------------+          | | [5] bind: tier -> model    | |          +----------------------+
+                              | | [6] STT -> LLM -> TTS      | |
+                              | | [7] tools: semantic_search | |          +----------------------+
+                              | |            record_lookup   | |--[5]---->| Lakebase Postgres    |
+                              | | [8] publish evidence       | |--[7]---->| customers, records   |
+                              | | [9] flush OTLP spans       | |          | Lakebase Search ANN  |
++------------------+          | |                            | |          +----------------------+
+| Deepgram         |<===[6]==>| |                            | |
+| STT nova-3       |          | |                            | |          +----------------------+
+| TTS aura-2       |          | |                            | |--[9]---->| Unity Catalog table  |
++------------------+          | +----------------------------+ |          | -> MLflow traces     |
+                              | start_app.py boots both tiers  |          +----------------------+
+                              +--------------------------------+
+
+[0] Before any call - generate a world (studio "Generate" step):
+
+    Browser --POST /api/generate--> Web tier --draft + embed--> Unity AI Gateway
+                                       |
+                                       +--write in 1 txn (data_generation_id)--> Lakebase Postgres
+```
+
+0. **Generate a world.** Name a fictional company, a role and a system prompt. The generator drafts documents,
    customers and records through Unity AI Gateway, embeds them, and writes them to Lakebase in one transaction
-   under a fresh `data_generation_id`. Indexes are [Lakebase Search](https://www.databricks.com/blog/lakebase-search-state-art-full-text-and-vector-search-postgres):
+   under a fresh `data_generation_id`. Indexes are
+   [Lakebase Search](https://www.databricks.com/blog/lakebase-search-state-art-full-text-and-vector-search-postgres):
    `lakebase_ann` (cosine ANN via `lakebase_vector`) and `lakebase_bm25` (BM25 via `lakebase_text`).
-2. **Start a call.** The web tier mints a short-lived LiveKit token that carries `data_generation_id` and
-   `customer_id`, and dispatches the agent into a fresh room.
-3. **Bind and route.** The agent worker looks up the caller's tier in Lakebase (never from speech), and
+1. **Load the studio.** The browser fetches the studio from the web tier and lists the worlds stored in
+   Lakebase.
+2. **Start a call.** The web tier mints a short-lived LiveKit token (`GET /api/token`) that carries
+   `data_generation_id` and `customer_id`, and dispatches the agent into a fresh room.
+3. **Join the room.** The browser connects to LiveKit Cloud over WebRTC with that token.
+4. **Dispatch the agent.** LiveKit hands the job to the agent worker, which stays registered as `ug-agent`
+   over a WebSocket.
+5. **Bind and route.** The agent worker looks up the caller's tier in Lakebase (never from speech), and
    `route_for(tier)` picks the model. The model never sees the tier.
-4. **Talk.** Deepgram STT → the routed LLM through the gateway's Responses API → Deepgram TTS. `semantic_search`
-   is [Lakebase Search](https://www.databricks.com/blog/lakebase-search-state-art-full-text-and-vector-search-postgres)
-   ANN (`ORDER BY embedding <=> $q` on the `lakebase_ann` index); `record_lookup` is plain SQL
-   and only returns the caller's own records. Both tools are scoped to the bound dataset.
-5. **Show and trace.** PII-free evidence (routing decision, retrieval hits, token usage) streams to the UI, and
-   the spans flush over OTLP into a Unity Catalog table.
+6. **Talk.** Deepgram STT → the routed LLM through the gateway's Responses API → Deepgram TTS.
+7. **Ground.** `semantic_search` is
+   [Lakebase Search](https://www.databricks.com/blog/lakebase-search-state-art-full-text-and-vector-search-postgres)
+   ANN (`ORDER BY embedding <=> $q` on the `lakebase_ann` index), with the question embedded through the
+   gateway first; `record_lookup` is plain SQL and only returns the caller's own records. Both tools are
+   scoped to the bound dataset.
+8. **Show.** PII-free evidence (routing decision, retrieval hits, token usage) streams to the UI over the
+   LiveKit data channel.
+9. **Trace.** The spans flush over OTLP into a Unity Catalog table, where they read as MLflow traces.
 
 ## What's inside
 
