@@ -225,6 +225,21 @@
   .gov-body p { color: var(--text-mid); font-size: .9rem; line-height: 1.5; margin-top: 4px; }
   .gov-body .mono { color: var(--text-hi); font-size: .86em; }
 
+  /* ===== STEP BY STEP: the same flow as plain text, numbered in call order ===== */
+  .steps { margin: clamp(30px, 4.5vw, 52px) 0 0; }
+  .steps-pre {
+    margin-top: 16px; padding: 20px 22px;
+    border: 1px solid var(--hairline); border-radius: var(--r-lg);
+    background: var(--surface); color: var(--text-hi);
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.45;
+    white-space: pre; overflow-x: auto;
+  }
+  .steps-pre:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  .steps-list { margin: 18px 0 0; padding-left: 1.6em; max-width: 76ch; color: var(--text-mid); font-size: .9rem; line-height: 1.55; }
+  .steps-list li + li { margin-top: 6px; }
+  .steps-list b { color: var(--text-hi); font-weight: 600; }
+  .steps-list .mono { color: var(--text-hi); font-size: .86em; }
+
   /* ===== FOOTER NOTE ===== */
   .arch-foot {
     margin: clamp(28px, 4vw, 44px) 0 0;
@@ -580,6 +595,55 @@
       Drag to explore the full flow
     </p>
   </div>
+
+  <!-- ===== STEP BY STEP: plain-text diagram, numbered in call order ===== -->
+  <section class="steps" aria-labelledby="stepsH">
+    <h2 class="gov-h" id="stepsH">Step by step: how a call connects</h2>
+    <p class="gov-sub">Numbers mark the order things happen: step 0 runs once per world, steps 1–4 establish the connection, and 5–9 run on every call.</p>
+    <pre class="steps-pre" tabindex="0" aria-label="Plain-text architecture diagram">                              +- Databricks App (1 container) -+
++------------------+          | +----------------------------+ |
+| Browser          |--[1][2]-&gt;| | Web / token tier           | |
+| studio UI        |&lt;---JWT---| | web_server.py              | |
+| livekit-client   |          | | GET /   GET /api/token     | |
++------------------+          | +----------------------------+ |
+    | [3]     ^ [8]           |                                |
+    v         |               |                                |            Databricks workspace
++------------------+          | +----------------------------+ |          +----------------------+
+| LiveKit Cloud    |--[4]----&gt;| | Agent worker               | |-[6][7]--&gt;| Unity AI Gateway     |
+| WebRTC SFU       |&lt;=[6][8]=&gt;| | agent.py (LiveKit Agents)  | |          | /responses (LLM)     |
+| + agent dispatch |          | |                            | |          | /embeddings          |
++------------------+          | | [5] bind: tier -&gt; model    | |          +----------------------+
+                              | | [6] STT -&gt; LLM -&gt; TTS      | |
+                              | | [7] tools: semantic_search | |          +----------------------+
+                              | |            record_lookup   | |--[5]----&gt;| Lakebase Postgres    |
+                              | | [8] publish evidence       | |--[7]----&gt;| customers, records   |
+                              | | [9] flush OTLP spans       | |          | Lakebase Search ANN  |
++------------------+          | |                            | |          +----------------------+
+| Deepgram         |&lt;===[6]==&gt;| |                            | |
+| STT nova-3       |          | |                            | |          +----------------------+
+| TTS aura-2       |          | |                            | |--[9]----&gt;| Unity Catalog table  |
++------------------+          | +----------------------------+ |          | -&gt; MLflow traces     |
+                              | start_app.py boots both tiers  |          +----------------------+
+                              +--------------------------------+
+
+[0] Before any call - generate a world (studio "Generate" step):
+
+    Browser --POST /api/generate--&gt; Web tier --draft + embed--&gt; Unity AI Gateway
+                                       |
+                                       +--write in 1 txn (data_generation_id)--&gt; Lakebase Postgres</pre>
+    <ol class="steps-list" start="0">
+      <li><b>Generate a world.</b> Name a fictional company, a role and a system prompt. The generator drafts documents, customers and records through Unity AI Gateway, embeds them, and writes them to Lakebase in one transaction under a fresh <span class="mono">data_generation_id</span>. Indexes are <a href="https://www.databricks.com/blog/lakebase-search-state-art-full-text-and-vector-search-postgres">Lakebase Search</a>: <span class="mono">lakebase_ann</span> (cosine ANN via <span class="mono">lakebase_vector</span>) and <span class="mono">lakebase_bm25</span> (BM25 via <span class="mono">lakebase_text</span>).</li>
+      <li><b>Load the studio.</b> The browser fetches the studio from the web tier and lists the worlds stored in Lakebase.</li>
+      <li><b>Start a call.</b> The web tier mints a short-lived LiveKit token (<span class="mono">GET /api/token</span>) that carries <span class="mono">data_generation_id</span> and <span class="mono">customer_id</span>, and dispatches the agent into a fresh room.</li>
+      <li><b>Join the room.</b> The browser connects to LiveKit Cloud over WebRTC with that token.</li>
+      <li><b>Dispatch the agent.</b> LiveKit hands the job to the agent worker, which stays registered as <span class="mono">ug-agent</span> over a WebSocket.</li>
+      <li><b>Bind and route.</b> The agent worker looks up the caller's tier in Lakebase (never from speech), and <span class="mono">route_for(tier)</span> picks the model. The model never sees the tier.</li>
+      <li><b>Talk.</b> Deepgram STT → the routed LLM through the gateway's Responses API → Deepgram TTS.</li>
+      <li><b>Ground.</b> <span class="mono">semantic_search</span> is <a href="https://www.databricks.com/blog/lakebase-search-state-art-full-text-and-vector-search-postgres">Lakebase Search</a> ANN (<span class="mono">ORDER BY embedding &lt;=&gt; $q</span> on the <span class="mono">lakebase_ann</span> index), with the question embedded through the gateway first; <span class="mono">record_lookup</span> is plain SQL and only returns the caller's own records. Both tools are scoped to the bound dataset.</li>
+      <li><b>Show.</b> PII-free evidence (routing decision, retrieval hits, token usage) streams to the UI over the LiveKit data channel.</li>
+      <li><b>Trace.</b> The spans flush over OTLP into a Unity Catalog table, where they read as MLflow traces.</li>
+    </ol>
+  </section>
 
   <!-- ===== GOVERNANCE LEDGER ===== -->
   <section class="gov" aria-labelledby="govH">
