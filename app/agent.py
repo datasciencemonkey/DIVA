@@ -25,6 +25,8 @@ from dotenv import load_dotenv
 
 load_dotenv(_REPO_ROOT / ".env.local", override=False)
 
+import httpx
+from openai.types import Reasoning
 from livekit import agents
 from livekit.agents import APIConnectOptions, AgentServer, AgentSession
 from livekit.agents.telemetry import set_tracer_provider
@@ -277,6 +279,12 @@ async def entrypoint(ctx: agents.JobContext):
             base_url=f"{host}/ai-gateway/openai/v1",
             use_websocket=False,
             store=False,
+            # Keep voice-agent latency down: cap reasoning effort. These system.ai.gpt-5/6 models reason
+            # server-side, and the plugin doesn't auto-set effort for non-openai model names, so set it.
+            reasoning=Reasoning(effort="low"),
+            # Long replies (e.g. "tell me a scary story") blew past the plugin's default read
+            # timeout -> httpx.ReadTimeout -> the turn died after 4 retries. Give generations room.
+            timeout=httpx.Timeout(connect=10.0, read=120.0, write=15.0, pool=10.0),
         ),
         tts=deepgram.TTS(model="aura-2-andromeda-en"),
         tools=build_tools(pool, session_ctx, evidence_sink=evidence_sink),
