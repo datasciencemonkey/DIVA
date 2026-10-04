@@ -1,0 +1,19 @@
+# Direct deps for the LiveKit worker venv. Recompile PINNED for the Apps
+# Python (3.11) before deploy — a 3.12 lock pins numpy 2.5.x which won't install:
+#   uv pip compile agent-requirements.in --python-version 3.11 -o agent-requirements.txt
+
+psycopg[binary]==3.3.4
+psycopg-pool==3.3.1
+databricks-sdk==0.133.0
+python-dotenv==1.2.2
+requests==2.34.2
+livekit==1.1.5
+livekit-agents==1.5.6
+livekit-api==1.1.0
+livekit-plugins-openai==1.5.6
+livekit-plugins-deepgram==1.5.6
+livekit-plugins-silero==1.5.6
+httpx==0.28.1
+httpx-sse==0.4.3
+opentelemetry-sdk==1.39.1
+opentelemetry-exporter-otlp-proto-http==1.39.1

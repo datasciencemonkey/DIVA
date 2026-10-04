@@ -1,0 +1,536 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="dark light" />
+<title>UAIG Voice Studio</title>
+<meta name="description" content="Governed voice AI, generated live: a Choice / Control / Context / Costs operator console." />
+
+<!-- Apply the persisted theme before first paint so returning presenters never see a flash.
+     Dark is the default; only a stored "light" preference flips the attribute. -->
+<script>
+  (function () {
+    try {
+      if (localStorage.getItem("ug_theme") === "light") {
+        document.documentElement.setAttribute("data-theme", "light");
+      }
+    } catch (e) { /* private mode — stay on the default dark theme */ }
+  })();
+</script>
+
+<!-- Interface type is DM Sans (Google Fonts, variable) with a tuned system fallback so the
+     demo still renders instantly if the network font can't load. Data readouts keep the
+     system monospace stack (see studio.css). GSAP + livekit-client are the only CDN libs. -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400..800;1,9..40,400..800&display=swap" />
+
+<link rel="stylesheet" href="studio.css" />
+</head>
+<body data-stage="configure">
+
+<!-- ambient background: fixed aurora + hairline grid, purely decorative -->
+<div class="bg" aria-hidden="true">
+  <div class="bg-aurora bg-aurora--a"></div>
+  <div class="bg-aurora bg-aurora--b"></div>
+  <div class="bg-aurora bg-aurora--c"></div>
+  <div class="bg-grid"></div>
+  <div class="bg-vignette"></div>
+</div>
+
+<!-- ================= TOP BAR ================= -->
+<header class="topbar">
+  <a class="brand" href="index.html" aria-label="UAIG Voice Studio home">
+    <span class="brand-mark" aria-hidden="true">
+      <svg viewBox="0 0 32 32" width="26" height="26" fill="none">
+        <rect x="1.2" y="1.2" width="29.6" height="29.6" rx="8.5" stroke="currentColor" stroke-width="1.4" opacity=".55"/>
+        <g stroke="currentColor" stroke-width="2.1" stroke-linecap="round">
+          <line x1="9" y1="13" x2="9" y2="19"/>
+          <line x1="13.4" y1="9.5" x2="13.4" y2="22.5"/>
+          <line x1="18" y1="7" x2="18" y2="25"/>
+          <line x1="22.6" y1="11.5" x2="22.6" y2="20.5"/>
+        </g>
+      </svg>
+    </span>
+    <span class="brand-word">UAIG<span class="brand-dim"> Voice Studio</span></span>
+  </a>
+
+  <nav class="stepper" aria-label="Studio progress">
+    <ol>
+      <li class="step" data-step="configure" aria-current="step"><span class="step-l">Configure</span><svg class="step-check" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg></li>
+      <li class="step" data-step="generate"><span class="step-l">Generate</span><svg class="step-check" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg></li>
+      <li class="step" data-step="live"><span class="step-l">Live</span><svg class="step-check" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg></li>
+    </ol>
+  </nav>
+
+  <div class="topbar-right">
+    <a class="topbar-link" href="architecture.html" aria-label="View the architecture diagram">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="2.3"/><circle cx="18" cy="6" r="2.3"/><circle cx="12" cy="18" r="2.3"/><path d="M7.7 7.7l3.1 8.1"/><path d="M16.3 7.7l-3.1 8.1"/><path d="M8.3 6h7.4"/></svg>
+      <span class="tl-label">Architecture</span>
+    </a>
+    <span class="conn-chip" id="connChip" data-state="idle" role="status" aria-live="polite">
+      <span class="conn-dot"></span><span class="conn-label">Not connected</span>
+    </span>
+    <button type="button" class="theme-toggle" id="themeToggle" aria-pressed="false" aria-label="Switch to light theme" title="Switch to light theme">
+      <svg class="ic-sun" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="4"/>
+        <path d="M12 2.5v2.2M12 19.3v2.2M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6"/>
+      </svg>
+      <svg class="ic-moon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M20.5 14.8A8 8 0 0 1 9.2 3.5a7 7 0 1 0 11.3 11.3z"/>
+      </svg>
+    </button>
+  </div>
+</header>
+
+<main class="stage-wrap">
+
+  <!-- ============================================================= -->
+  <!-- STAGE 1 — CONFIGURE                                           -->
+  <!-- ============================================================= -->
+  <section class="stage stage--configure is-active" id="stage-configure" aria-label="Configure">
+    <div class="configure-grid">
+
+      <div class="hero">
+        <h1 class="hero-title" data-anim>
+          Give any brand a voice<br/>that answers <em>only<svg class="em-line draw-svg" viewBox="0 0 100 12" preserveAspectRatio="none" aria-hidden="true"><path d="M3 8.5C28 3.5 72 3.5 97 8.5" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/></svg></em> from what it knows.
+        </h1>
+        <p class="hero-sub" data-anim>
+          Configure an assistant, generate its world of policies, customers and knowledge,
+          then drop into a live governed call, instrumented across four pillars.
+        </p>
+
+        <!-- Focal motif: spoken voice enters, passes a governed checkpoint (shield),
+             and resolves into ONE chosen route among candidates. Authored inline SVG,
+             drawn on load (stroke-dashoffset) with a looping signal packet; renders
+             fully drawn if GSAP is absent or reduced motion is requested. -->
+        <div class="hero-motif" data-anim aria-hidden="true">
+          <svg class="draw-svg" viewBox="0 0 480 168" fill="none" stroke-linecap="round" stroke-linejoin="round">
+            <g class="hm-wave" stroke="currentColor" stroke-width="3">
+              <line x1="16"  y1="76" x2="16"  y2="92"/>
+              <line x1="28"  y1="67" x2="28"  y2="101"/>
+              <line x1="40"  y1="55" x2="40"  y2="113"/>
+              <line x1="52"  y1="63" x2="52"  y2="105"/>
+              <line x1="64"  y1="47" x2="64"  y2="121"/>
+              <line x1="76"  y1="57" x2="76"  y2="111"/>
+              <line x1="88"  y1="43" x2="88"  y2="125"/>
+              <line x1="100" y1="53" x2="100" y2="115"/>
+              <line x1="112" y1="49" x2="112" y2="119"/>
+              <line x1="124" y1="65" x2="124" y2="103"/>
+              <line x1="136" y1="72" x2="136" y2="96"/>
+              <line x1="148" y1="76" x2="148" y2="92"/>
+            </g>
+            <line class="hm-wave" x1="150" y1="84" x2="190" y2="84" stroke="currentColor" stroke-width="2"/>
+            <rect class="hm-gate-fill" x="192" y="54" width="34" height="60" rx="13" fill="currentColor"/>
+            <rect class="hm-gate" x="192" y="54" width="34" height="60" rx="13" stroke="currentColor" stroke-width="2"/>
+            <path class="hm-shield" d="M209 68 l9 3.5 v7 c0 7.5 -4.5 10.5 -9 12.5 c-4.5 -2 -9 -5 -9 -12.5 v-7 z" stroke="currentColor" stroke-width="2"/>
+            <path class="hm-shield" d="M205 85 l3 3 6 -7" stroke="currentColor" stroke-width="2"/>
+            <path class="hm-route" d="M226 84 C 320 84, 350 128, 414 128" stroke="currentColor" stroke-width="2"/>
+            <path class="hm-route" d="M226 84 L 414 84" stroke="currentColor" stroke-width="2"/>
+            <path class="hm-route--active" d="M226 84 C 320 84, 350 40, 414 40" stroke="currentColor" stroke-width="2.4"/>
+            <circle class="hm-node" cx="424" cy="128" r="10" fill="none" stroke="currentColor" stroke-width="2"/>
+            <circle class="hm-node" cx="424" cy="84" r="10" fill="none" stroke="currentColor" stroke-width="2"/>
+            <circle class="hm-node-fill" cx="424" cy="40" r="10" fill="currentColor"/>
+            <circle class="hm-node--active" cx="424" cy="40" r="10" fill="none" stroke="currentColor" stroke-width="2.4"/>
+            <circle class="hm-node--active" cx="424" cy="40" r="3.2" fill="currentColor"/>
+            <circle class="hm-flow" cx="0" cy="0" r="4" fill="currentColor"/>
+          </svg>
+        </div>
+
+        <ul class="pillars-strip" data-anim>
+          <li class="pillar-brand" style="--hue:var(--c-choice)">
+            <span class="pillar-brand-ic" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h9"/><path d="M4 17h5"/><circle cx="16" cy="7" r="3"/><circle cx="12" cy="17" r="3"/><path d="M20 7h0"/></svg>
+            </span>
+            <div><b>Choice</b><span>Every call routes to the right model for its governed tier.</span></div>
+          </li>
+          <li class="pillar-brand" style="--hue:var(--c-control)">
+            <span class="pillar-brand-ic" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+            </span>
+            <div><b>Control</b><span>Tier comes from a governed lookup, never from the conversation.</span></div>
+          </li>
+          <li class="pillar-brand" style="--hue:var(--c-context)">
+            <span class="pillar-brand-ic" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H18a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6.5A2.5 2.5 0 0 1 4 18.5z"/><path d="M8 7h7"/><path d="M8 11h7"/></svg>
+            </span>
+            <div><b>Context</b><span>Answers are grounded in retrieved, read-only knowledge.</span></div>
+          </li>
+          <li class="pillar-brand" style="--hue:var(--c-costs)">
+            <span class="pillar-brand-ic" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5"/><path d="M4 19h16"/><path d="M8 16l3.5-4 3 2.5L20 8"/></svg>
+            </span>
+            <div><b>Costs</b><span>See the tokens and cost projection behind every routing decision.</span></div>
+          </li>
+        </ul>
+      </div>
+
+      <div class="config-card" data-anim>
+        <div class="config-card-head">
+          <h2>Design the assistant</h2>
+          <p>Pick a starting point, then edit anything.</p>
+        </div>
+
+        <div class="presets" id="presets" role="group" aria-label="Preset assistants"></div>
+
+        <form class="config-form" id="configForm" autocomplete="off" novalidate>
+          <div class="field">
+            <label for="fCompany">Company</label>
+            <input id="fCompany" name="company" type="text" placeholder="e.g. Cascade Airlines" required />
+          </div>
+          <div class="field">
+            <label for="fRole">Assistant role</label>
+            <input id="fRole" name="role" type="text" placeholder="e.g. Airline support agent" required />
+          </div>
+          <div class="field">
+            <div class="field-labelrow">
+              <label for="fPrompt">System prompt <span class="field-hint">voice-friendly · answers only from tools</span></label>
+              <button type="button" class="btn-draft" id="btnDraftPrompt" disabled aria-label="Draft the system prompt with AI from the company name" title="Enter a company name first">
+                <svg class="btn-draft-ic" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M12 3.2l1.7 4.9 4.9 1.7-4.9 1.7L12 16.4l-1.7-4.9L5.4 9.8l4.9-1.7z"/>
+                  <path d="M18.5 15.2l.7 2.1 2.1.7-2.1.7-.7 2.1-.7-2.1-2.1-.7 2.1-.7z"/>
+                </svg>
+                <span class="btn-draft-label">Draft with AI</span>
+              </button>
+            </div>
+            <textarea id="fPrompt" name="system_prompt" rows="5" placeholder="Describe how the assistant should behave on a call…" required></textarea>
+          </div>
+
+          <div class="config-actions">
+            <button type="submit" class="btn btn--primary" id="btnGenerate">
+              <span>Generate the world</span>
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
+            </button>
+            <button type="button" class="btn btn--ghost" id="btnExisting" aria-expanded="false" aria-controls="datasetPanel">
+              Use an existing world
+            </button>
+          </div>
+          <p class="form-error" id="configError" role="alert" hidden></p>
+        </form>
+
+        <!-- existing-world drawer -->
+        <div class="dataset-panel" id="datasetPanel" hidden>
+          <div class="dataset-panel-head">
+            <h3>Ready worlds</h3>
+            <button type="button" class="icon-btn" id="datasetRefresh" aria-label="Refresh worlds">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 0 1 13.7-5.7L20 8"/><path d="M20 4v4h-4"/><path d="M20 12a8 8 0 0 1-13.7 5.7L4 16"/><path d="M4 20v-4h4"/></svg>
+            </button>
+          </div>
+          <div class="dataset-list" id="datasetList" role="list" aria-live="polite"></div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ============================================================= -->
+  <!-- STAGE 2 — GENERATE                                            -->
+  <!-- ============================================================= -->
+  <section class="stage stage--generate" id="stage-generate" aria-label="Generating world" hidden>
+    <div class="generate-grid">
+      <div class="generate-head">
+        <h2 class="generate-title" data-anim-g id="genTitle">Generating <span id="genCompany">the world</span></h2>
+        <p class="generate-sub" data-anim-g id="genSub">Drafting knowledge, casting customers, and embedding documents.</p>
+      </div>
+
+      <ol class="timeline" id="timeline" data-anim-g>
+        <li class="tl-step" data-stage-key="drafting">
+          <span class="tl-node">
+            <svg class="tl-ic draw-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l1-4L15.5 5.5a2 2 0 0 1 3 3L8 19z"/><path d="M13.5 7.5l3 3"/></svg>
+            <svg class="tl-done draw-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>
+          </span>
+          <div class="tl-body">
+            <b>Drafting policies &amp; FAQ</b>
+            <span class="tl-detail" data-detail="drafting">Writing the brand's knowledge base…</span>
+          </div>
+        </li>
+        <li class="tl-step" data-stage-key="drafted">
+          <span class="tl-node">
+            <svg class="tl-ic draw-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8.5" r="3"/><path d="M3.5 20c0-3 2.4-5 5.5-5s5.5 2 5.5 5"/><path d="M16 6.2a2.6 2.6 0 0 1 0 5.1"/><path d="M17.6 14.4c2 .5 3.4 2.2 3.4 4.6"/></svg>
+            <svg class="tl-done draw-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>
+          </span>
+          <div class="tl-body">
+            <b>Casting customers</b>
+            <span class="tl-detail" data-detail="drafted">Standard · Premium · VIP personas</span>
+          </div>
+        </li>
+        <li class="tl-step" data-stage-key="embedding">
+          <span class="tl-node">
+            <svg class="tl-ic draw-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7.4 7.8l3.4 3.7M16.6 7l-3.4 4M7.7 16.6l3-3M16.3 16.4l-3-2.9" opacity=".5"/><circle cx="6" cy="7" r="1.7" fill="currentColor" stroke="none"/><circle cx="18" cy="6" r="1.7" fill="currentColor" stroke="none"/><circle cx="12" cy="12.5" r="1.9" fill="currentColor" stroke="none"/><circle cx="6.5" cy="18" r="1.7" fill="currentColor" stroke="none"/><circle cx="17.5" cy="17.5" r="1.7" fill="currentColor" stroke="none"/></svg>
+            <svg class="tl-done draw-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>
+          </span>
+          <div class="tl-body">
+            <b>Embedding documents</b>
+            <span class="tl-detail" data-detail="embedding">Indexing knowledge for retrieval…</span>
+          </div>
+        </li>
+        <li class="tl-step" data-stage-key="saving">
+          <span class="tl-node">
+            <svg class="tl-ic draw-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="7" ry="2.6"/><path d="M5 6v12c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6V6"/><path d="M5 12c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6"/></svg>
+            <svg class="tl-done draw-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>
+          </span>
+          <div class="tl-body">
+            <b>Saving the world</b>
+            <span class="tl-detail" data-detail="saving">Committing to the governed store…</span>
+          </div>
+        </li>
+        <li class="tl-step" data-stage-key="ready">
+          <span class="tl-node">
+            <svg class="tl-ic draw-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5C12.5 8.5 13.5 9.5 18.5 12C13.5 14.5 12.5 15.5 12 20.5C11.5 15.5 10.5 14.5 5.5 12C10.5 9.5 11.5 8.5 12 3.5Z"/></svg>
+            <svg class="tl-done draw-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>
+          </span>
+          <div class="tl-body">
+            <b>Ready</b>
+            <span class="tl-detail" data-detail="ready">World is live.</span>
+          </div>
+        </li>
+      </ol>
+
+      <!-- summary appears on ready -->
+      <div class="summary-card" id="summaryCard" hidden>
+        <div class="summary-head">
+          <span class="summary-badge">World ready</span>
+          <h3 id="summaryCompany">—</h3>
+        </div>
+        <div class="summary-stats" id="summaryStats"></div>
+        <div class="summary-tiers" id="summaryTiers"></div>
+        <button type="button" class="btn btn--primary" id="btnEnterCall">
+          <span>Enter the call</span>
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
+        </button>
+      </div>
+
+      <!-- failure appears on failed -->
+      <div class="fail-card" id="failCard" hidden role="alert">
+        <span class="fail-badge">Generation failed</span>
+        <p id="failMessage">Something went wrong.</p>
+        <div class="fail-actions">
+          <button type="button" class="btn btn--primary" id="btnRetry">Try again</button>
+          <button type="button" class="btn btn--ghost" id="btnBackConfig">Back to configure</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================= -->
+  <!-- STAGE 3 — LIVE                                                -->
+  <!-- ============================================================= -->
+  <section class="stage stage--live" id="stage-live" aria-label="Live call console" hidden>
+    <div class="live-grid">
+
+      <!-- LEFT RAIL: caller + call control -->
+      <aside class="rail" aria-label="Call controls">
+        <div class="rail-card call-card" data-anim-l>
+          <div class="rail-head">
+            <h2 id="liveCompany">Live call</h2>
+          </div>
+
+          <!-- pre-connect: caller picker -->
+          <div id="callerSetup">
+            <p class="rail-note" id="callerNote">Choose who's calling. The tier drives the routing you'll see.</p>
+            <div class="callers" id="callerPicker" role="radiogroup" aria-label="Select caller"></div>
+
+            <div class="field field--tight">
+              <label for="fName">Courtesy name <span class="field-hint">optional</span></label>
+              <input id="fName" type="text" placeholder="e.g. Sam" autocomplete="off" />
+            </div>
+
+            <button type="button" class="btn btn--primary btn--block" id="btnConnect" disabled>
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15.5 3.5a5 5 0 0 1 5 5"/><path d="M14.5 7a2.5 2.5 0 0 1 2.5 2.5"/><path d="M4.5 5.5C4.5 14 10 19.5 18.5 19.5l.9-2.7a1.4 1.4 0 0 0-.8-1.7l-2.7-1.1a1.4 1.4 0 0 0-1.6.4l-.8 1a11 11 0 0 1-4.5-4.5l1-.8a1.4 1.4 0 0 0 .4-1.6L9 5.9a1.4 1.4 0 0 0-1.7-.8z"/></svg>
+              <span>Connect &amp; talk</span>
+            </button>
+            <p class="form-error" id="connectError" role="alert" hidden></p>
+          </div>
+
+          <!-- during-connect: live call state -->
+          <div id="callLive" hidden>
+            <div class="caller-live" id="callerLive">
+              <span class="caller-live-avatar" id="callerAvatar">A</span>
+              <div>
+                <b id="callerLiveName">Anonymous caller</b>
+                <span class="caller-live-tier" id="callerLiveTier">Governed tier resolves on connect</span>
+              </div>
+            </div>
+
+            <div class="mic-panel">
+              <div class="mic-signal" aria-hidden="true">
+                <svg class="draw-svg" viewBox="0 0 42 34" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect class="msg-core" x="17" y="4" width="8" height="14" rx="4"/>
+                  <path class="msg-core" d="M13 15a8 8 0 0 0 16 0"/>
+                  <path class="msg-core" d="M21 23v4M16.5 27h9"/>
+                  <path class="msg-arc" d="M11 9a11 11 0 0 0 0 16"/>
+                  <path class="msg-arc" d="M6 5a17 17 0 0 0 0 24"/>
+                  <path class="msg-arc" d="M31 9a11 11 0 0 1 0 16"/>
+                  <path class="msg-arc" d="M36 5a17 17 0 0 1 0 24"/>
+                </svg>
+              </div>
+              <div class="mic-meter" id="micMeter" aria-hidden="true">
+                <span></span><span></span><span></span><span></span><span></span>
+                <span></span><span></span><span></span><span></span><span></span>
+              </div>
+              <div class="mic-legend">
+                <span class="spk" id="spkYou" data-active="false"><i></i>Caller</span>
+                <span class="spk" id="spkAgent" data-active="false"><i></i>Agent</span>
+              </div>
+            </div>
+
+            <div class="call-actions">
+              <button type="button" class="btn btn--ghost btn--block" id="btnMute" aria-pressed="false" title="Mute the microphone">
+                <svg class="ic-mic" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0"/><path d="M12 18v3"/><path d="M8.5 21h7"/></svg>
+                <svg class="ic-mic-off" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0"/><path d="M12 18v3"/><path d="M8.5 21h7"/><path d="M4 4l16 16"/></svg>
+                <span id="muteLabel">Mute</span>
+              </button>
+              <button type="button" class="btn btn--danger btn--block" id="btnEnd">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 5l14 14"/><path d="M4.5 5.5C4.5 14 10 19.5 18.5 19.5l.9-2.7a1.4 1.4 0 0 0-.8-1.7l-2.7-1.1a1.4 1.4 0 0 0-1.6.4l-.8 1a11 11 0 0 1-4.5-4.5l1-.8a1.4 1.4 0 0 0 .4-1.6L9 5.9a1.4 1.4 0 0 0-1.7-.8z"/></svg>
+                <span>End call</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- grounded example prompts (GET /api/examples). Read-aloud suggestions for the
+               presenter; stays visible in both the caller setup and the connected call.
+               Hidden entirely when the endpoint returns nothing (fail-soft). -->
+          <section class="ask-panel" id="askPanel" aria-labelledby="askTitle" hidden>
+            <h3 class="ask-title" id="askTitle">Try asking</h3>
+            <p class="ask-sub">Grounded in this world — say one aloud, or click to copy.</p>
+            <div class="ask-chips" id="askChips"></div>
+            <p class="ask-copied" id="askCopied" role="status" aria-live="polite"></p>
+          </section>
+
+          <button type="button" class="link-back" id="btnLiveBack">← New world</button>
+        </div>
+      </aside>
+
+      <!-- MAIN: four pillars + transcript -->
+      <div class="console">
+        <div class="pillars" id="pillars">
+
+          <!-- CHOICE -->
+          <article class="pillar" data-pillar="choice" style="--hue:var(--c-choice)" data-anim-l aria-live="polite">
+            <header class="pillar-head">
+              <span class="pillar-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h9"/><path d="M4 17h5"/><circle cx="16" cy="7" r="3"/><circle cx="12" cy="17" r="3"/></svg></span>
+              <h3>Choice</h3>
+              <span class="pillar-tag">Routing</span>
+            </header>
+            <div class="pillar-body" id="pChoice">
+              <div class="await" id="choiceAwait">Awaiting first evidence…</div>
+              <div class="choice-live" hidden>
+                <div class="route">
+                  <div class="route-tier"><span class="k">Governed tier</span><span class="v" id="choiceTier">—</span></div>
+                  <div class="route-arrow" aria-hidden="true">
+                    <svg class="route-lock draw-svg" viewBox="0 0 46 46" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                      <line class="rl-track" x1="5" y1="15" x2="41" y2="15" stroke="currentColor" stroke-width="2"/>
+                      <path class="rl-arrow" d="M6 15H35" stroke="currentColor" stroke-width="2.2"/>
+                      <path class="rl-arrow" d="M30 9l6 6-6 6" stroke="currentColor" stroke-width="2.2"/>
+                      <rect class="rl-lock-fill" x="15" y="31" width="16" height="11" rx="2.4" fill="currentColor"/>
+                      <path class="rl-lock rl-shackle" d="M18.5 31v-3.2a4.5 4.5 0 0 1 9 0V31" stroke="currentColor" stroke-width="2"/>
+                      <rect class="rl-lock" x="15" y="31" width="16" height="11" rx="2.4" stroke="currentColor" stroke-width="2"/>
+                      <circle class="rl-lock" cx="23" cy="36.4" r="1.4" fill="currentColor" stroke="none"/>
+                    </svg>
+                  </div>
+                  <div class="route-model"><span class="k">Routed model</span><span class="v mono" id="choiceModel">—</span></div>
+                </div>
+                <p class="pillar-foot" id="choiceCompany"></p>
+              </div>
+            </div>
+          </article>
+
+          <!-- CONTROL -->
+          <article class="pillar" data-pillar="control" style="--hue:var(--c-control)" data-anim-l aria-live="polite">
+            <header class="pillar-head">
+              <span class="pillar-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></span>
+              <h3>Control</h3>
+              <span class="pillar-tag">Governance</span>
+            </header>
+            <div class="pillar-body" id="pControl">
+              <ul class="guarantees">
+                <li><span class="g-ic" aria-hidden="true">✓</span> Tier from a governed Lakebase lookup, not the conversation</li>
+                <li><span class="g-ic" aria-hidden="true">✓</span> Caller-stated status is ignored</li>
+                <li><span class="g-ic" aria-hidden="true">✓</span> Tools are read-only</li>
+              </ul>
+              <div class="directives" id="directives">
+                <p class="directives-await">Directives resolve on connect…</p>
+              </div>
+            </div>
+          </article>
+
+          <!-- CONTEXT -->
+          <article class="pillar pillar--wide" data-pillar="context" style="--hue:var(--c-context)" data-anim-l>
+            <header class="pillar-head">
+              <span class="pillar-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H18a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6.5A2.5 2.5 0 0 1 4 18.5z"/><path d="M8 7h7"/><path d="M8 11h5"/></svg></span>
+              <h3>Context</h3>
+              <span class="pillar-tag">Retrieval</span>
+              <span class="ctx-pulse" id="retrievalPulse" aria-hidden="true">
+                <svg class="draw-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+                  <circle class="cp-doc" cx="12" cy="12" r="2" fill="currentColor" stroke="none"/>
+                  <circle class="cp-wave" cx="12" cy="12" r="6"/>
+                  <circle class="cp-wave" cx="12" cy="12" r="10"/>
+                </svg>
+              </span>
+              <span class="pillar-count" id="retrievalCount" aria-label="retrieval events">0</span>
+            </header>
+            <div class="pillar-body">
+              <div class="retrieval-feed" id="retrievalFeed" role="log" aria-live="polite" aria-label="Live retrieval events">
+                <div class="await">No retrievals yet. Ask the assistant a question.</div>
+              </div>
+            </div>
+          </article>
+
+          <!-- COSTS -->
+          <article class="pillar pillar--wide" data-pillar="costs" style="--hue:var(--c-costs)" data-anim-l aria-live="polite">
+            <header class="pillar-head">
+              <span class="pillar-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5"/><path d="M4 19h16"/><path d="M8 16l3.5-4 3 2.5L20 8"/></svg></span>
+              <h3>Costs</h3>
+              <span class="pillar-tag">Indicative</span>
+            </header>
+            <div class="pillar-body costs-body">
+              <div class="cost-index">
+                <span class="k">Cost index</span>
+                <svg class="cost-meter" viewBox="0 0 100 6" preserveAspectRatio="none" aria-hidden="true">
+                  <line class="cm-track" x1="2" y1="3" x2="98" y2="3" stroke="currentColor" stroke-width="4" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+                  <line class="cm-fill" id="costFill" x1="2" y1="3" x2="98" y2="3" stroke="currentColor" stroke-width="4" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+                </svg>
+                <div class="cost-bars" id="costBars" data-level="0">
+                  <span data-tier="Low">Low</span>
+                  <span data-tier="Medium">Med</span>
+                  <span data-tier="High">High</span>
+                </div>
+              </div>
+              <div class="tokens">
+                <span class="k">Total tokens</span>
+                <span class="tokens-val"><b id="tokensVal">—</b></span>
+              </div>
+              <div class="cost-projection">
+                <span class="k">Projected cost</span>
+                <span class="proj-val"><b id="costProj">—</b><small id="costRate"></small></span>
+                <div class="spark" id="turnSpark" aria-hidden="true"></div>
+              </div>
+              <p class="pillar-foot">Tokens are agent-reported; tier and projection are indicative.</p>
+            </div>
+          </article>
+        </div>
+
+        <!-- TRANSCRIPT -->
+        <section class="transcript-card" data-anim-l aria-label="Live transcript">
+          <header class="transcript-head">
+            <h3>Transcript</h3>
+            <span class="transcript-live" id="transcriptLive"><span class="conn-dot"></span>live</span>
+          </header>
+          <div class="transcript" id="transcript" role="log" aria-live="polite">
+            <div class="await">The conversation will appear here once you connect.</div>
+          </div>
+        </section>
+      </div>
+
+    </div>
+  </section>
+
+</main>
+
+<!-- CDN libs: livekit-client (jsdelivr, unchanged) + GSAP (cdnjs). Then app logic. -->
+<script src="https://cdn.jsdelivr.net/npm/livekit-client@2/dist/livekit-client.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script src="studio.js"></script>
+</body>
+</html>

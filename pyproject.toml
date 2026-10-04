@@ -1,0 +1,36 @@
+[project]
+name = "ug-voice-studio"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "psycopg[binary]==3.3.4",
+    "psycopg-pool==3.3.1",
+    "databricks-sdk==0.133.0",
+    "python-dotenv==1.2.2",
+    "requests==2.34.2",
+    # LiveKit voice-agent worker stack (ReferenceApp-verified pins)
+    "livekit==1.1.5",
+    "livekit-agents==1.5.6",
+    "livekit-api==1.1.0",
+    "livekit-plugins-openai==1.5.6",
+    "livekit-plugins-deepgram==1.5.6",
+    "livekit-plugins-silero==1.5.6",
+    "httpx==0.28.1",
+    "httpx-sse==0.4.3",
+    "opentelemetry-sdk==1.39.1",
+    "opentelemetry-exporter-otlp-proto-http==1.39.1",
+]
+
+[dependency-groups]
+dev = ["pytest==8.3.4", "pytest-asyncio==0.25.2"]
+
+# Ruling (Task 1): this is an app, not a distributable package, and it uses a
+# src/ layout with no build backend — without this `uv sync` fails trying to
+# build the root project. package = false makes uv manage the venv + deps only.
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
