@@ -1024,6 +1024,24 @@
   function finiteNum(x) { return (typeof x === "number" && Number.isFinite(x)) ? x : null; }
   function unitNum(x) { return (typeof x === "number" && x >= 0 && x <= 1) ? x : null; }   // NaN fails both tests
 
+  /* The Halloween display face (Cormorant, DESIGN §2) is not in the <head>: a standard call, and architecture.html, should
+     never pay for it. Its stylesheet <link> is injected the first time a call enters Halloween, and only then; the id is the
+     guard, so re-entering (or a repeated fragment) adds nothing, and the <link> simply stays in <head> once added (cached
+     and inert in standard: nothing uses the face outside the mode). The fonts.googleapis.com / fonts.gstatic.com
+     preconnects are already in index.html, and `display=swap` means the headings keep showing in DM Sans until the serif
+     is ready, or for good if it never arrives (studio.css's --font-display falls back to it). The one-shot cost is the
+     stylesheet; the browser fetches only the font files the headings then actually draw. */
+  const DISPLAY_FONT_ID = "hw-display-font";
+  const DISPLAY_FONT_HREF = "https://fonts.googleapis.com/css2?family=Cormorant:ital,wght@0,500..700;1,500..700&display=swap";
+  function loadDisplayFont() {
+    if (document.getElementById(DISPLAY_FONT_ID)) return;
+    const link = document.createElement("link");
+    link.id = DISPLAY_FONT_ID;
+    link.rel = "stylesheet";
+    link.href = DISPLAY_FONT_HREF;
+    document.head.appendChild(link);
+  }
+
   function applyVoiceMode(v) {
     v = (v && typeof v === "object") ? v : {};
     const mode = (typeof v.mode === "string" && v.mode) ? v.mode : "standard";
@@ -1053,6 +1071,7 @@
     $("#vmFallback").hidden = !v.degraded;
 
     row.hidden = false;
+    if (mode === "halloween") loadDisplayFont();   // first entry only: the request starts no later than the restyle below
     document.body.dataset.voiceMode = mode;
     if (first && HAS_GSAP) animIn([row], { y: 8, dur: 0.4 });
   }
