@@ -1112,6 +1112,56 @@ body[data-voice-mode="halloween"] .bg-aurora--a,
 :root[data-theme="light"] body[data-voice-mode="halloween"] .bg-aurora--a { opacity: 0; }
 
 /* =============================================================================
+   HALLOWEEN ENTER / EXIT CROSS-FADE (docs/halloween-ui/DESIGN.md §4.1-4.2, ~420ms, both ways)
+   The seasonal skin is a token swap, so the dissolve is a token transition: the colour tokens are
+   registered (`@property` makes them interpolable <color>s) and transitioned on <body>. Every
+   consumer then follows frame by frame — the card / pillar / rail / transcript gradients, borders,
+   explicit text colours, color-mix() tints, the Lava-to-pumpkin CTA, SVG currentColor — with no
+   per-surface list to maintain. (Transitioning background-color on the cards cannot do this: they
+   are painted with linear-gradient(var(--surface), var(--ink-2)), a background-image, which CSS
+   does not interpolate. Measured: the card gradients and every explicitly-coloured text jumped at
+   t=0; only borders and inherited colour faded.)
+   - Symmetric: the transition sits on plain <body>, so the standard state carries it and the exit
+     plays back through the same curve (--dur-3 on the house ease).
+   - It fires only when a token's computed value changes — a mode swap, or the light/dark toggle
+     (DESIGN §4.1 calls that smoothing a bonus). An ordinary state change picks a different token
+     but changes no token's value, so it is untouched. First paint has no prior style, so nothing
+     runs on load (the <head> script sets data-theme before paint).
+   - Reduced motion: <body> and .bg-aurora--a are real elements, so the blanket `*` rule in the
+     reduced-motion block turns this into an instant swap; nothing here targets a pseudo-element.
+   - Keep in step with the two Halloween palette blocks: register and list any colour token they
+     re-declare. --topbar-bg (a gradient) and --shadow are not colours, so they swap outright; the
+     pillar hues and --danger are never swapped, so they are not registered. Each initial-value
+     mirrors :root.
+   Colour only — no box-shadow or filter is animated, nothing is written inline, and it all lets
+   go with the attribute. (A browser without @property keeps the old instant swap.)
+   ========================================================================== */
+@property --ink             { syntax: "<color>"; inherits: true; initial-value: #0B2026; }
+@property --ink-2           { syntax: "<color>"; inherits: true; initial-value: #0E252C; }
+@property --surface         { syntax: "<color>"; inherits: true; initial-value: #112C34; }
+@property --surface-2       { syntax: "<color>"; inherits: true; initial-value: #1B3139; }
+@property --surface-3       { syntax: "<color>"; inherits: true; initial-value: #203C45; }
+@property --hairline        { syntax: "<color>"; inherits: true; initial-value: rgba(150,166,190,.12); }
+@property --hairline-strong { syntax: "<color>"; inherits: true; initial-value: rgba(150,166,190,.22); }
+@property --text-hi         { syntax: "<color>"; inherits: true; initial-value: #EAF0EE; }
+@property --text-mid        { syntax: "<color>"; inherits: true; initial-value: #A7B4B9; }
+@property --text-lo         { syntax: "<color>"; inherits: true; initial-value: #99A6AF; }
+@property --accent          { syntax: "<color>"; inherits: true; initial-value: #FF3621; }
+@property --accent-deep     { syntax: "<color>"; inherits: true; initial-value: #FB3A25; }
+@property --accent-ink      { syntax: "<color>"; inherits: true; initial-value: #0B2026; }
+@property --accent-text     { syntax: "<color>"; inherits: true; initial-value: #FF7054; }
+
+body {
+  transition-property: --ink, --ink-2, --surface, --surface-2, --surface-3, --hairline, --hairline-strong,
+                       --text-hi, --text-mid, --text-lo, --accent, --accent-deep, --accent-ink, --accent-text;
+  transition-duration: var(--dur-3);
+  transition-timing-function: var(--ease-signature);
+}
+/* T1 hides the Lava orb on Halloween (raw rgba, so no token reaches it): fade its opacity instead of cutting it.
+   GSAP only drives its transform, so the two never fight. */
+.bg-aurora--a { transition: opacity var(--dur-3) var(--ease-signature); }
+
+/* =============================================================================
    RESPONSIVE
    ========================================================================== */
 @media (max-width: 1080px) {
@@ -1156,4 +1206,6 @@ body[data-voice-mode="halloween"] .bg-aurora--a,
      wash and the pillar's top-line twin are pseudo-elements, which the blanket `*` rule above does not reach. */
   body[data-voice-mode="halloween"] .pillar[data-pillar="control"] { animation: none; }
   .bg::before, .pillar[data-pillar="control"]::after { transition: none; }
+  /* Halloween cross-fade: the <body> token transition and the .bg-aurora--a fade sit on real elements, so the blanket
+     `*` rule above already makes enter / exit an instant swap — only pseudo-elements need an explicit rule. */
 }
