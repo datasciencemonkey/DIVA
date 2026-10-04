@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** A working LiveKit voice agent that, bound to a `data_generation_id` + caller identity, reads the loyalty tier from a governed lookup, **routes the UAIG model by tier**, answers with hybrid retrieval, and emits OTel traces — reusing ReferenceApp's proven skeleton with the entrypoint reordered so the tier (and model) are known before the session is built.
+**Goal:** A working LiveKit voice agent that, bound to a `data_generation_id` + caller identity, reads the loyalty tier from a governed lookup, **routes the Unity Gateway model by tier**, answers with hybrid retrieval, and emits OTel traces — reusing ReferenceApp's proven skeleton with the entrypoint reordered so the tier (and model) are known before the session is built.
 
 **Architecture:** Reuse ReferenceApp's `app/agent.py` boot/tracing seam, `app/web_server.py` token minting, and speech+LLM stack. Swap: generic read-only tools (`semantic_search`/`record_lookup` from Plan 2's `retrieval`), a per-dataset system prompt wrapped in fixed governance clauses, tier→model routing at bind (`route_for`), and `ug.*` trace attributes. Runs **locally** (worker + stdlib web tier); Databricks-App deploy + the animated UI are Plan 4.
 
-**Tech Stack:** Python 3.12, `uv`; `livekit-agents==1.5.6` + plugins (openai/deepgram/silero), `openai.responses.LLM` over UAIG; Deepgram STT `nova-3` + TTS `aura-2`; OpenTelemetry OTLP → UC/MLflow; Plan 2's `retrieval`/`embeddings`/`routing`/`loyalty_context`.
+**Tech Stack:** Python 3.12, `uv`; `livekit-agents==1.5.6` + plugins (openai/deepgram/silero), `openai.responses.LLM` over Unity Gateway; Deepgram STT `nova-3` + TTS `aura-2`; OpenTelemetry OTLP → UC/MLflow; Plan 2's `retrieval`/`embeddings`/`routing`/`loyalty_context`.
 
 **Spec:** `docs/superpowers/specs/2026-09-24-unity-gateway-voice-studio-design.md`
 **Reference (read, do not modify):** `<reference-app>/app/{agent.py,tools.py,web_server.py,start_app.py}`.
@@ -16,7 +16,7 @@
 ## Global Constraints
 
 - Run with **`uv`**; profile **DEFAULT**; commit as `datasciencemonkey <datasciencemonkey@gmail.com>`, ending messages with `Co-authored-by: Isaac <no-reply@databricks.com>`.
-- **LLM via UAIG Responses API** (`{host}/ai-gateway/openai/v1`, `use_websocket=False`, `store=False`) — never Chat Completions for the agent. Speech = Deepgram cascade; Silero VAD auto-provisioned; `max_tool_steps=5`.
+- **LLM via Unity Gateway Responses API** (`{host}/ai-gateway/openai/v1`, `use_websocket=False`, `store=False`) — never Chat Completions for the agent. Speech = Deepgram cascade; Silero VAD auto-provisioned; `max_tool_steps=5`.
 - **Tier→model (verified, model-routing-contract):** `UG_MODEL_STANDARD=databricks-gpt-5-nano`, `UG_MODEL_PREMIUM=databricks-gpt-5-5`, `UG_MODEL_VIP=databricks-gpt-6-sol`, `UG_MODEL_FALLBACK=databricks-gpt-5-5` (all Responses+tools compatible; Claude/Gemini are NOT — do not route to them).
 - **Governance invariants (spec §12), enforced in code not just the prompt:** the routing decision (`route_for`) is deterministic and outside the LLM; the LLM never receives the raw tier; the caller name is courtesy-only (sanitized, never a lookup/auth key); the tier comes from `read_loyalty_context` (governed, keyed by `customer_id`+`data_generation_id`), never from what the caller says; retrieval miss → the agent abstains, never fabricates; tools are **read-only**.
 - **`.env.local` (user-provided at run time):** `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `DEEPGRAM_API_KEY`. Plus the env we already use: `DATABRICKS_CONFIG_PROFILE=DEFAULT`, `LAKEBASE_ENDPOINT=projects/your-project/branches/production/endpoints/primary`, `LAKEBASE_DATABASE=databricks_postgres`, `UG_SCHEMA=ug`, the `UG_MODEL_*`, `UG_EMBED_MODEL=databricks-gte-large-en`. Optional tracing: `DATABRICKS_TRACE_CATALOG/SCHEMA/TABLE_PREFIX` (fail-soft if unset).
@@ -603,7 +603,7 @@ def test_read_meta_safe_when_absent():
 
 ## Self-Review
 
-**1. Spec coverage:** entrypoint reorder + routing → §6/§11 (Tasks 3,7); governance-wrapped prompt → §12 (Task 2); generic read-only tools → §13 (Task 4); tracing ug.* → §14 (Task 5); token/identity → §10 (Task 6); cascade speech + UAIG Responses → §7 (Task 7); live proof incl. routing + abstain + governance → §3/§12 (Task 8). Studio config, animated four-C's UI, Databricks-App deploy, eval → **Plan 4**.
+**1. Spec coverage:** entrypoint reorder + routing → §6/§11 (Tasks 3,7); governance-wrapped prompt → §12 (Task 2); generic read-only tools → §13 (Task 4); tracing ug.* → §14 (Task 5); token/identity → §10 (Task 6); cascade speech + Unity Gateway Responses → §7 (Task 7); live proof incl. routing + abstain + governance → §3/§12 (Task 8). Studio config, animated four-C's UI, Databricks-App deploy, eval → **Plan 4**.
 
 **2. Placeholder scan:** No "TODO/handle X." Reuse steps name the exact ReferenceApp symbols to copy + the exact adaptations; the minimal `index.html` is explicitly a throwaway harness (Plan 4 replaces it). The one "verify usage hook or estimate" (Task 1 R3) is a discovery output consumed by Plan 4's Costs pillar, not this plan.
 

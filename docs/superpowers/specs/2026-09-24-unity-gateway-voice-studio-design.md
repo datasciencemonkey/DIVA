@@ -9,14 +9,14 @@
 
 ## 1. Summary
 
-A **governed voice-agent "studio"** that presents **Unity AI Gateway (UAIG)** through the lens of a
+A **governed voice-agent "studio"** that presents **Unity Gateway** through the lens of a
 customer-support voice agent. You type a **company name, an assistant role, and a system prompt**,
 flip a **"Generate data"** toggle, and the app synthesizes a small dataset (support docs + customer
 records) into **one shared, generic Lakebase schema**, tagged with a **`data_generation_id`**. A
-LiveKit voice agent — LLM served through **UAIG** — then answers questions for that company using
+LiveKit voice agent — LLM served through **Unity Gateway** — then answers questions for that company using
 **generic, read-only tools** (semantic + exact search on Lakebase) scoped to that id. The caller's
 **loyalty tier (Standard / Premium / VIP)**, read from a **governed lookup at session bind**, selects
-**which UAIG-served model handles the call** (the "bake in") and sets LLM-safe treatment directives.
+**which Unity Gateway-served model handles the call** (the "bake in") and sets LLM-safe treatment directives.
 Every turn is traced to **MLflow / Unity Catalog** via OTel. A **brand-new, animated UI** narrates the
 four pillars — **Choice, Control, Context, Costs** — live during the call.
 
@@ -38,7 +38,7 @@ The demo is **reusable**: swapping the company is a new prompt + a data generati
 **Non-goals (v1) — narrated, not built:**
 - Phone / SIP dial-in (web/app WebRTC first; "same agent also on the phone" is narrated).
 - Governed **write** actions (v1 is read-only Q&A + lookup; the write invariant is preserved for a later phase).
-- Tool calls as governed **MCP** services through UAIG (LLM goes through UAIG — that *is* the governed
+- Tool calls as governed **MCP** services through Unity Gateway (LLM goes through Unity Gateway — that *is* the governed
   path shown; "managed MCP tool calls" is narrated as productionization).
 - Downstream analytics loop: knowledge-extraction → UC Delta → **Genie Ontology → Genie One →
   dashboards / agents / apps**. Trace + table schema are designed to feed it; an **optional single Genie
@@ -50,8 +50,8 @@ The demo is **reusable**: swapping the company is a new prompt + a data generati
 
 | Pillar | What it shows | Data source |
 |---|---|---|
-| **Choice** | The UAIG-served model this tier routed to — and what the other tiers *would* have used. | Routing decision at bind (§11). |
-| **Control** | Governed caller identity (bound, not spoken); the routing/treatment decision runs *outside* the LLM; the system-prompt guardrails; UAIG rate/budget governance. | Bind + policy + narrated UAIG governance. |
+| **Choice** | The Unity Gateway-served model this tier routed to — and what the other tiers *would* have used. | Routing decision at bind (§11). |
+| **Control** | Governed caller identity (bound, not spoken); the routing/treatment decision runs *outside* the LLM; the system-prompt guardrails; Unity Gateway rate/budget governance. | Bind + policy + narrated Unity Gateway governance. |
 | **Context** | Exactly what `semantic_search` / `record_lookup` returned to ground each answer. | Tool outputs streamed to the UI (§15). |
 | **Costs** | Running tokens + \$ per turn and per call for the routed model, with a cross-tier comparison ("this call on VIP vs Standard"). | Per-turn LLM usage × a per-model price table (§15, risk R3). |
 
@@ -59,7 +59,7 @@ The demo is **reusable**: swapping the company is a new prompt + a data generati
 
 - **Consumer → WebRTC backend → LiveKit SFU agent worker** = web tier + agent worker (built).
 - **3p/hosted ASR + TTS** = Deepgram STT/TTS, **cascade** pipeline (built).
-- **AI gateway (MCP/LLMs), "managed tool calls"** = **UAIG**: LLM path **+ 3-tier model selection** (built;
+- **AI gateway (MCP/LLMs), "managed tool calls"** = **Unity Gateway**: LLM path **+ 3-tier model selection** (built;
   MCP-governed tools narrated).
 - **Lakebase read replica(s) — "LAKEBASE SEARCH FOR INSTANT IQ (BM25, Sem Search)"** = native **Lakebase
   Search** for content retrieval + SQL for structured lookup, single instance in v1 (built; verify R1).
@@ -107,9 +107,10 @@ The demo is **reusable**: swapping the company is a new prompt + a data generati
 ```text
 ┌── STUDIO (config page, same web app) ─────────────────────────────────────────┐
 │ company_name + assistant_role + system_prompt + [toggle] Generate data        │
-│   POST /api/generate → generator (agent-venv): UAIG LLM drafts docs+records,  │
-│     FMAPI embeds docs, writes rows tagged data_generation_id to Lakebase,     │
-│     builds the Lakebase Search index, registers row in `datasets`             │
+│   POST /api/generate → generator (agent-venv): Unity Gateway LLM drafts       │
+│     docs+records, FMAPI embeds docs, writes rows tagged data_generation_id    │
+│     to Lakebase, builds the Lakebase Search index, registers row in           │
+│     `datasets`                                                                │
 │   → returns data_generation_id                                                │
 └───────────────────────────────────────────────────────────────────────────────┘
         │  Start call: pick/generate dataset + "call as" (customer) / type name
@@ -140,7 +141,7 @@ routed model depends on the bound tier (known only after the participant joins),
 ## 7. Speech stack (cascade)
 
 Deepgram `nova-3` STT + Deepgram `aura-2-…` TTS; Silero VAD auto-provisioned; LLM =
-`openai.responses.LLM` over UAIG (`/ai-gateway/openai/v1`, `use_websocket=False`, `store=False`).
+`openai.responses.LLM` over Unity Gateway (`/ai-gateway/openai/v1`, `use_websocket=False`, `store=False`).
 **Responses API (not Chat Completions)** — reasoning models reject function tools on `/chat/completions`
 (notes §7). Every tier model must support Responses passthrough **with function calling** (risk R2).
 
@@ -167,13 +168,13 @@ Everything the agent reads on the hot path is in **Lakebase**; OTel spans land i
 - **Generator** (`generate.py`, runnable via `uv run` for dev; invoked by the app as an agent-venv
   subprocess so the stdlib web tier stays dependency-free — R5): 
   1. mint a fresh `data_generation_id`;
-  2. **UAIG LLM** drafts ~5–8 support/policy/FAQ docs + ~15–40 customers spread across all three tiers
+  2. **Unity Gateway LLM** drafts ~5–8 support/policy/FAQ docs + ~15–40 customers spread across all three tiers
      + a handful of child records, all consistent with `{company, role, system_prompt}`;
   3. **FMAPI embeddings** (via the gateway) vectorize doc chunks;
   4. write all rows (tagged with the id) to Lakebase and build/refresh the Lakebase Search index;
   5. register the row in `datasets`; return the id.
 - Small data → seconds to generate. All data is **clearly labeled synthetic**. The generator **dogfoods
-  UAIG** for both drafting and embeddings — itself part of the story.
+  Unity Gateway** for both drafting and embeddings — itself part of the story.
 
 ## 10. Session binding, identity, governed loyalty lookup
 
@@ -292,7 +293,7 @@ def route_for(loyalty_tier: str) -> RoutingDecision: ...
 - A **Lakebase-capable workspace** — ReferenceApp's `your-workspace` could *not* provision serverless Postgres and ran
   degraded; the studio needs Lakebase for semantic + exact + tier lookup. Confirm the target profile
   provides Lakebase, or budget for degraded/simulated mode.
-- **UAIG serves the 3 tier models** on that workspace, each Responses-passthrough + function-calling
+- **Unity Gateway serves the 3 tier models** on that workspace, each Responses-passthrough + function-calling
   compatible (R2). **FMAPI embeddings** available for generation.
 - **Lakebase Search** available/GA on that workspace (R1).
 
@@ -349,8 +350,8 @@ def route_for(loyalty_tier: str) -> RoutingDecision: ...
   intent/complexity + cost/latency budget), returning the same `RoutingDecision`.
   - **Design fit:** ReferenceApp already runs a **served UC model → deterministic decision** on the hot path
     (flight-delay model → rules); the router revives that seam, pointed at model selection.
-  - **Governed & on-brand:** the router is itself a UAIG / Model-Serving-hosted model — another governed
-    model in the story, strengthening Choice + Control + Costs. Remains **app-side** routing (UAIG is not
+  - **Governed & on-brand:** the router is itself a Unity Gateway / Model-Serving-hosted model — another governed
+    model in the story, strengthening Choice + Control + Costs. Remains **app-side** routing (Unity Gateway is not
     claimed to do the classification itself — §positioning).
   - **Invariant preserved:** the decision stays **outside the conversational LLM** and auditable; the
     conversational LLM never sees the raw tier/signals.
@@ -375,7 +376,7 @@ def route_for(loyalty_tier: str) -> RoutingDecision: ...
 | Loyalty context reader | `services/loyalty_context.py` | ReferenceApp `src/services/value_context.py` |
 | Retrieval (Lakebase Search + SQL) | `services/retrieval.py` | new (R1) |
 | Lakebase pool | `services/db.py` | ReferenceApp `src/services/recovery.py` (pool/auth) |
-| Data generator | `generate.py` | new (dogfoods UAIG) |
+| Data generator | `generate.py` | new (dogfoods Unity Gateway) |
 | Web tier (token minting) | `app/web_server.py` | ReferenceApp `app/web_server.py` |
 | Studio + 4-C's UI | `app/web/*` | new (impeccable + GSAP) |
 | Tracing seam | in `app/agent.py` | ReferenceApp `_SpanEnrichmentExporter` |
@@ -387,4 +388,4 @@ def route_for(loyalty_tier: str) -> RoutingDecision: ...
 
 *Bottom line: keep ReferenceApp's governed skeleton and invariants, replace its domain tools with a
 data-driven generic layer scoped by `data_generation_id`, add loyalty→model routing as the headline
-UAIG capability, and present it through a brand-new animated four-pillars UI.*
+Unity Gateway capability, and present it through a brand-new animated four-pillars UI.*

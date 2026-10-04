@@ -1,6 +1,6 @@
 """AI-drafted system prompt endpoint (Plan 4, feature 2).
 
-The draft is company-tailored via the UAIG gateway, but the loyalty-tier ban is a
+The draft is company-tailored via Unity Gateway, but the loyalty-tier ban is a
 governance invariant enforced server-side: an LLM draft that omits it gets the
 canonical sentence appended, and a gateway failure falls back to a safe template.
 """

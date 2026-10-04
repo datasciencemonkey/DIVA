@@ -1,4 +1,4 @@
-# UAIG Voice Studio — Plan 4: Polished Front End + In-App Story Generation
+# UG Voice Studio — Plan 4: Polished Front End + In-App Story Generation
 
 **Goal:** Replace the throwaway test harness with a demo-grade "studio" that (1) lets a
 presenter configure a company/assistant, (2) generates its synthetic *world* in-app with

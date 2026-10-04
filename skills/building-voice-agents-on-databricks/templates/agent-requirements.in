@@ -11,7 +11,7 @@
 livekit
 livekit-agents
 livekit-api
-livekit-plugins-openai       # LLM over an OpenAI-compatible endpoint (the AI Gateway)
+livekit-plugins-openai       # LLM over an OpenAI-compatible endpoint (the Unity Gateway)
 livekit-plugins-deepgram     # STT + TTS
 livekit-plugins-silero       # VAD
 # Databricks + data

@@ -10,7 +10,7 @@ Everything runs in one of four places:
 | **The caller's browser** | The studio single-page app and `livekit-client` |
 | **External SaaS** | LiveKit Cloud (WebRTC media and agent dispatch) and Deepgram (speech-to-text and text-to-speech) |
 | **One Databricks App** | `start_app.py` boots both tiers in one container: the web / token tier (`app/web_server.py`) and the agent worker (`app/agent.py`) |
-| **Your Databricks workspace** | Unity AI Gateway (chat and embeddings), Lakebase Postgres with [Lakebase Search](https://www.databricks.com/blog/lakebase-search-state-art-full-text-and-vector-search-postgres) (the worlds), Unity Catalog and MLflow (traces) |
+| **Your Databricks workspace** | Unity Gateway (chat and embeddings), Lakebase Postgres with [Lakebase Search](https://www.databricks.com/blog/lakebase-search-state-art-full-text-and-vector-search-postgres) (the worlds), Unity Catalog and MLflow (traces) |
 
 ## The diagram
 
@@ -26,7 +26,7 @@ Numbers mark the order things happen: step 0 runs once per world, steps 1–4 es
     | [3]     ^ [8]           |                                |
     v         |               |                                |            Databricks workspace
 +------------------+          | +----------------------------+ |          +----------------------+
-| LiveKit Cloud    |--[4]---->| | Agent worker               | |-[6][7]-->| Unity AI Gateway     |
+| LiveKit Cloud    |--[4]---->| | Agent worker               | |-[6][7]-->| Unity Gateway        |
 | WebRTC SFU       |<=[6][8]=>| | agent.py (LiveKit Agents)  | |          | /responses (LLM)     |
 | + agent dispatch |          | |                            | |          | /embeddings          |
 +------------------+          | | [5] bind: tier -> model    | |          +----------------------+
@@ -45,7 +45,7 @@ Numbers mark the order things happen: step 0 runs once per world, steps 1–4 es
 
 [0] Before any call - generate a world (studio "Generate" step):
 
-    Browser --POST /api/generate--> Web tier --draft + embed--> Unity AI Gateway
+    Browser --POST /api/generate--> Web tier --draft + embed--> Unity Gateway
                                        |
                                        +--write in 1 txn (data_generation_id)--> Lakebase Postgres
 ```
@@ -56,7 +56,7 @@ Numbers mark the order things happen: step 0 runs once per world, steps 1–4 es
 
 0. **Generate a world.** Once per company, the studio's Generate step posts to `/api/generate` (or run
    `uv run python generate.py "<company>"`). `src/generate.py` drafts documents, customers across the Standard
-   / Premium / VIP tiers, and order and case records with a JSON-mode chat call through Unity AI Gateway,
+   / Premium / VIP tiers, and order and case records with a JSON-mode chat call through Unity Gateway,
    embeds the documents with the gateway's embedding model, and writes it all to Lakebase in one transaction
    under a fresh `data_generation_id`. The documents are indexed for
    [Lakebase Search](https://www.databricks.com/blog/lakebase-search-state-art-full-text-and-vector-search-postgres):
@@ -80,7 +80,7 @@ Numbers mark the order things happen: step 0 runs once per world, steps 1–4 es
    `route_for(tier)` (`src/policy/routing.py`) picks the model from the `UG_MODEL_*` map. The model never sees
    the tier, and the session is only built once the model is known.
 6. **Talk.** Audio flows browser ⇄ LiveKit ⇄ worker. Deepgram STT (nova-3) turns speech into text, the routed
-   LLM answers through Unity AI Gateway's OpenAI-compatible `/responses` API, and Deepgram TTS (aura-2) speaks
+   LLM answers through Unity Gateway's OpenAI-compatible `/responses` API, and Deepgram TTS (aura-2) speaks
    the reply.
 7. **Ground.** The LLM can call two read-only tools (`app/tools.py`, `src/services/retrieval.py`).
    `semantic_search` embeds the question through the gateway's `/embeddings` and runs

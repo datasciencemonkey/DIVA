@@ -5,7 +5,7 @@ learned getting real-time voice agents running on Databricks, written down so yo
 way. It sits apart from the app code (`app/`, `src/`) but ships and versions with the project.
 
 Point Cursor, Claude Code, or any Agent Skills loader at this folder. Then ask it to **deploy the app**, **add
-Lakebase tools**, **wire Unity AI Gateway**, **trace calls into MLflow**, or **debug a call that connects with no
+Lakebase tools**, **wire Unity Gateway**, **trace calls into MLflow**, or **debug a call that connects with no
 agent**. Example prompts are in the root [README § Agent skill](../README.md#agent-skill).
 
 ## What's inside
@@ -16,7 +16,7 @@ skills/
     SKILL.md                      # spine: architecture, workflow, gotchas, quick reference
     references/
       deployment.md               # single-container Databricks App deploy (+ the py3.11 dep trap)
-      agent-and-tools.md          # worker entrypoint, FM/AI-Gateway LLM, Lakebase tools (+ RunContext gotcha)
+      agent-and-tools.md          # worker entrypoint, FM/Unity Gateway LLM, Lakebase tools (+ RunContext gotcha)
       observability.md            # LiveKit OTel spans -> MLflow / Unity Catalog
     templates/
       start_app.py                # single-container launcher (adapt paths)
@@ -27,7 +27,7 @@ skills/
 ## Scope
 
 There's one skill, `building-voice-agents-on-databricks`, and it covers the whole path: a **LiveKit agent worker
-and a browser token server in one Databricks App**, the LLM on the **Databricks Foundation Model API / AI Gateway**,
+and a browser token server in one Databricks App**, the LLM on the **Databricks Foundation Model API / Unity Gateway**,
 **Lakebase**-backed tools, and **MLflow/OpenTelemetry** tracing into Unity Catalog.
 
 It opens with the traps that ate the most time: the Python 3.11 vs 3.12 dependency mismatch, `databricks sync` vs
@@ -41,7 +41,7 @@ Once the skill is loaded, the agent should open `SKILL.md` and then the matching
 - Deploy DIVA or a fork as a **single-container Databricks App** (3.11 worker venv, secrets, SP grants,
   `databricks sync --full`).
 - Scaffold a **LiveKit `AgentServer` + stdlib token mint** so a browser call dispatches the worker.
-- Point the conversational LLM at **Unity AI Gateway** (`openai.responses.LLM` + tools).
+- Point the conversational LLM at **Unity Gateway** (`openai.responses.LLM` + tools).
 - Add **Lakebase** `function_tool`s without hitting the `RunContext` `NameError`.
 - Export LiveKit OTel spans to **MLflow traces in Unity Catalog**.
 - Diagnose **"call connects, no agent joins"**, failed Apps deploys, and missing traces.
