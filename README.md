@@ -90,6 +90,41 @@ steps 5–9 run on every call. The longer walkthrough lives in [`docs/architectu
    LiveKit data channel.
 9. **Trace.** Spans flush over OTLP into a Unity Catalog table, and you read them as MLflow traces.
 
+## Halloween mode (Plan 5)
+
+Ask the agent for a spooky voice and it switches — and the whole studio switches with it. Tier, model and
+governance stay exactly as they were.
+
+- **AI Decide.** Databricks `ai_decide` (Beta) classifies each caller turn as enter, exit or none, outside the
+  conversational LLM. A deterministic policy applies at most one change per turn, and an exit always wins.
+  `UG_DECIDE_ENGINE=uaig_chat` swaps in a gateway-served chat model as the decider; `UG_AI_DECIDE=0` turns the
+  feature off.
+- **Expressive voice.** In Halloween mode the Databricks LLM writes inline cues such as `[whispers]`, and
+  ElevenLabs (`eleven_v3_conversational`) performs them. Cues are never read aloud or shown. If ElevenLabs is
+  unavailable the call carries on in a darker Deepgram voice (`aura-2-zeus-en`).
+- **Themed UI.** The Control pillar shows each mode change live (mode, confidence, latency, path), and the whole
+  studio cross-fades into an "All Hallows' Console" theme — moon, fog, embers, bats, display type, a
+  jack-o'-lantern on the Control pillar — then cleanly back when the agent exits. Honors `prefers-reduced-motion`.
+
+Settings live in `app.yaml` and are mirrored in `.env.example`: `UG_AI_DECIDE`, `UG_DECIDE_ENGINE`,
+`UG_DECIDE_MODEL`, `UG_DECIDE_TIMEOUT_S`, `UG_DECIDE_CUE_WAIT_S`, `UG_HALLOWEEN_TTS`, `UG_HALLOWEEN_TTS_MODEL`,
+`UG_HALLOWEEN_VOICE_ID`, `UG_HALLOWEEN_STABILITY`, `UG_HALLOWEEN_FALLBACK_VOICE`, plus the secret
+`ELEVEN_API_KEY`. The design spec and plan are in
+[`docs/superpowers/`](docs/superpowers/specs/2026-10-02-ug-voice-studio-plan-5-ai-decide-halloween-design.md).
+
+Four things are the owner's to do before the ElevenLabs voice works on a deployed app; the repo can only
+reference them:
+
+1. **Enable `ai_decide` on the workspace** (admin, Previews). The agent's `DATABRICKS_TOKEN` must also be
+   allowed to call the `ai-functions` API. Without `ai_decide` the default engine returns errors; explicit
+   requests still work, or set `UG_DECIDE_ENGINE=uaig_chat`.
+2. **Create the ElevenLabs key** as a secret in the `ug-voice-studio` scope and attach it to the app as the
+   resource `elevenlabs-api-key`. `app.yaml` reads it with `valueFrom`; the value is never committed. Attach it
+   before deploying, since `valueFrom` only resolves once the resource exists.
+3. **Pick a voice and set `UG_HALLOWEEN_VOICE_ID`** (a commented placeholder in `app.yaml`). Until it is set,
+   Halloween mode uses the Deepgram fallback voice.
+4. **Confirm the app can reach `api.elevenlabs.io`.** Outbound egress to it has not been verified yet.
+
 ## What's inside
 
 | Path | What it is |

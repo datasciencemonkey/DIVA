@@ -29,6 +29,16 @@ env:
     valueFrom: deepgram-api-key
   - name: DATABRICKS_TOKEN
     valueFrom: database-token
+  # Plan 5 Halloween voice (ElevenLabs). `elevenlabs-api-key` is an app secret
+  # resource bound to a key in the ug-voice-studio scope (suggested key name:
+  # `elevenlabs_api_key`). The secret VALUE and that resource binding are created
+  # OUT-OF-BAND by the owner (see skills/building-voice-agents-on-databricks/
+  # references/deployment.md) -- no key value ever lives in this repo. Attach the
+  # resource BEFORE deploying this file: a `valueFrom` only resolves once the app
+  # resource exists. If the key is missing or unusable at runtime the Halloween
+  # voice drops to the Deepgram fallback voice and the call carries on.
+  - name: ELEVEN_API_KEY
+    valueFrom: elevenlabs-api-key
 
   # --- Databricks workspace (non-secret) ---
   - name: DATABRICKS_HOST
@@ -55,6 +65,37 @@ env:
     value: "system.ai.gte-large-en"
   - name: UG_GEN_MODEL
     value: "system.ai.gpt-5-4"
+
+  # --- Plan 5: AI Decide, the per-turn voice-mode decision (non-secret) ---
+  # The default engine needs `ai_decide` enabled on the workspace (admin ->
+  # Previews). Without it, explicit requests still work; set
+  # UG_DECIDE_ENGINE=uaig_chat to decide with a gateway-served chat model instead.
+  - name: UG_AI_DECIDE
+    value: "1"                        # kill switch: "0" = never classify, stay in the standard voice
+  - name: UG_DECIDE_ENGINE
+    value: "ai_decide"                # ai_decide | uaig_chat
+  - name: UG_DECIDE_MODEL
+    value: "system.ai.gpt-5-4-nano"   # uaig_chat engine only; keep a GPT-family model (Claude rejects json_object)
+  - name: UG_DECIDE_TIMEOUT_S
+    value: "3.0"                      # limit on the background decision call
+  - name: UG_DECIDE_CUE_WAIT_S
+    value: "0.8"                      # longest a turn waits for the decision before replying in the current voice
+
+  # --- Plan 5: Halloween voice (non-secret; the key is ELEVEN_API_KEY above) ---
+  - name: UG_HALLOWEEN_TTS
+    value: "elevenlabs"               # elevenlabs | openai | deepgram
+  - name: UG_HALLOWEEN_TTS_MODEL
+    value: "eleven_v3_conversational" # only eleven_v3* models perform inline [tags]; any other model gets none
+  - name: UG_HALLOWEEN_STABILITY
+    value: "0.5"                      # ElevenLabs voice setting, 0 to 1
+  - name: UG_HALLOWEEN_FALLBACK_VOICE
+    value: "aura-2-zeus-en"           # Deepgram voice used when ElevenLabs is unavailable
+  # UG_HALLOWEEN_VOICE_ID is REQUIRED for the ElevenLabs voice and is the owner's
+  # pick (chosen by ear). It is deliberately left unset here: with no voice id the
+  # Halloween profile is the Deepgram fallback voice above, never ElevenLabs' stock
+  # voice. To enable the ElevenLabs voice, add this entry:
+  #   - name: UG_HALLOWEEN_VOICE_ID
+  #     value: "<elevenlabs-voice-id>"
 
   # --- optional tracing (fail-soft if unavailable) ---
   - name: OTEL_SERVICE_NAME

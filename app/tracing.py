@@ -2,7 +2,7 @@
 
 Reuses ReferenceApp app/agent.py's span-enrichment seam verbatim:
   - _SPAN_TYPES, _as_json_value, _SpanEnrichmentExporter, build_tracer_provider
-Adds: fill_ug_metadata (ug.* attributes, PII-free).
+Adds: the ug.ai_decide span type (in _SPAN_TYPES) and fill_ug_metadata (ug.* attributes, PII-free).
 """
 from __future__ import annotations
 
@@ -21,8 +21,15 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor, SpanExporter
 # (verbatim from ReferenceApp app/agent.py)
 # ---------------------------------------------------------------------------
 
-# LiveKit span name → MLflow SpanType for typed trace-tree rendering.
-_SPAN_TYPES = {"agent_session": "AGENT", "llm_node": "LLM", "function_tool": "TOOL"}
+# Span name → MLflow SpanType for typed trace-tree rendering. `ug.ai_decide` is ours (the span the voice-mode
+# controller opens on a mode transition or dropped late answer, app/voice_mode.py); the exporter JSON-encodes the type, so it is typed here
+# rather than with a bare string on the span.
+_SPAN_TYPES = {
+    "agent_session": "AGENT",
+    "llm_node": "LLM",
+    "function_tool": "TOOL",
+    "ug.ai_decide": "CHAIN",
+}
 
 
 def _as_json_value(raw: str | None, wrap_key: str) -> str | None:
@@ -146,8 +153,13 @@ def build_tracer_provider(enrichment: dict[str, str] | None = None) -> TracerPro
 # ---------------------------------------------------------------------------
 
 
-def fill_ug_metadata(enrichment: dict, bind_ctx, session_ctx) -> None:
-    """Attach ug.* trace attributes (spec §14). Fail-soft; PII-free (no caller name/spend)."""
+def fill_ug_metadata(enrichment: dict, bind_ctx, session_ctx, voice_mode=None) -> None:
+    """Attach ug.* trace attributes (spec §14; §7.11 for ug.voice_*). Fail-soft; PII-free (no caller name/spend,
+    and no utterance or agent line).
+
+    `voice_mode` is the call's VoiceModeController (or its VoiceModeState). Call this again at shutdown so the
+    root span carries the final mode; whatever the carrier lacks is simply not set.
+    """
     try:
         if bind_ctx is not None:
             enrichment["ug.data_generation_id"] = bind_ctx.data_generation_id
@@ -158,5 +170,30 @@ def fill_ug_metadata(enrichment: dict, bind_ctx, session_ctx) -> None:
         if lr is not None:
             import json as _json
             enrichment["ug.retrieval"] = _json.dumps(lr)
+    except Exception:
+        pass  # enrichment must never break the voice pipeline
+    _fill_voice_mode(enrichment, voice_mode)
+
+
+def _fill_voice_mode(enrichment: dict, voice_mode) -> None:
+    """The ug.voice_* root attrs (spec §7.11): the final mode, its transition count, the expressive tags performed,
+    whether the call fell back to the fallback voice, and the engine behind the last recorded decision (read from
+    the evidence the controller last published, so absent until it has published one). Independent of the
+    bind/retrieval attrs: a failure here loses only these."""
+    try:
+        state = getattr(voice_mode, "state", voice_mode)   # a controller carries its state; a bare state is used as-is
+        for key, field in (
+            ("ug.voice_mode", "mode"),
+            ("ug.voice_mode_transitions", "transitions"),
+            ("ug.expressive_tags", "tags_spoken"),
+            ("ug.voice_degraded", "degraded"),
+        ):
+            value = getattr(state, field, None)
+            if value is not None:   # 0 and False are real values
+                enrichment[key] = value
+        last = getattr(state, "last", None)
+        engine = last.get("engine") if isinstance(last, dict) else None
+        if engine is not None:
+            enrichment["ug.decide_engine"] = engine
     except Exception:
         pass  # enrichment must never break the voice pipeline

@@ -39,6 +39,47 @@
   <div class="bg-vignette"></div>
 </div>
 
+<!-- Halloween atmosphere (docs/halloween-ui/DESIGN.md §3): a purely decorative scene that sits behind the
+     studio, right over .bg. Inert until themed: `hidden` keeps it out of the layout, and studio.css only
+     renders + animates it under body[data-voice-mode="halloween"] (architecture.html never carries this
+     markup). aria-hidden + pointer-events:none keep it out of the accessibility tree, the tab order and
+     every click. The bat and the cobweb corner are each authored ONCE in <defs> and reused via <use>.
+     Order matters for the embers / bats: studio.css styles each one by position (:nth-child). Each bat's
+     <svg> sits in a <div> because the <div> is what flies: Chrome won't run a transform animation on an
+     <svg> root on the compositor, but it will on an HTML box. -->
+<div class="hw-atmos" aria-hidden="true" hidden>
+  <svg class="hw-defs" width="0" height="0">
+    <defs>
+      <path id="hw-bat-shape" d="M32 7L34.2 2.2L35.7 8.8C39.6 8.2 45 4.6 51.6 3.4C56.6 2.8 60.6 5.2 63.8 10.2Q58.4 9.4 55.4 16Q51.4 12.6 46 18Q42.6 15.6 39.8 22Q37.6 19.8 34.6 25Q33.4 27.2 32 27.2Q30.6 27.2 29.4 25Q26.4 19.8 24.2 22Q21.4 15.6 18 18Q12.6 12.6 8.6 16Q5.6 9.4 0.2 10.2C3.4 5.2 7.4 2.8 12.4 3.4C19 4.6 24.4 8.2 28.3 8.8L29.8 2.2L32 7z"/>
+      <path id="hw-cobweb-shape" fill="none" stroke-linecap="round" vector-effect="non-scaling-stroke" d="M0.7 0.7L198 0.7M0.7 0.7L184.8 71M0.7 0.7L142.4 137.5M0.7 0.7L74.2 183.6M0.7 0.7L0.7 198M27 0.7Q20.5 4.2 25.2 9.7M25.2 9.7Q18.8 12 19.4 18.8M19.4 18.8Q12.7 18.9 10.1 25M10.1 25Q4.4 20.8 0.7 27M55 0.7Q45.1 8.7 51.3 19.7M51.3 19.7Q35.8 22.8 39.6 38.2M39.6 38.2Q22.5 33.3 20.6 51M20.6 51Q8.8 43.3 0.7 55M87 0.7Q73.9 14 81.2 31.2M81.2 31.2Q59 37.6 62.6 60.4M62.6 60.4Q39.1 58 32.6 80.7M32.6 80.7Q14.7 73.7 0.7 87M123 0.7Q96.4 18.2 114.8 44.1M114.8 44.1Q84.3 53.7 88.5 85.4M88.5 85.4Q50.4 74.7 46.1 114M46.1 114Q17.7 89.1 0.7 123M162 0.7Q135 25.4 151.2 58.1M151.2 58.1Q107.3 68.3 116.5 112.5M116.5 112.5Q68.7 101.8 60.7 150.2M60.7 150.2Q25.9 131.5 0.7 162"/>
+    </defs>
+  </svg>
+
+  <div class="hw-moon"></div>
+
+  <div class="hw-fog hw-fog--a"></div>
+  <div class="hw-fog hw-fog--b"></div>
+
+  <div class="hw-embers">
+    <span class="hw-ember"></span>
+    <span class="hw-ember"></span>
+    <span class="hw-ember"></span>
+    <span class="hw-ember"></span>
+    <span class="hw-ember"></span>
+    <span class="hw-ember"></span>
+    <span class="hw-ember"></span>
+  </div>
+
+  <div class="hw-bats">
+    <div class="hw-bat"><svg viewBox="0 0 64 30"><use href="#hw-bat-shape"/></svg></div>
+    <div class="hw-bat"><svg viewBox="0 0 64 30"><use href="#hw-bat-shape"/></svg></div>
+    <div class="hw-bat"><svg viewBox="0 0 64 30"><use href="#hw-bat-shape"/></svg></div>
+  </div>
+
+  <svg class="hw-cobweb hw-cobweb--tl" viewBox="0 0 200 200"><use href="#hw-cobweb-shape"/></svg>
+  <svg class="hw-cobweb hw-cobweb--tr" viewBox="0 0 200 200"><use href="#hw-cobweb-shape"/></svg>
+</div>
+
 <!-- ================= TOP BAR ================= -->
 <header class="topbar">
   <a class="brand" href="index.html" aria-label="UG Voice Studio home">
@@ -451,6 +492,27 @@
               </ul>
               <div class="directives" id="directives">
                 <p class="directives-await">Directives resolve on connect…</p>
+              </div>
+
+              <!-- Voice mode (Plan 5): the AI Decide verdict + the voice that is speaking. Hidden until a
+                   `voice_mode` evidence fragment arrives; applyVoiceMode() fills it and sets
+                   body[data-voice-mode] so the stylesheet can shift the whole studio into the mode. -->
+              <div class="voice-mode" id="voiceMode" role="group" aria-labelledby="vmTitle" data-mode="standard" hidden>
+                <div class="vm-head">
+                  <span class="vm-title" id="vmTitle">Voice mode · AI Decide</span>
+                  <span class="vm-chip" id="vmChip" data-mode="standard">Standard</span>
+                </div>
+                <p class="vm-voice" id="vmVoice">—</p>
+                <p class="vm-decided" id="vmDecided"></p>
+                <div class="vm-probs" id="vmProbs" role="group" aria-label="Decision probabilities" hidden>
+                  <div class="vm-prob" data-k="enter"><span class="vm-prob-k">Enter</span><span class="vm-prob-bar" aria-hidden="true"><i></i></span><span class="vm-prob-v">—</span></div>
+                  <div class="vm-prob" data-k="exit"><span class="vm-prob-k">Exit</span><span class="vm-prob-bar" aria-hidden="true"><i></i></span><span class="vm-prob-v">—</span></div>
+                  <div class="vm-prob" data-k="none"><span class="vm-prob-k">None</span><span class="vm-prob-bar" aria-hidden="true"><i></i></span><span class="vm-prob-v">—</span></div>
+                </div>
+                <p class="vm-fallback" id="vmFallback" title="The Halloween voice failed, so the call is on the fallback voice for the rest of the session" hidden>
+                  <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4l9 16H3z"/><path d="M12 10v4"/><path d="M12 17.2v.01"/></svg>
+                  Fallback voice
+                </p>
               </div>
             </div>
           </article>

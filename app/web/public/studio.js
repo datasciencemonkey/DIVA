@@ -902,6 +902,7 @@
     state.room = null;
     stopMicMeter();
     setMuteUI(false);
+    resetVoiceMode();   // also when leaving via "← New world" (resetCallUI only runs on the Live stage)
     if (toSetup) resetCallUI();
   }
 
@@ -915,6 +916,7 @@
     onSpeakers([]);
     stopMicSignal();
     setMuteUI(false);
+    resetVoiceMode();   // a dropped connection ends the call's mode too
   }
 
   function setConn(stateName, label) {
@@ -950,6 +952,7 @@
     if (obj.bind) applyBind(obj.bind);
     if (obj.retrieval) applyRetrieval(obj.retrieval);
     if (obj.usage) applyUsage(obj.usage);
+    if (obj.voice_mode) applyVoiceMode(obj.voice_mode);
   }
 
   function applyBind(bind) {
@@ -1010,6 +1013,90 @@
     });
     wrap.appendChild(grid);
     if (HAS_GSAP) animIn($$(".directive", grid), { y: 8, stagger: 0.05, dur: 0.4 });
+  }
+
+  /* CONTROL · voice mode (Plan 5). One `voice_mode` fragment per mode change, dropped late answer or degrade (plus one at bind): the row shows the
+     decision live, and body[data-voice-mode] lets the stylesheet shift the whole studio into — and
+     back out of — the Halloween accent. Every field is optional: `probabilities` is null when the
+     engine omits it (the bars just hide), and nothing here may throw on a partial payload. */
+  const VM_LABELS = { standard: "Standard", halloween: "Halloween" };
+  const VM_PROBS = ["enter", "exit", "none"];
+  function finiteNum(x) { return (typeof x === "number" && Number.isFinite(x)) ? x : null; }
+  function unitNum(x) { return (typeof x === "number" && x >= 0 && x <= 1) ? x : null; }   // NaN fails both tests
+
+  /* The Halloween display face (Cormorant, DESIGN §2) is not in the <head>: a standard call, and architecture.html, should
+     never pay for it. Its stylesheet <link> is injected the first time a call enters Halloween, and only then; the id is the
+     guard, so re-entering (or a repeated fragment) adds nothing, and the <link> simply stays in <head> once added (cached
+     and inert in standard: nothing uses the face outside the mode). The fonts.googleapis.com / fonts.gstatic.com
+     preconnects are already in index.html, and `display=swap` means the headings keep showing in DM Sans until the serif
+     is ready, or for good if it never arrives (studio.css's --font-display falls back to it). The one-shot cost is the
+     stylesheet; the browser fetches only the font files the headings then actually draw. */
+  const DISPLAY_FONT_ID = "hw-display-font";
+  const DISPLAY_FONT_HREF = "https://fonts.googleapis.com/css2?family=Cormorant:ital,wght@0,500..700;1,500..700&display=swap";
+  function loadDisplayFont() {
+    if (document.getElementById(DISPLAY_FONT_ID)) return;
+    const link = document.createElement("link");
+    link.id = DISPLAY_FONT_ID;
+    link.rel = "stylesheet";
+    link.href = DISPLAY_FONT_HREF;
+    document.head.appendChild(link);
+  }
+
+  function applyVoiceMode(v) {
+    v = (v && typeof v === "object") ? v : {};
+    const mode = (typeof v.mode === "string" && v.mode) ? v.mode : "standard";
+    const row = $("#voiceMode");
+    const first = row.hidden;
+
+    row.dataset.mode = mode;
+    const chip = $("#vmChip");
+    chip.dataset.mode = mode;
+    chip.textContent = VM_LABELS[mode] || pretty(mode);
+    $("#vmVoice").textContent = v.voice ? String(v.voice) : "—";
+
+    // decided by <engine label> · conf 0.93 · 310 ms · same turn   (parts the payload lacks are left out;
+    // NBSPs keep each number with its unit so a wrap only ever falls between the " · " parts). A path of
+    // "none" is a snapshot with no verdict behind it (a degrade before any decision): claim nothing.
+    const NB = "\u00a0", conf = finiteNum(v.confidence), ms = finiteNum(v.latency_ms);
+    const bits = [];
+    if (v.path !== "none") {
+      if (v.decided_by) bits.push(`decided by ${v.decided_by}`);
+      if (conf != null) bits.push(`conf${NB}${conf.toFixed(2)}`);
+      if (ms != null) bits.push(`${Math.round(ms)}${NB}ms`);
+      if (v.path) bits.push(String(v.path).replace(/_/g, NB));
+    }
+    $("#vmDecided").textContent = bits.join(" · ");
+
+    renderVoiceProbs(v.probabilities);
+    $("#vmFallback").hidden = !v.degraded;
+
+    row.hidden = false;
+    if (mode === "halloween") loadDisplayFont();   // first entry only: the request starts no later than the restyle below
+    document.body.dataset.voiceMode = mode;
+    if (first && HAS_GSAP) animIn([row], { y: 8, dur: 0.4 });
+  }
+
+  /* enter / exit / none — the decider's per-label distribution. Each is a probability in [0, 1]; anything
+     else counts as missing. Bars are transform-only (scaleX). */
+  function renderVoiceProbs(probs) {
+    const wrap = $("#vmProbs");
+    const vals = VM_PROBS.map((k) => unitNum(probs && typeof probs === "object" ? probs[k] : null));
+    const top = Math.max(...vals.map((x) => (x == null ? -1 : x)));
+    wrap.hidden = top < 0;                      // engine sent none (or junk): hide the readout
+    if (wrap.hidden) return;
+    VM_PROBS.forEach((k, i) => {
+      const line = $(`.vm-prob[data-k="${k}"]`, wrap), p = vals[i];
+      $(".vm-prob-v", line).textContent = p == null ? "—" : p.toFixed(2);
+      $("i", line).style.transform = `scaleX(${p == null ? 0 : p})`;
+      line.dataset.top = String(p != null && p === top);
+    });
+  }
+
+  /* The mode is a per-call preference: when the call is over (or the world changes) the row goes
+     and the studio returns to its normal look — a stale Halloween accent would misreport state. */
+  function resetVoiceMode() {
+    delete document.body.dataset.voiceMode;
+    $("#voiceMode").hidden = true;
   }
 
   function applyCost(model) {
@@ -1074,6 +1161,16 @@
   /* =============================================================================
      TRANSCRIPT
      ========================================================================== */
+  /* Expressive cues ("[whispers]") are for the voice, never the page (G13). The agent already
+     publishes a cue-free transcript; this is the client's belt-and-braces. Same bound as the server's
+     strip_tags (app/expressive.py, MAX_GROUP_LEN): a closed [...] of up to 120 chars on one line that
+     is NOT followed by "(", so markdown links stay. Text without a cue is returned untouched. */
+  const CUE_RE = /\[[^\[\]\n]{0,118}\](?!\()/g;
+  function stripExpressiveTags(s) {
+    const t = String(s == null ? "" : s), out = t.replace(CUE_RE, "");
+    return out === t ? t : out.replace(/[ \t]{2,}/g, " ").trim();
+  }
+
   function handleTranscription(segments, participant) {
     const isAgent = !!(participant && participant.isAgent);
     const who = isAgent ? "agent" : "you";
@@ -1097,7 +1194,7 @@
         feed.appendChild(el);
         state.turns.set(id, el);
       }
-      $(".turn-text", el).textContent = seg.text || "";
+      $(".turn-text", el).textContent = stripExpressiveTags(seg.text);
       el.dataset.interim = seg.final === false ? "true" : "false";
     });
 
@@ -1245,6 +1342,7 @@
     state.callStart = null;
     state.turns.clear();
     $("#transcript").innerHTML = `<div class="await">The conversation will appear here once you connect.</div>`;
+    resetVoiceMode();
   }
 
   /* =============================================================================

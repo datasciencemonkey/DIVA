@@ -40,6 +40,7 @@
 
   /* ---- type ---- */
   --font: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-display: var(--font);   /* the big headings' face: DM Sans here, "Cormorant" under Halloween (T9a, below) */
   --mono: ui-monospace, "SF Mono", SFMono-Regular, "Menlo", "Cascadia Code", "Roboto Mono", monospace;
 
   /* ---- geometry ---- */
@@ -898,6 +899,645 @@ body[data-connected="true"] .mic-signal { color: var(--accent); }
 .btn.is-connecting svg { animation: pulse 1s var(--ease-signature) infinite; }
 
 /* =============================================================================
+   VOICE MODE (Plan 5) — the Control pillar's "AI Decide" row, and the restrained
+   Halloween accent the studio takes on while that mode is live.
+   applyVoiceMode() fills the row from a `voice_mode` evidence fragment and sets
+   body[data-voice-mode]. The accent rules are inert in standard mode (or with no
+   mode at all), so the studio looks exactly as it always did; halloween adds a
+   pumpkin/violet accent to the header, the ambient glow and the Control pillar
+   ONLY — never a reskin — and it clears cleanly when the attribute goes. The
+   palette is tokens, so both themes hold.
+   ========================================================================== */
+:root {
+  --hw-orange: #FF8A2B;   /* pumpkin — lines, fills, glows */
+  --hw-violet: #9D6BFF;   /* spectral violet — borders, glows */
+  --hw-ink:    #FFB877;   /* pumpkin as TEXT on navy (AA) */
+}
+:root[data-theme="light"] {
+  --hw-orange: #C2560A;   /* darkened for white / oat */
+  --hw-violet: #6B3FD1;
+  --hw-ink:    #8F3F00;   /* AA on the tinted chip over white / oat */
+}
+
+/* --- the row ---------------------------------------------------------------- */
+.voice-mode { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--hairline); display: flex; flex-direction: column; gap: 7px; }
+.voice-mode[hidden], .vm-probs[hidden], .vm-fallback[hidden] { display: none; }
+.vm-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.vm-title { font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; color: var(--text-lo); }
+.vm-chip {
+  flex: 0 0 auto; font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em;
+  padding: 3px 10px; border-radius: 999px;
+  color: var(--text-mid); background: var(--surface-3); border: 1px solid var(--hairline-strong);
+  transition: color var(--dur-2) var(--ease-signature), background var(--dur-2) var(--ease-signature), border-color var(--dur-2) var(--ease-signature), box-shadow var(--dur-2) var(--ease-signature);
+}
+.vm-chip[data-mode="halloween"] {
+  color: var(--hw-ink);
+  background: color-mix(in srgb, var(--hw-orange) 14%, var(--surface-2));
+  border-color: color-mix(in srgb, var(--hw-orange) 45%, transparent);
+  /* T8: the chip is the lantern's lit window: a still halo, so "the spell is active" reads at a glance */
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--hw-orange) 9%, transparent), 0 0 18px -3px color-mix(in srgb, var(--hw-orange) 55%, transparent);
+}
+.vm-voice { font-family: var(--mono); font-size: .84rem; font-weight: 600; color: var(--text-hi); line-height: 1.35; word-break: break-word; overflow-wrap: anywhere; }
+.vm-decided { font-family: var(--mono); font-size: .74rem; color: var(--text-lo); line-height: 1.45; }
+.vm-decided:empty { display: none; }
+
+/* enter / exit / none — the decider's distribution; fills are transform-only (scaleX) */
+.vm-probs { display: flex; flex-direction: column; gap: 5px; margin-top: 2px; }
+.vm-prob { display: grid; grid-template-columns: 2.4rem minmax(0, 1fr) 2.3rem; align-items: center; gap: 8px; }
+.vm-prob-k { font-size: .68rem; text-transform: uppercase; letter-spacing: .07em; color: var(--text-lo); }
+.vm-prob-bar { height: 6px; border-radius: 999px; overflow: hidden; background: var(--surface-3); }
+.vm-prob-bar i {
+  display: block; height: 100%; background: var(--text-lo);
+  transform: scaleX(0); transform-origin: left center;
+  transition: transform var(--dur-3) var(--ease-signature);
+}
+.vm-prob[data-top="true"] .vm-prob-bar i { background: var(--c-control); }   /* the leading label takes the pillar's own hue */
+.voice-mode[data-mode="halloween"] .vm-prob[data-top="true"] .vm-prob-bar i { background: linear-gradient(90deg, var(--hw-orange), var(--hw-violet)); }
+.vm-prob-v { text-align: right; font-family: var(--mono); font-size: .72rem; color: var(--text-mid); font-feature-settings: "tnum" 1; }
+.vm-prob[data-top="true"] .vm-prob-v { color: var(--text-hi); font-weight: 600; }
+
+/* the Halloween voice failed: the call is on the fallback voice (amber = the Control hue, "degraded") */
+.vm-fallback {
+  align-self: flex-start; display: inline-flex; align-items: center; gap: 6px;
+  font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em;
+  padding: 3px 10px; border-radius: 999px;
+  color: var(--c-control);
+  background: color-mix(in srgb, var(--c-control) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--c-control) 36%, transparent);
+}
+.vm-fallback svg { flex: 0 0 auto; }
+
+/* --- the Halloween accent: header hairline + glow, an ambient wash, the Control pillar.
+   Everything it touches is transitioned (gradients can't be, so the wash and the pillar's top
+   line are opacity-faded layers), so enter AND exit are a fade, not a jump. ---- */
+.topbar      { transition: border-color var(--dur-3) var(--ease-signature), box-shadow var(--dur-3) var(--ease-signature); }
+.brand-mark  { transition: color var(--dur-3) var(--ease-signature); }
+/* isolation: the lantern's light (T8, below) sits at z-index -1, which has to land above this card's own background and
+   under all of its content, so the card is a stacking context in every mode (no visible effect on its own).
+   --hw-lit is the lantern's envelope: 0 in standard, 1 under Halloween (T8 sets it); it rides the same house fade as
+   the rest of the mode, so the light comes up and goes down with the cross-fade instead of cutting. */
+.pillar[data-pillar="control"] {
+  isolation: isolate;
+  transition: border-color var(--dur-3) var(--ease-signature), box-shadow var(--dur-3) var(--ease-signature), --hw-lit var(--dur-3) var(--ease-signature);
+}
+/* The nightfall wash (DESIGN §3.1) is the scene's sky: a pumpkin lantern glow rising from the bottom-left, a
+   spectral-violet pool over the moon at the top-right, a faint ember warmth under the top-left cobweb, the old
+   low-right violet for depth, and a slow darkening toward the floor. It is ONE gradient declared here (not swapped
+   in under the mode): gradients can't be interpolated, so a different picture under the attribute would pop to
+   the old one at full opacity on the first frame of the exit fade. Opacity does the whole enter / exit. */
+.bg::before {
+  --hw-night: rgba(6, 3, 14, .36);
+  content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0;
+  background:
+    radial-gradient(ellipse 66% 52% at 3% 106%,  color-mix(in srgb, var(--hw-orange) 32%, transparent), transparent 70%),
+    radial-gradient(ellipse 52% 50% at 95% -4%,  color-mix(in srgb, var(--hw-violet) 32%, transparent), transparent 70%),
+    radial-gradient(ellipse 40% 36% at 0% 0%,    color-mix(in srgb, var(--hw-orange) 12%, transparent), transparent 70%),
+    radial-gradient(ellipse 58% 60% at 96% 100%, color-mix(in srgb, var(--hw-violet) 18%, transparent), transparent 70%),
+    linear-gradient(to bottom, transparent 30%, var(--hw-night));
+  transition: opacity var(--dur-3) var(--ease-signature);
+}
+:root[data-theme="light"] .bg::before { --hw-night: rgba(84, 44, 136, .10); }   /* parchment dusk: an aubergine haze, not a grey one */
+/* the pillar's 2px top line (.pillar::before, amber) gets a pumpkin→violet twin that fades in over it */
+.pillar[data-pillar="control"]::after {
+  content: ""; position: absolute; inset: 0 0 auto 0; height: 2px; pointer-events: none; opacity: 0;
+  background: linear-gradient(90deg, var(--hw-orange), var(--hw-violet) 60%, transparent);
+  transition: opacity var(--dur-3) var(--ease-signature);
+}
+
+body[data-voice-mode="halloween"] .bg::before { opacity: 1; }
+:root[data-theme="light"] body[data-voice-mode="halloween"] .bg::before { opacity: .6; }
+body[data-voice-mode="halloween"] .brand-mark { color: var(--hw-orange); }
+body[data-voice-mode="halloween"] .topbar {
+  /* T5 escalation: a brighter violet edge, with the pumpkin bloom pooling just under it. Static shadows riding the
+     transition above; Harvest's softer twin is in the T5 block below. */
+  border-bottom-color: color-mix(in srgb, var(--hw-violet) 72%, transparent);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--hw-violet) 20%, transparent),
+              0 10px 30px -12px color-mix(in srgb, var(--hw-orange) 62%, transparent);
+}
+body[data-voice-mode="halloween"] .pillar[data-pillar="control"] {
+  /* The card's edge and the still bloom around it (T8 carries the flicker: an opacity overlay inside the card,
+     below). Static, riding the transition above: this used to be a 5.5s box-shadow keyframe loop, which repainted
+     a 46px blur every frame and snapped to nothing on exit. */
+  border-color: color-mix(in srgb, var(--hw-violet) 50%, var(--hairline));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--hw-violet) 14%, transparent),
+              0 14px 38px -18px color-mix(in srgb, var(--hw-orange) 50%, transparent);
+  --hw-lit: 1;   /* the lantern's light, fully up (Harvest runs it at .55; both in T8) */
+}
+body[data-voice-mode="halloween"] .pillar[data-pillar="control"]::after { opacity: 1; }
+
+/* =============================================================================
+   HALLOWEEN PALETTE — "All Hallows' Console" (docs/halloween-ui/DESIGN.md §1)
+   The seasonal skin is built the way the light theme is: the SAME custom properties,
+   re-declared under one scoped selector. Everything above already draws from these
+   tokens, so the whole studio retints in one cascade and reverts for free when
+   body[data-voice-mode] leaves — nothing is written inline, so there is nothing to
+   unwind. (This supersedes "accent only, never a reskin" in the Voice Mode note: that
+   accent now rides on top of this palette.) It composes with the theme: "Midnight" is
+   dark, the default; "Harvest" is the data-theme="light" sibling. Harvest sits on the
+   same <body> and out-ranks Midnight, so it MUST restate every token Midnight sets or
+   Midnight's value leaks into light — keep the two lists identical. Scoped to <body>, so
+   architecture.html (same stylesheet, never sets the attribute) is untouched.
+   NOT re-declared, so they keep their data meaning in both themes: the four pillar hues
+   (--c-choice/-control/-context/-costs) and --danger. The signature hues are the
+   --hw-* tokens above. Every text token is AA on surface, surface-2/-3, ink and ink-2.
+   ========================================================================== */
+
+/* "Midnight" — a haunted indigo-black with a violet undertone; pumpkin replaces Lava as THE signal */
+body[data-voice-mode="halloween"] {
+  /* ---- ink + surfaces ---- */
+  --ink:        #0C0718;   /* page / .bg */
+  --ink-2:      #140C24;   /* inputs / insets / card-gradient base */
+  --surface:    #1A1230;   /* card top */
+  --surface-2:  #221834;   /* resting controls, bubbles */
+  --surface-3:  #2C2144;   /* hover / pressed controls */
+  --hairline:        rgba(157,107,255,.16);   /* spectral violet (= --hw-violet) */
+  --hairline-strong: rgba(157,107,255,.30);
+  --topbar-bg: linear-gradient(to bottom, rgba(12,7,24,.86), rgba(12,7,24,.58));
+
+  /* ---- text ---- */
+  --text-hi:  #F3ECFA;   /* AA (>=12.9:1) on every card surface incl. hover surface-3 */
+  --text-mid: #C6B7E0;   /* AA (>=7.9:1) on every card surface incl. hover surface-3 */
+  --text-lo:  #AD9ECB;   /* AA (>=6.0:1) on every card surface incl. hover surface-3 */
+
+  /* ---- signal: pumpkin ---- */
+  --accent:      var(--hw-orange);   /* #FF8A2B — CTA/focus/connected/"live"/hero fills */
+  --accent-deep: #F0761A;            /* button gradient base */
+  --accent-ink:  #1A0C02;            /* label on the pumpkin button (8.13:1 top, 6.66:1 base) */
+  --accent-text: var(--hw-ink);      /* #FFB877 — accent-as-TEXT (AA, >=8.7:1) */
+
+  --shadow: 0 26px 64px -24px rgba(0,0,0,.82);
+}
+
+/* "Harvest" — warm parchment + aubergine ink; pumpkin darkened for AA on a pale ground */
+:root[data-theme="light"] body[data-voice-mode="halloween"] {
+  /* ---- ink + surfaces ---- */
+  --ink:        #F6EEE2;   /* parchment — page / .bg */
+  --ink-2:      #EADFCB;   /* insets, inputs, card-gradient base */
+  --surface:    #FFFBF3;   /* card top */
+  --surface-2:  #F3E9D7;   /* resting controls, bubbles */
+  --surface-3:  #E7D8BF;   /* hover / pressed controls */
+  --hairline:        rgba(107,63,209,.16);   /* violet (= light --hw-violet) */
+  --hairline-strong: rgba(107,63,209,.28);
+  --topbar-bg: linear-gradient(to bottom, rgba(246,238,226,.9), rgba(246,238,226,.62));   /* parchment twin of the standard light topbar */
+
+  /* ---- text ---- */
+  --text-hi:  #241433;   /* deep aubergine — AA (>=12.2:1) on every card surface incl. hover surface-3 */
+  --text-mid: #4C3A52;   /* AA (>=7.3:1) on every card surface incl. hover surface-3 */
+  --text-lo:  #5E4A64;   /* AA (>=5.6:1) on every card surface incl. hover surface-3 */
+
+  /* ---- signal: pumpkin, darkened ---- */
+  --accent:      var(--hw-orange);   /* #C2560A (the light --hw-orange) — CTA/focus/connected/hero */
+  --accent-deep: #A8470A;            /* primary-button gradient base */
+  --accent-ink:  #FFFFFF;            /* white label on the pumpkin button (4.54:1 top, 5.88:1 base) */
+  --accent-text: #9A3F06;            /* accent-as-TEXT (AA, >=4.8:1 on every card surface incl. hover surface-3) */
+
+  --shadow: 0 1px 2px rgba(0,0,0,.04), 0 16px 40px -20px rgba(0,0,0,.13);   /* the standard light shadow, restated so Midnight's heavier one doesn't leak */
+}
+
+/* =============================================================================
+   HALLOWEEN ACCENT AUDIT (docs/halloween-ui/DESIGN.md §5) — pumpkin, and the pillar hues, on
+   the surfaces they now meet. Every place the studio pairs --accent (or a pillar hue) with a
+   surface or text was measured as rendered, in both palettes. Midnight needed nothing: each
+   pairing is as good as standard or better (pumpkin on violet beats Lava on navy — focus ring
+   6.3-8.4:1, CTA label 6.7-8.1:1), and in BOTH palettes the hero motif, CTAs, connected chip,
+   transcript bubbles, cost-meter fill and sparkline read as intended, so their rules are left
+   alone. What is left, below: (1) Harvest's parchment --ink-2 is darker and warmer than the standard
+   oat, so pillar-hue / accent / danger TEXT sitting on its own tint over it slips under AA;
+   each label is pulled toward the aubergine ink (the way the light theme already darkens its
+   hues) and the hues themselves — and standard — stay as they are. (2) The ambient Lava orb is
+   raw rgba, not a token, so the palette swap can't reach it. Static colour only: nothing is
+   animated or written inline, and all of it lets go when body[data-voice-mode] does.
+   ========================================================================== */
+
+/* Harvest: the gold / mint pillar hues as TEXT on their own tint, pulled toward --text-hi */
+:root[data-theme="light"] body[data-voice-mode="halloween"] {
+  --hw-control-ink: color-mix(in srgb, var(--c-control) 76%, var(--text-hi));
+  --hw-context-ink: color-mix(in srgb, var(--c-context) 84%, var(--text-hi));
+}
+:root[data-theme="light"] body[data-voice-mode="halloween"] .cost-bars[data-level="1"] span[data-tier="Low"]  { color: var(--hw-context-ink); }   /* 4.48 -> 5.24 */
+:root[data-theme="light"] body[data-voice-mode="halloween"] .cost-bars[data-level="3"] span[data-tier="High"] { color: var(--hw-control-ink); }   /* 4.10 -> 5.26 */
+:root[data-theme="light"] body[data-voice-mode="halloween"] .tier-badge[data-tier="VIP"]                      { color: var(--hw-control-ink); }   /* 4.28 -> 5.49 */
+:root[data-theme="light"] body[data-voice-mode="halloween"] .vm-fallback                                      { color: var(--hw-control-ink); }   /* 4.39 -> 5.63 */
+:root[data-theme="light"] body[data-voice-mode="halloween"] .caller-group[data-tier="VIP"] .caller-avatar     { color: var(--hw-control-ink); }   /* 3.95 -> 5.06 (standard-light is 4.2 — already under) */
+/* Harvest: pumpkin / danger text on a tint of itself, and the timeline's done-check on its pumpkin node */
+:root[data-theme="light"] body[data-voice-mode="halloween"] .caller-live-avatar { color: color-mix(in srgb, var(--accent-text) 80%, var(--text-hi)); }   /* 4.29 -> 5.30 */
+:root[data-theme="light"] body[data-voice-mode="halloween"] .form-error        { color: color-mix(in srgb, var(--danger) 85%, var(--text-hi)); }        /* 4.26 -> 5.08 */
+:root[data-theme="light"] body[data-voice-mode="halloween"] .tl-done           { color: var(--accent-text); }   /* icon on a 20% pumpkin tint: 2.73 -> 4.09 (needs 3) */
+
+/* ambient: the top-left Lava orb (raw rgba(255,54,33), both themes) would keep tinting the corner a
+   maroon / rose under the pumpkin wash; drop it while the mode is live — the wash (.bg::before) carries
+   that corner, and the orb is back the moment the attribute leaves. Harvest needs its own selector to
+   out-rank the light-only `.bg-aurora` opacity above. */
+body[data-voice-mode="halloween"] .bg-aurora--a,
+:root[data-theme="light"] body[data-voice-mode="halloween"] .bg-aurora--a { opacity: 0; }
+
+/* =============================================================================
+   HALLOWEEN ENTER / EXIT CROSS-FADE (docs/halloween-ui/DESIGN.md §4.1-4.2, ~420ms, both ways)
+   The seasonal skin is a token swap, so the dissolve is a token transition: the colour tokens are
+   registered (`@property` makes them interpolable <color>s) and transitioned on <body>. Every
+   consumer then follows frame by frame — the card / pillar / rail / transcript gradients, borders,
+   explicit text colours, color-mix() tints, the Lava-to-pumpkin CTA, SVG currentColor — with no
+   per-surface list to maintain. (Transitioning background-color on the cards cannot do this: they
+   are painted with linear-gradient(var(--surface), var(--ink-2)), a background-image, which CSS
+   does not interpolate. Measured: the card gradients and every explicitly-coloured text jumped at
+   t=0; only borders and inherited colour faded.)
+   - Symmetric: the transition sits on plain <body>, so the standard state carries it and the exit
+     plays back through the same curve (--dur-3 on the house ease).
+   - It fires only when a token's computed value changes — a mode swap, or the light/dark toggle
+     (DESIGN §4.1 calls that smoothing a bonus). An ordinary state change picks a different token
+     but changes no token's value, so it is untouched. First paint has no prior style, so nothing
+     runs on load (the <head> script sets data-theme before paint).
+   - Reduced motion: <body> and .bg-aurora--a are real elements, so the blanket `*` rule in the
+     reduced-motion block turns this into an instant swap; nothing here targets a pseudo-element.
+   - Keep in step with the two Halloween palette blocks: register and list any colour token they
+     re-declare. --topbar-bg (a gradient) and --shadow are not colours, so they swap outright; the
+     pillar hues and --danger are never swapped, so they are not registered. Each initial-value
+     mirrors :root.
+   Colour only — no box-shadow or filter is animated, nothing is written inline, and it all lets
+   go with the attribute. (A browser without @property keeps the old instant swap.)
+   ========================================================================== */
+@property --ink             { syntax: "<color>"; inherits: true; initial-value: #0B2026; }
+@property --ink-2           { syntax: "<color>"; inherits: true; initial-value: #0E252C; }
+@property --surface         { syntax: "<color>"; inherits: true; initial-value: #112C34; }
+@property --surface-2       { syntax: "<color>"; inherits: true; initial-value: #1B3139; }
+@property --surface-3       { syntax: "<color>"; inherits: true; initial-value: #203C45; }
+@property --hairline        { syntax: "<color>"; inherits: true; initial-value: rgba(150,166,190,.12); }
+@property --hairline-strong { syntax: "<color>"; inherits: true; initial-value: rgba(150,166,190,.22); }
+@property --text-hi         { syntax: "<color>"; inherits: true; initial-value: #EAF0EE; }
+@property --text-mid        { syntax: "<color>"; inherits: true; initial-value: #A7B4B9; }
+@property --text-lo         { syntax: "<color>"; inherits: true; initial-value: #99A6AF; }
+@property --accent          { syntax: "<color>"; inherits: true; initial-value: #FF3621; }
+@property --accent-deep     { syntax: "<color>"; inherits: true; initial-value: #FB3A25; }
+@property --accent-ink      { syntax: "<color>"; inherits: true; initial-value: #0B2026; }
+@property --accent-text     { syntax: "<color>"; inherits: true; initial-value: #FF7054; }
+
+body {
+  transition-property: --ink, --ink-2, --surface, --surface-2, --surface-3, --hairline, --hairline-strong,
+                       --text-hi, --text-mid, --text-lo, --accent, --accent-deep, --accent-ink, --accent-text;
+  transition-duration: var(--dur-3);
+  transition-timing-function: var(--ease-signature);
+}
+/* T1 hides the Lava orb on Halloween (raw rgba, so no token reaches it): fade its opacity instead of cutting it.
+   GSAP only drives its transform, so the two never fight. */
+.bg-aurora--a { transition: opacity var(--dur-3) var(--ease-signature); }
+
+/* =============================================================================
+   HALLOWEEN ATMOSPHERE SCENE (docs/halloween-ui/DESIGN.md §3) — .hw-atmos in index.html
+   The sky the seasonal skin sits in: a moon, two fog banks, seven embers, three bats and a cobweb in each
+   top corner. All decoration (aria-hidden, pointer-events:none), painted behind every piece of content,
+   over .bg and its nightfall wash (.bg::before). Density is deliberate; if in doubt, fewer.
+   - Reach: architecture.html shares this stylesheet but has no .hw-atmos, and the element is display:none
+     in every standard call, so nothing here renders, paints, promotes a layer or runs a loop outside the
+     mode. Only the reveal and will-change hang off body[data-voice-mode="halloween"].
+   - Enter / exit: opacity 0->1 and back on the house ease, with `display` riding the same transition
+     (transition-behavior: allow-discrete + @starting-style). The scene therefore stays rendered, and keeps
+     drifting, for the whole exit fade and only then drops to display:none, which is what stops every loop.
+     A browser without those gets an instant swap, never a broken one. For the same reason the loops are
+     declared on .hw-atmos descendants, not on the body attribute: hung off the attribute they would all
+     freeze and snap to rest on the first frame of the exit, mid-fade.
+   - Motion: transform and opacity only, one animation per element, nothing that lays out or repaints.
+     There is no filter and no animated shadow anywhere: every soft edge is gradient falloff (so there is no
+     blur pass on a moving layer either), and the halos are radial gradients. Periods are long and mostly
+     prime (the aurora's trick), so the scene never visibly repeats.
+   - Reduced motion: the block at the end of this file holds a static frame (moon, fog at rest, cobwebs)
+     and drops the embers and bats.
+   Colour comes from the --hw-* tokens, so Harvest (light) follows for free; the few scene-only values
+   (moon, haze, bats) are declared once per theme on .hw-atmos.
+   ========================================================================== */
+.hw-atmos {
+  /* "Midnight": a pale-gold moon, violet haze, violet bats */
+  --hw-moon-core: #F3E5BD;
+  --hw-moon-rim:  #CDB47C;
+  --hw-moon-glow: rgba(255, 224, 150, .22);
+  --hw-haze:      rgba(180, 152, 255, .21);
+  --hw-bat:       color-mix(in srgb, var(--hw-violet) 62%, transparent);
+
+  /* same plane as .bg but later in the DOM, so it paints over it and under all content */
+  position: fixed; inset: 0; z-index: -1;
+  overflow: hidden; contain: strict; pointer-events: none;
+  display: none; opacity: 0;
+  transition: opacity var(--dur-3) var(--ease-signature), display var(--dur-3) allow-discrete;
+}
+:root[data-theme="light"] .hw-atmos {
+  /* "Harvest": a harvest moon in pumpkin-gold, violet haze, aubergine bats on parchment */
+  --hw-moon-core: #FFE0B2;
+  --hw-moon-rim:  #F0A458;
+  --hw-moon-glow: color-mix(in srgb, var(--hw-orange) 26%, transparent);
+  --hw-haze:      rgba(107, 63, 209, .11);
+  --hw-bat:       color-mix(in srgb, var(--hw-violet) 48%, transparent);
+}
+body[data-voice-mode="halloween"] .hw-atmos { display: block; opacity: 1; }
+@starting-style { body[data-voice-mode="halloween"] .hw-atmos { opacity: 0; } }
+
+.hw-defs { position: absolute; width: 0; height: 0; overflow: hidden; }   /* the <defs> sprite: nothing to see */
+.hw-embers, .hw-bats { position: absolute; inset: 0; }
+
+/* moon: a lit disc with three faint maria, inside a wide soft halo. Static; the halo is a radial gradient.
+   The cards are opaque, so a moon dropped at a fixed offset would be sliced by the content column's straight edge
+   on most screens. It is instead sized to, and centred in, the free strip right of that column (--hw-margin), and
+   tucks to the edge, smaller, where the strip is narrow. */
+.hw-moon {
+  --hw-margin: calc(max(0px, (100vw - var(--maxw)) / 2) + clamp(18px, 3.5vw, 40px));   /* mirrors .stage's gutter */
+  --hw-moon-d: clamp(72px, calc(var(--hw-margin) - 40px), 168px);
+  position: absolute; top: clamp(82px, 13vh, 150px);
+  width: var(--hw-moon-d); aspect-ratio: 1;
+  right: max(16px, calc((var(--hw-margin) - var(--hw-moon-d)) / 2));
+}
+.hw-moon::before, .hw-moon::after { content: ""; position: absolute; border-radius: 50%; }
+.hw-moon::before {   /* halo, painted first so the disc sits on it */
+  inset: -105%;
+  background: radial-gradient(circle, var(--hw-moon-glow) 0%, color-mix(in srgb, var(--hw-violet) 18%, transparent) 34%, transparent 64%);
+}
+.hw-moon::after {    /* disc, lit from the upper left */
+  inset: 0;
+  background:
+    radial-gradient(circle at 63% 29%, rgba(104, 84, 48, .22) 0 6.5%, transparent 7.5%),
+    radial-gradient(circle at 35% 61%, rgba(104, 84, 48, .17) 0 10%,  transparent 11%),
+    radial-gradient(circle at 60% 77%, rgba(104, 84, 48, .15) 0 5.5%, transparent 6.5%),
+    radial-gradient(circle at 34% 30%, var(--hw-moon-core), var(--hw-moon-rim) 100%);
+}
+
+/* fog: two wide banks of overlapping soft ellipses that drift sideways and back. Each ellipse fades out well
+   inside its band, so no edge of the band ever shows; a bank is wider than the screen by as much as it drifts. */
+.hw-fog { position: absolute; left: -6vw; width: 112vw; }
+.hw-fog--a {
+  bottom: -10vh; height: 46vh;
+  background:
+    radial-gradient(ellipse 20% 44% at 17% 60%, var(--hw-haze), transparent 74%),
+    radial-gradient(ellipse 20% 36% at 38% 46%, color-mix(in srgb, var(--hw-haze) 75%, transparent), transparent 72%),
+    radial-gradient(ellipse 24% 48% at 63% 62%, var(--hw-haze), transparent 74%),
+    radial-gradient(ellipse 17% 34% at 84% 48%, color-mix(in srgb, var(--hw-haze) 70%, transparent), transparent 72%);
+  animation: hw-fog-drift-a 47s ease-in-out infinite alternate;
+}
+.hw-fog--b {
+  bottom: 16vh; height: 32vh;
+  background:
+    radial-gradient(ellipse 19% 42% at 22% 48%, color-mix(in srgb, var(--hw-haze) 70%, transparent), transparent 72%),
+    radial-gradient(ellipse 23% 46% at 52% 44%, color-mix(in srgb, var(--hw-haze) 85%, transparent), transparent 74%),
+    radial-gradient(ellipse 17% 38% at 80% 54%, color-mix(in srgb, var(--hw-haze) 65%, transparent), transparent 72%);
+  animation: hw-fog-drift-b 61s ease-in-out infinite alternate;
+}
+@keyframes hw-fog-drift-a { from { transform: translate3d(-6vw, 0, 0); } to { transform: translate3d(6vw, 0, 0); } }
+@keyframes hw-fog-drift-b { from { transform: translate3d(6vw, 0, 0); } to { transform: translate3d(-6vw, 0, 0); } }
+
+/* embers: a soft pumpkin / violet speck rising and fading, each on its own slow period and phase (a negative
+   delay pre-rolls it, so the scene is already alive on the first frame). Per-ember values are the custom
+   properties below: --x position, --s size, --c colour, --d period, --t phase, --dx sideways wander. */
+.hw-ember {
+  position: absolute; bottom: -3vh; left: var(--x);
+  width: var(--s); height: var(--s); border-radius: 50%;
+  background: radial-gradient(circle, var(--c) 0%, var(--c) 16%, color-mix(in srgb, var(--c) 38%, transparent) 40%, transparent 70%);
+  opacity: 0;
+  animation: hw-ember-rise var(--d) linear var(--t) infinite;
+}
+.hw-ember:nth-child(1) { --x:  6%; --s: 14px; --c: var(--hw-orange); --d: 23s; --t:  -4s; --dx:  2.4vw; }
+.hw-ember:nth-child(2) { --x: 17%; --s: 10px; --c: var(--hw-violet); --d: 31s; --t: -19s; --dx: -1.8vw; }
+.hw-ember:nth-child(3) { --x: 29%; --s: 12px; --c: var(--hw-orange); --d: 19s; --t: -11s; --dx:  2.0vw; }
+.hw-ember:nth-child(4) { --x: 44%; --s:  9px; --c: var(--hw-violet); --d: 37s; --t:  -8s; --dx: -2.6vw; }
+.hw-ember:nth-child(5) { --x: 61%; --s: 13px; --c: var(--hw-orange); --d: 27s; --t: -22s; --dx:  1.6vw; }
+.hw-ember:nth-child(6) { --x: 76%; --s: 10px; --c: var(--hw-violet); --d: 29s; --t:  -2s; --dx: -2.2vw; }
+.hw-ember:nth-child(7) { --x: 90%; --s: 12px; --c: var(--hw-orange); --d: 21s; --t: -15s; --dx:  1.4vw; }
+@keyframes hw-ember-rise {
+  0%   { transform: translate3d(0, 0, 0);                                opacity: 0; }
+  10%  {                                                                 opacity: .9; }
+  38%  { transform: translate3d(calc(var(--dx) * -.7), -30vh, 0); }
+  66%  { transform: translate3d(calc(var(--dx) * .9),  -56vh, 0);        opacity: .55; }
+  100% { transform: translate3d(calc(var(--dx) * -.3), -82vh, 0);        opacity: 0; }
+}
+
+/* bats: a glimpse, not a swarm. Each crosses the sky once per (long) period, in the first ~30% of it, then waits
+   off-screen; the nearest (largest) is the fastest, the farthest the slowest. The path is a shallow sine built
+   into the keyframes (bob + micro-tilt), so it stays ONE transform animation per element. The first bat is
+   pre-rolled so there is already one in flight when the scene opens. --y lane, --w size, --o peak opacity.
+   The flying element is an HTML box with the inline <svg> inside it: Chrome won't composite a transform animation
+   on an <svg> root (measured: TRANSFORM_RELATED_PROPERTY_CANNOT_BE_ACCELERATED_ON_TARGET, so it ran on the main
+   thread), but it does for the <div>. */
+.hw-bat {
+  position: absolute; top: var(--y); left: 0;
+  width: var(--w); aspect-ratio: 64 / 30;
+  color: var(--hw-bat);
+  opacity: 0;
+  animation: hw-bat-cross var(--d) linear var(--t) infinite;
+}
+.hw-bat svg { display: block; width: 100%; height: 100%; fill: currentColor; }
+.hw-bat:nth-child(1) { --y: 22vh; --w: 44px; --o: .62; --d:  71s; --t:  -5s; }
+.hw-bat:nth-child(2) { --y: 38vh; --w: 30px; --o: .48; --d:  89s; --t: -52s; }
+.hw-bat:nth-child(3) { --y: 14vh; --w: 24px; --o: .40; --d: 103s; --t: -83s; }
+@keyframes hw-bat-cross {
+  0%    { transform: translate3d(-14vw,  0,     0) rotate(-6deg); opacity: 0; }
+  1.5%  {                                                         opacity: var(--o); }
+  5%    { transform: translate3d(  1vw, -2.4vh, 0) rotate( 5deg); }
+  9%    { transform: translate3d( 18vw,  1.2vh, 0) rotate(-5deg); }
+  13%   { transform: translate3d( 36vw, -2.2vh, 0) rotate( 5deg); }
+  17%   { transform: translate3d( 54vw,  1.4vh, 0) rotate(-5deg); }
+  21%   { transform: translate3d( 72vw, -2vh,   0) rotate( 5deg); }
+  25%   { transform: translate3d( 90vw,  1vh,   0) rotate(-5deg); opacity: var(--o); }
+  30%   { transform: translate3d(112vw, -1vh,   0) rotate( 4deg); opacity: 0; }
+  100%  { transform: translate3d(112vw, -1vh,   0) rotate( 4deg); opacity: 0; }
+}
+
+/* cobweb corners: one authored web (index.html <defs>), drawn with the hairline token so it tracks the theme,
+   mirrored for the top-right. Static. non-scaling-stroke keeps it a true hairline at any size. */
+.hw-cobweb {
+  position: absolute; top: 0; width: clamp(120px, 14vw, 210px); aspect-ratio: 1;
+  fill: none; stroke: var(--hairline-strong); stroke-width: 1;
+}
+.hw-cobweb--tl { left: 0; }
+.hw-cobweb--tr { right: 0; transform: scaleX(-1); }
+
+/* promote the moving layers only while the mode is live (the exit fade keeps its animations, hence its layers,
+   until display:none lands; after that nothing is left to promote) */
+body[data-voice-mode="halloween"] .hw-fog                   { will-change: transform; }
+body[data-voice-mode="halloween"] :is(.hw-ember, .hw-bat)   { will-change: transform, opacity; }
+
+/* small screens: a thinner sky, same picture. There is no free margin here, so the moon sits behind the hero title:
+   it is dimmed to a ghost so the title's light text keeps its contrast over it (worst case measured 4.7:1 in Midnight;
+   the title is large text, which needs 3:1). */
+@media (max-width: 720px) {
+  .hw-moon { top: 76px; right: 18px; width: 84px; opacity: .38; }
+  .hw-cobweb { width: 104px; }
+  .hw-ember:nth-child(n + 5), .hw-bat:nth-child(n + 2) { display: none; }
+}
+
+/* =============================================================================
+   HALLOWEEN REGION SKINS (docs/halloween-ui/DESIGN.md §2, §5) — T5 topbar / hero / Configure, T6 Generate, T7 Live
+   The palette swap (T0) already repaints every surface, so these blocks add only what a swap cannot: light,
+   not paint. Each is scoped under body[data-voice-mode="halloween"], so standard mode and architecture.html
+   (same stylesheet, never sets the attribute) are untouched, and all of it lets go with the attribute.
+   - Static only: text- and box-shadows that sit still, gradients, and colours. Nothing here animates, so there is
+     nothing for the reduced-motion block to switch off. The shadows that change on enter / exit (topbar, CTA,
+     timeline node) ride transitions their base rules already declare, so they fade with the token cross-fade and
+     the blanket rule collapses them under reduce; the two faint text-glows (wordmark, hero) have none to ride and
+     switch with the attribute, as DESIGN §2 specifies a static glow.
+   - Data stays neutral (G13): no transcript, directive, token, price or retrieval text is restyled (bar the one
+     contrast fix in T7), and the pillar hues (the data identity) are untouched. The display face (--font-display),
+     the heading settle and the heading tracking are T9a, after T8's lantern, at the end of this run of blocks.
+   ========================================================================== */
+
+/* ---- T5 · topbar, hero & Configure ----------------------------------------------------------------
+   Topbar: the violet underline + pumpkin glow is escalated in place (the Halloween accent rule above). The
+   wordmark gets a faint pumpkin glow (its dim "Voice Studio" half stays crisp) and the current stepper tab is lit
+   pumpkin rather than merely tinted. Hero: the headline takes the faint pumpkin glow DESIGN §2 prescribes for the
+   display headings. Configure: the card's hairline edge is lit pumpkin -> violet, and the primary CTAs sit in
+   lantern light instead of a black drop shadow. Harvest runs the text glows at roughly half strength, and the topbar
+   bloom softer: a pumpkin halo on parchment goes muddy before it goes bright. */
+body[data-voice-mode="halloween"] .brand-word { text-shadow: 0 0 16px color-mix(in srgb, var(--hw-orange) 40%, transparent); }
+body[data-voice-mode="halloween"] .brand-dim  { text-shadow: none; }
+body[data-voice-mode="halloween"] .step[aria-current="step"] {
+  border-color: color-mix(in srgb, var(--accent) 48%, transparent);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+}
+/* T9a: the glow belongs to all four display headings (hero, Generate, the live company title, the summary title) */
+body[data-voice-mode="halloween"] .hero-title,
+body[data-voice-mode="halloween"] .generate-title,
+body[data-voice-mode="halloween"] .rail-head h2,
+body[data-voice-mode="halloween"] .summary-head h3 { text-shadow: 0 0 18px color-mix(in srgb, var(--hw-orange) 30%, transparent); }
+body[data-voice-mode="halloween"] .config-card::before {
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--hw-orange) 60%, transparent), color-mix(in srgb, var(--hw-violet) 60%, transparent), transparent);
+}
+/* Midnight only: Harvest keeps the neutral shadow the light rule above gives it, exactly as standard-light does.
+   :not(:disabled) leaves a disabled CTA on `.btn:disabled`'s no-shadow. */
+:root:not([data-theme="light"]) body[data-voice-mode="halloween"] .btn--primary:not(:disabled) {
+  box-shadow: 0 12px 28px -14px color-mix(in srgb, var(--hw-orange) 62%, transparent), inset 0 1px 0 rgba(255,255,255,.22);
+}
+:root:not([data-theme="light"]) body[data-voice-mode="halloween"] .btn--primary:not(:disabled):hover {
+  box-shadow: 0 18px 42px -16px color-mix(in srgb, var(--hw-orange) 70%, transparent), inset 0 1px 0 rgba(255,255,255,.28);
+}
+
+:root[data-theme="light"] body[data-voice-mode="halloween"] .topbar {
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--hw-violet) 14%, transparent),
+              0 10px 26px -14px color-mix(in srgb, var(--hw-orange) 42%, transparent);
+}
+:root[data-theme="light"] body[data-voice-mode="halloween"] .brand-word { text-shadow: 0 0 14px color-mix(in srgb, var(--hw-orange) 22%, transparent); }
+:root[data-theme="light"] body[data-voice-mode="halloween"] .hero-title,
+:root[data-theme="light"] body[data-voice-mode="halloween"] .generate-title,
+:root[data-theme="light"] body[data-voice-mode="halloween"] .rail-head h2,
+:root[data-theme="light"] body[data-voice-mode="halloween"] .summary-head h3 { text-shadow: 0 0 18px color-mix(in srgb, var(--hw-orange) 16%, transparent); }
+/* Harvest: a focused field's edge. The standard 60% border is weaker in pumpkin on parchment (2.0:1 against the card,
+   where standard-light's deeper Lava reaches 2.6:1); solid pumpkin lifts it to ~3.9:1 and the halo stays. */
+:root[data-theme="light"] body[data-voice-mode="halloween"] .field input:focus,
+:root[data-theme="light"] body[data-voice-mode="halloween"] .field textarea:focus { border-color: var(--accent); }
+
+/* ---- T6 · Generate ---------------------------------------------------------------------------------
+   The lit stretch of the timeline runs pumpkin -> spectral violet (toward the step still to come, where the
+   standard rule faded out into the faint hairline), and the step in progress gets a second, violet aura outside
+   its pumpkin ring. The done / active / pending states still tell apart by fill (tinted + check), ring + aura,
+   and dim violet outline; the done check stays as T1 left it. Summary and fail cards, their badges and the stat /
+   tier readouts need nothing: they are token-painted, and the numerals stay in DM Sans / mono. */
+body[data-voice-mode="halloween"] .tl-step[data-state="done"]::before,
+body[data-voice-mode="halloween"] .tl-step[data-state="active"]::before {
+  background: linear-gradient(var(--accent), color-mix(in srgb, var(--hw-violet) 62%, transparent));
+}
+body[data-voice-mode="halloween"] .tl-step[data-state="active"] .tl-node {
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 18%, transparent), 0 0 0 11px color-mix(in srgb, var(--hw-violet) 10%, transparent);
+}
+
+/* ---- T7 · Live console & pillars -------------------------------------------------------------------
+   Rail, mic, ask-chips, the four pillars (the Choice / Context / Costs top hue lines intact and at least as visible
+   as in standard; Control's is T0's pumpkin -> violet twin, and T8's), transcript bubbles, live dot, the Costs meter
+   and sparkline all follow the palette; measured as rendered, every text pair in the console is AA in Midnight
+   and, with the one fix below, in Harvest. The fix: an in-progress caption
+   (dimmed to 60% in standard) lands at 4.1-4.2:1 on the parchment bubbles, under AA for data text; lifting it keeps
+   it visibly dimmer than a final line and legible. (The Control pillar's lantern is T8.) */
+:root[data-theme="light"] body[data-voice-mode="halloween"] .turn[data-interim="true"] .turn-text { opacity: .72; }
+
+/* ---- T8 · the Control pillar: a jack-o'-lantern ------------------------------------------------------
+   The pillar that hosts the Voice-mode row is the mode's centerpiece: light from inside a carved pumpkin, with a
+   candle's flicker. The glow is a layer INSIDE the card (.pillar-head::before: out of flow, above the card's own
+   background, below every piece of its content, so no text is ever tinted or dimmed) and the flicker is that layer's
+   `opacity` and nothing else, which the compositor runs without repainting anything per frame. It replaces the old
+   box-shadow keyframes, which animated a 46px shadow on the card itself (a full blurred repaint per frame).
+   - Enter / exit: a loop hung off body[data-voice-mode] would freeze and snap to its resting value on the first frame
+     of the exit (measured on the old loop: the halo went from full to none in one frame), so the loop is not on the
+     attribute. The layer and its loop are declared in every mode but `display:none` outside this one: no box, no
+     animation and no compositor layer in a standard call. `display` rides the house fade (allow-discrete), so on
+     exit the layer stays up, still flickering, for the whole ~420ms and only then drops out; what fades is the light
+     itself, the gradients' alpha scaling with --hw-lit (registered so it interpolates; set on the card: 0 standard,
+     1 Midnight, .55 Harvest, where pumpkin on parchment goes muddy before it goes bright). The flicker owns
+     `opacity`, the fade owns the colour, so the two never fight over one property. A browser without
+     allow-discrete just loses the layer at once on exit, never a broken one.
+   - Reduced motion: the layer is a pseudo-element, which the blanket `*` rule does not reach; the block at the end of
+     this file stops the loop, and the layer holds its resting opacity (.74, the middle of the flicker's range).
+   - The Voice-mode row, inside the card, is the flame: its label, chip and top rule take the pumpkin. Its data (voice,
+     decided-by line, probabilities) is not restyled at all (G13); the pumpkin -> violet top-probability bar was T0's. */
+@property --hw-lit { syntax: "<number>"; inherits: true; initial-value: 0; }
+:root[data-theme="light"] body[data-voice-mode="halloween"] .pillar[data-pillar="control"] { --hw-lit: .55; }
+
+.pillar[data-pillar="control"] .pillar-head::before {
+  content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  border-radius: calc(var(--r-lg) - 1px);   /* the card's inner edge, so the lit rim follows its corners */
+  display: none; opacity: .74;
+  background:
+    radial-gradient(ellipse 96% 66% at 36% 110%, color-mix(in srgb, var(--hw-orange) calc(var(--hw-lit) * 36%), transparent), transparent 74%),   /* the candle: low, under the Voice-mode row */
+    radial-gradient(ellipse 60% 44% at 100% 0%,  color-mix(in srgb, var(--hw-violet) calc(var(--hw-lit) * 20%), transparent), transparent 72%);   /* spectral spill, top right */
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--hw-orange) calc(var(--hw-lit) * 16%), transparent),                                        /* the lit rim */
+              inset 0 -26px 46px -32px color-mix(in srgb, var(--hw-orange) calc(var(--hw-lit) * 55%), transparent);
+  animation: hw-lantern 8.3s ease-in-out infinite;
+  transition: display var(--dur-3) allow-discrete;
+}
+body[data-voice-mode="halloween"] .pillar[data-pillar="control"] .pillar-head::before { display: block; }
+/* a candle, not a pulse: uneven steps, one guttering dip, never the same twice in a row. Opacity only. */
+@keyframes hw-lantern {
+  0%   { opacity: .74; }
+  6%   { opacity: .62; }
+  11%  { opacity: .84; }
+  19%  { opacity: .70; }
+  27%  { opacity: .92; }
+  36%  { opacity: .66; }
+  41%  { opacity: .56; }
+  46%  { opacity: .80; }
+  58%  { opacity: .72; }
+  66%  { opacity: .92; }
+  74%  { opacity: .68; }
+  83%  { opacity: .86; }
+  91%  { opacity: .64; }
+  100% { opacity: .74; }
+}
+
+.voice-mode { transition: border-color var(--dur-3) var(--ease-signature); }
+.vm-title   { transition: color var(--dur-3) var(--ease-signature); }
+.voice-mode[data-mode="halloween"] { border-top-color: color-mix(in srgb, var(--hw-orange) 38%, var(--hairline-strong)); }
+.voice-mode[data-mode="halloween"] .vm-title { color: var(--accent-text); }
+
+/* ---- T9a · display typography ------------------------------------------------------------------------
+   DESIGN §2: one display face, on the four big headings only, as a progressive enhancement. --font-display is DM
+   Sans in every mode but this one, so the headings are styled and legible before the serif arrives and if it never
+   does (studio.js injects Cormorant's stylesheet on the first Halloween entry; `display=swap`). Body text, the
+   pillar h3s, labels, chips and every mono readout keep their faces: the console still reads as an instrument.
+   - The pumpkin text-glow on these headings is the T5 rule above, extended (static, not animated).
+   - Cormorant is a high-contrast serif with short caps (cap-height .625 vs DM Sans's .70) and a small x-height, so
+     at the same size it reads weaker than the DM Sans subheads beside it. `font-size-adjust: cap-height .7` sets the
+     used size by cap-height: a no-op for DM Sans (and about one for its system fallback, whose caps are the same
+     height), +12% for Cormorant, so the caps land where DM Sans's did. The grotesk's tight -0.028em tracking is also let out a little.
+     Line boxes are unitless multiples of the computed size, so neither change moves a line box.
+   - The hero is the one heading big enough to drive the layout, so it takes a smaller boost (.665, about +6%): at the
+     full +12% its first two lines overshoot the 571px column by a few px, flip the wrap to four lines, and run the
+     "only" underline into the ascender of "knows" on the line below. At .665 "Give any brand a voice" and "that
+     answers only from" set with a 4% margin (and the DM Sans fallback is 5% smaller, still plainly legible).
+   - The hero's 15ch measure is the width of DM Sans's "0" (.693em); Cormorant's is .477em, which would narrow the
+     column by 31% at the widths where the measure binds (721-1080px). It is pinned in em (10.4em = 15ch of DM
+     Sans) so the column is the same in either face.
+   - hw-settle: the headings arrive with a small fade and rise, once, on entering the mode (120-900ms, on the house
+     ease). It hangs off the attribute, so it cannot replay on exit (the selector just detaches; the heading is already
+     at rest) and it leaves no transform behind (`backwards` holds only the start frame through the delay). */
+body[data-voice-mode="halloween"] { --font-display: "Cormorant", var(--font); }
+.hero-title, .generate-title, .rail-head h2, .summary-head h3 { font-family: var(--font-display); }
+body[data-voice-mode="halloween"] .hero-title,
+body[data-voice-mode="halloween"] .generate-title,
+body[data-voice-mode="halloween"] .rail-head h2,
+body[data-voice-mode="halloween"] .summary-head h3 {
+  font-size-adjust: cap-height 0.7;
+  letter-spacing: -0.012em;
+  animation: hw-settle 780ms var(--ease-signature) 120ms backwards;
+}
+body[data-voice-mode="halloween"] .hero-title { font-size-adjust: cap-height 0.665; max-width: 10.4em; }
+@keyframes hw-settle { from { opacity: 0; transform: translateY(.16em); } }
+/* a hair more air on the uppercase micro-labels that sit with these headings (the base tracking is in each comment) */
+body[data-voice-mode="halloween"] .vm-title                        { letter-spacing: .075em; }   /* .06em */
+body[data-voice-mode="halloween"] .pillar-tag                      { letter-spacing: .115em; }   /* .1em */
+body[data-voice-mode="halloween"] :is(.summary-badge, .fail-badge) { letter-spacing: .105em; }   /* .09em */
+
+/* =============================================================================
    RESPONSIVE
    ========================================================================== */
 @media (max-width: 1080px) {
@@ -938,4 +1578,24 @@ body[data-connected="true"] .mic-signal { color: var(--accent); }
      removed (movement with no state to preserve), never left mid-animation. */
   .hm-flow { opacity: 0 !important; }
   .draw-svg path, .draw-svg line, .draw-svg polyline, .draw-svg circle, .draw-svg rect { stroke-dashoffset: 0 !important; }
+  /* Halloween accent: the wash, the pillar's top-line twin and the lantern (T8) are pseudo-elements, which the
+     blanket `*` rule above does not reach. The lantern is decoration: its flicker stops and it holds its resting,
+     finished frame (opacity .74, lit at full --hw-lit the instant the mode is on, since the card itself is a real
+     element the blanket rule reaches); the display:none fade is dropped so it leaves with the attribute. */
+  .bg::before, .pillar[data-pillar="control"]::after, .pillar[data-pillar="control"] .pillar-head::before { transition: none; }
+  .pillar[data-pillar="control"] .pillar-head::before { animation: none; }
+  /* T9a: the headings simply appear, already settled (the blanket rule would also finish it in .001ms) */
+  body[data-voice-mode="halloween"] .hero-title,
+  body[data-voice-mode="halloween"] .generate-title,
+  body[data-voice-mode="halloween"] .rail-head h2,
+  body[data-voice-mode="halloween"] .summary-head h3 { animation: none; }
+  /* Halloween cross-fade: the <body> token transition and the .bg-aurora--a fade sit on real elements, so the blanket
+     `*` rule above already makes enter / exit an instant swap — only pseudo-elements need an explicit rule. */
+  /* Halloween atmosphere: hold a static, finished frame. The moon and cobwebs never move and the fog banks sit
+     parked at rest; the embers and bats are movement with no state to preserve, so they go (as .hm-flow does above).
+     Everything the scene animates is a real element, so the blanket rule already reaches it and makes the scene's own
+     fade an instant swap; `animation: none` makes "nothing is running" explicit, and will-change has nothing to promote. */
+  .hw-fog, .hw-ember, .hw-bat { animation: none; }
+  .hw-embers, .hw-bats { display: none; }
+  body[data-voice-mode="halloween"] :is(.hw-fog, .hw-ember, .hw-bat) { will-change: auto; }
 }
