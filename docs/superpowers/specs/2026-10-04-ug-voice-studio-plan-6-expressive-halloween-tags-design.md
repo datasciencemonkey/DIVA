@@ -1,7 +1,7 @@
 # UG Voice Studio — Plan 6: Expressive Halloween Monster Voice (richer ElevenLabs audio tags)
 
 **Date:** 2026-10-04
-**Status:** Design (autonomous run under the owner's goal; written so the owner can correct it in the PR)
+**Status:** Implemented. Merged to `main` in PR #34 (2026-10-04) and running on a Databricks App. Drafted as an autonomous run under the owner's goal, for the owner to correct in the PR.
 **Issues:** epic #28; tasks T1 #29 · T2 #30 · T3 #31 · T4 #32 · T5 #33
 **Builds on:** Plan 5 (`docs/superpowers/specs/2026-10-02-ug-voice-studio-plan-5-ai-decide-halloween-design.md`), gotchas G9–G13 (`docs/gotchas.md`)
 

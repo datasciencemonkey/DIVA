@@ -61,7 +61,7 @@ Browser ──WebRTC──▶ LiveKit Cloud ◀──WebSocket── Agent worke
 - **In the launcher, `os.environ.pop("DATABRICKS_CLIENT_ID"/"DATABRICKS_CLIENT_SECRET")`** so a PAT is the SDK's single auth method (Apps inject SP OAuth too; the SDK refuses ambiguous auth).
 - **Grant the app service principal `CAN_MANAGE` on the workspace source folder + `READ` on the secret scope**, or deploy dies at "Preparing source code" (the UI auto-grants; the CLI does not).
 - **Launch the app compute first; the worker registers ~30–60s AFTER deploy succeeds** (venv install + model `download-files`). Don't judge a call attempt in that window. If `download-files` can't reach the model CDN, the worker never registers — same "no agent" symptom.
-- **The worker needs outbound to LiveKit Cloud (`wss://…livekit.cloud`) and your STT/TTS provider.** This worked out of the box on a standard serverless workspace (worker registered and received job requests), but egress is workspace-config-dependent — if the worker won't register, verify outbound access before debugging code.
+- **The worker needs outbound to LiveKit Cloud (`wss://…livekit.cloud`) and your STT/TTS provider.** This worked out of the box on a standard serverless workspace (worker registered and received job requests, and ElevenLabs at `api.elevenlabs.io` was reachable), but egress is workspace-config-dependent — if the worker won't register, verify outbound access before debugging code.
 - **Generic `App deployment failed unexpectedly` with no container logs, reproducible on a bare hello-world = platform-side.** Retry later; don't keep changing the app.
 
 ## Common mistakes

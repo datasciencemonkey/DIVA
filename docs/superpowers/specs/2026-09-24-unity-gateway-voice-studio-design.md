@@ -1,7 +1,7 @@
 # Unity Gateway Voice Studio — Design Spec
 
 **Date:** 2026-09-24
-**Status:** Draft for review (brainstorming → design gate)
+**Status:** Implemented. Plans 1 to 6 are merged and the studio runs on a Databricks App. This is the original design, kept as the record; [the architecture page](../../architecture.md) describes what shipped.
 **Working dir:** `voice-agents-ug-demo`
 **Reference primitive:** `<reference-app>`, read-only.
 
@@ -132,11 +132,11 @@ Agent worker entrypoint (REORDERED vs ReferenceApp — routing needs identity fi
   10. OTel spans → UC/MLflow at shutdown (async, fail-soft)
 ```
 
-**Key adaptation (R4 to verify):** ReferenceApp builds `AgentSession` *before* `ctx.connect()`. Because the
+**Key adaptation (R4):** ReferenceApp builds `AgentSession` *before* `ctx.connect()`. Because the
 routed model depends on the bound tier (known only after the participant joins), we **construct
-`AgentSession` after `wait_for_participant()`**. Verify livekit-agents 1.5.6 permits this ordering
-(connect first, then build+start), which ReferenceApp already relies on for `ctx.connect()` preceding
-`session.start()`.
+`AgentSession` after `wait_for_participant()`**. livekit-agents permits this ordering (connect first, then
+build+start), which ReferenceApp already relies on for `ctx.connect()` preceding `session.start()`; the
+agent runs this way (see [the runtime contract](../../discovery/agent-runtime-contract.md)).
 
 ## 7. Speech stack (cascade)
 
@@ -321,6 +321,8 @@ def route_for(loyalty_tier: str) -> RoutingDecision: ...
 
 ## 19. Risks & discovery (must-verify before/within implementation)
 
+_All seven were worked through in Plans 1 to 4; the results are in [`docs/discovery/`](../../discovery/)._
+
 - **R1 — Lakebase Search:** confirm current API / GA status and whether embeddings are internal or need
   FMAPI (blog: *announcing-lakebase-search-agent-native-retrieval-built-lakebase-postgres*). Fallback:
   hand-rolled `pgvector` + `tsvector` hybrid.
@@ -338,8 +340,8 @@ def route_for(loyalty_tier: str) -> RoutingDecision: ...
 
 ## 20. Open decisions deferred to the plan
 
-- Exact tier→model choices (pending R2 discovery on the target workspace).
-- Whether to ship the optional Genie aggregate reuse-proof in v1.
+- Exact tier→model choices (settled by the R2 discovery in [`docs/discovery/model-routing-contract.md`](../../discovery/model-routing-contract.md)).
+- Whether to ship the optional Genie aggregate reuse-proof in v1 (settled: not shipped).
 - UI build tooling (pure-stdlib build vs light bundler) — decided with the impeccable/frontend pass.
 - Generator prompt design + how much record structure to synthesize per company.
 

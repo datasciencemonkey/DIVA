@@ -154,12 +154,12 @@ document can't talk to it directly. The one indirect route is the agent's previo
 agent just said, including the caller's first name from the greeting. Unity Gateway doesn't decide intent itself; the
 decision is app logic that calls a decision service.
 
-As of 2026-10-05 the voice-mode path is unit-tested and has run live, on a local instance (see the Plan 5 live-run notes
-in [gotchas](gotchas.md)) and on a deployed app, where AI Decide switched the mode in both directions. As shipped,
-`app.yaml` leaves `UG_HALLOWEEN_VOICE_ID` unset, so Halloween mode speaks in the Deepgram fallback voice until it is
-set. The ElevenLabs voice also needs the `elevenlabs-api-key` secret resource attached to the app before deploying (its
-`valueFrom` only resolves once the resource exists) and outbound access to `api.elevenlabs.io`. AI Decide needs the
-`ai_decide` function enabled on the workspace (admin, Previews).
+The whole path runs on a Databricks App: AI Decide switches the mode in both directions and the ElevenLabs voice speaks.
+To turn it on in your own app, set `UG_HALLOWEEN_VOICE_ID` (`app.yaml` ships it unset, so Halloween mode speaks in the
+Deepgram fallback voice until you do), attach the `elevenlabs-api-key` secret resource before deploying (its `valueFrom`
+only resolves once the resource exists), and enable the `ai_decide` function on the workspace (admin, Previews). The
+app reaches `api.elevenlabs.io` with no extra setup on the workspace we deployed to; if yours restricts outbound access,
+allow that host.
 
 ### One decider: the `ai_decide` REST API
 

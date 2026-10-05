@@ -1,5 +1,7 @@
 # Halloween UI — Build Plan (GitHub-issue-ready)
 
+**Status:** done; the theme shipped. Kept as the record of the build plan.
+
 Each task below is a self-contained, independently-reviewable unit: crisp title, scope, exact files,
 acceptance criteria, and a browser devloop. Build from `DESIGN.md`. Bite-sized, DRY, YAGNI.
 
@@ -8,7 +10,7 @@ acceptance criteria, and a browser devloop. Build from `DESIGN.md`. Bite-sized, 
 ## How to devloop this theme (shared harness — read once)
 
 The theme is driven entirely by `body[data-voice-mode="halloween"]`, so you can test **without a live
-voice call**. In the running studio (served locally; do not deploy), use the browser console / an
+voice call**. In the running studio (served locally), use the browser console / an
 `evaluate_script`:
 
 ```js

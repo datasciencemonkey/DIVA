@@ -1,6 +1,6 @@
 # UG Voice Studio — Plan 5: Expressive Mode + AI Decide Halloween Voice — Implementation Plan
 
-> **Update 2026-10-05 (#45):** the `uaig_chat` fallback engine this plan builds was removed later. AI Decide now uses only the Databricks `ai_decide` REST API. The plan is kept as the record of how it was built.
+> **Update 2026-10-05 (#45):** the `uaig_chat` fallback engine this plan builds was removed later. AI Decide now uses only the Databricks `ai_decide` REST API. The plan is implemented and runs on a Databricks App; Tasks 1 and 13 needed the ElevenLabs key and `ai_decide` Previews, which the owner supplied. Task 1's results went into `docs/gotchas.md`, the Plan 6 expressive-tags contract and `tools/ai_decide_check.py`, not into the two contract files it names. It is kept as the record of how it was built.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. This project is governed by `docs/constitution.md` — read it first.
 
@@ -31,14 +31,14 @@
 
 ## Execution Order & Parallelization (constitution #4)
 
-Task 1 (discovery) and Task 13 (live) are **owner-gated** (need the ElevenLabs key + `ai_decide` Previews). The build (Tasks 2–12) does **not** depend on Task 1's live results — it uses configurable env defaults — so build it now as a subagent team in dependency waves; Task 1 only pins the final model/voice and must complete before Task 13.
+Task 1 (discovery) and Task 13 (live) need the ElevenLabs key and `ai_decide` Previews, which the owner supplies. The build (Tasks 2–12) does **not** depend on Task 1's live results — it uses configurable env defaults — so build it now as a subagent team in dependency waves; Task 1 only pins the final model/voice and must complete before Task 13.
 
 - **Wave A (parallel, independent, key-free):** Task 2 (policy), Task 3 (expressive), Task 4 (prompt), Task 9 (tracing), Task 11 (UI — against the documented evidence JSON).
 - **Wave B:** Task 5 (profiles ← 3,4), Task 6 (engines ← 2).
 - **Wave C:** Task 7 (controller ← 2,4,5,6).
 - **Wave D:** Task 8 (studio_agent ← 3,5,7), Task 12 (deploy config ← elevenlabs dep).
 - **Wave E:** Task 10 (agent wiring ← all) + governance suite.
-- **Owner-gated, any time keys/Previews land:** Task 1 → gates Task 13 (last).
+- **Needs the key and Previews:** Task 1 comes before Task 13 (last).
 
 Each task is a fresh-subagent unit (TDD RED→GREEN→commit) with its own reviewer gate; whole-branch review at the end. Quality bar per constitution: **9–10/10** — a task isn't done until its tests pass and a reviewer signs off.
 
@@ -54,7 +54,7 @@ Input classes the spec implies but that are easy to break — each gets a test i
 
 ---
 
-### Task 1: Discovery — ElevenLabs bake-off + `ai_decide` contract (OWNER-GATED)
+### Task 1: Discovery — ElevenLabs bake-off + `ai_decide` contract (needs the key and Previews)
 
 **Files:** Create `docs/discovery/expressive-tts-contract.md`, `docs/discovery/ai-decide-contract.md`.
 
@@ -379,13 +379,13 @@ async def test_classify_never_raises_on_timeout_or_garbage():
 
 - [ ] **Step 1: Add the dependency** — `livekit-plugins-elevenlabs==1.8.3` to `pyproject.toml` + `agent-requirements.in`; `uv sync`; import-smoke `uv run python -c "import livekit.plugins.elevenlabs; print('ok')"`.
 - [ ] **Step 2: Recompile for Python 3.11** — regenerate `agent-requirements.txt` for the Apps runtime (gotchas: Worktrees & deploy), including the ElevenLabs plugin + its `codecs` extra.
-- [ ] **Step 3: Config** — add the §7.12 env to `app.yaml`; add the `ELEVEN_API_KEY` secret via `valueFrom: elevenlabs-api-key` (the secret + app resource are created out-of-band in the `ug-voice-studio` scope — **owner, key-gated**); mirror all vars (blank) into `.env.example`.
+- [ ] **Step 3: Config** — add the §7.12 env to `app.yaml`; add the `ELEVEN_API_KEY` secret via `valueFrom: elevenlabs-api-key` (the secret + app resource are created out-of-band in the `ug-voice-studio` scope — **the owner supplies the key**); mirror all vars (blank) into `.env.example`.
 - [ ] **Step 4: Docs** — README note; fold the C7/C8 pitfalls, the AI Decide pattern, and the new secret into the skill bundle references.
 - [ ] **Step 5: Commit** (`chore(deploy): elevenlabs dep + AI Decide env/secret wiring`). Note the `uv.lock` cross-worktree reconciliation at merge.
 
 ---
 
-### Task 13: Live validation (OWNER-GATED)
+### Task 13: Live validation (needs the key and Previews)
 
 **Files:** none (verification); scripted checklist.
 
@@ -408,4 +408,4 @@ async def test_classify_never_raises_on_timeout_or_garbage():
 
 ---
 
-*Plan 5 adds governed, auto-decided Halloween voice with Databricks-performed inference and vendor-direct ElevenLabs expression. Tasks 2–12 build now (no keys needed); Tasks 1 + 13 are owner-gated on the ElevenLabs key and `ai_decide` Previews. Governed by `docs/constitution.md`; traps tracked in `docs/gotchas.md`.*
+*Plan 5 adds governed, auto-decided Halloween voice with Databricks-performed inference and vendor-direct ElevenLabs expression. Tasks 2–12 need no keys; Tasks 1 + 13 need the ElevenLabs key and `ai_decide` Previews. Governed by `docs/constitution.md`; traps tracked in `docs/gotchas.md`.*
