@@ -30,18 +30,31 @@ def build_tracer_provider():
     return provider
 ```
 
-**2. Register it with LiveKit and flush on shutdown** (in the worker entrypoint):
+**2. Register it in the process setup, flush per job** (not in the entrypoint):
 
 ```python
 from livekit.agents.telemetry import set_tracer_provider
+from opentelemetry import trace
 
-provider = build_tracer_provider()
-if provider is not None:
-    set_tracer_provider(provider, metadata={"livekit.agent_name": AGENT_NAME})
+_provider = None
+
+def _setup_process(proc):                              # runs before the process takes a job
+    global _provider
+    _provider = build_tracer_provider()
+    if _provider is not None:
+        trace.set_tracer_provider(_provider)
+        set_tracer_provider(_provider, metadata={"livekit.agent_name": AGENT_NAME})
+
+server = AgentServer(setup_fnc=_setup_process)
+
+# in the entrypoint:
+if _provider is not None:
     async def _flush():
-        provider.force_flush(); provider.shutdown()
-    ctx.add_shutdown_callback(_flush)                 # spans export when the call ends
+        _provider.force_flush()                       # do NOT shutdown(): livekit-agents 1.8.3
+    ctx.add_shutdown_callback(_flush)                 # ends job_entrypoint *after* this callback
 ```
+
+livekit-agents 1.8.3 opens the root span `job_entrypoint` **before** your entrypoint runs, on whatever provider is installed at that moment. Set the provider from the entrypoint (as LiveKit's own tracing example does) and your exporter gets only the children: every span lands in the UC table, but the trace has no root and **never appears in the MLflow experiment**, which lists only traces with a root span. MLflow's LiveKit guide also configures tracing in `prewarm`/`setup_fnc`.
 
 **3. Enrich spans so MLflow renders them natively.** Marked "optional" but in practice **required for a useful MLflow view** — without it you get rows in the UC Delta table but no typed trace tree. LiveKit's raw span names/attrs don't carry MLflow attributes, so wrap the exporter and add them at export time. Full implementation (adapt as needed):
 
@@ -49,7 +62,7 @@ if provider is not None:
 import ast, json
 from opentelemetry.sdk.trace.export import SpanExporter
 
-_SPAN_TYPES = {"agent_session": "AGENT", "llm_node": "LLM", "function_tool": "TOOL"}
+_SPAN_TYPES = {"job_entrypoint": "AGENT", "agent_session": "AGENT", "llm_node": "LLM", "function_tool": "TOOL"}
 
 def _json_value(raw, wrap_key):
     if not raw:
@@ -112,7 +125,7 @@ Wire it into `build_tracer_provider` by wrapping the OTLP exporter **before** th
     provider.add_span_processor(BatchSpanProcessor(exporter))
 ```
 
-The `enrichment` dict is captured by reference — mutate it during the call (e.g. once you know the caller) and the root span picks it up at export.
+The `enrichment` dict is captured by reference — mutate it during the call (e.g. once you know the caller) and the root span picks it up at export. With the provider built once per process, one process can run several jobs (thread executor), so key the enrichment by trace id: register each job's dict from the entrypoint, where the current span is that job's `job_entrypoint`, and look it up by `span.context.trace_id` at export (the Voice Studio repo's `register_trace_enrichment` in `app/tracing.py`).
 
 ## Custom spans and `ug.*` attributes
 
@@ -120,7 +133,7 @@ Your own spans (for example the `ug.ai_decide` span, see [agent-and-tools.md](ag
 
 - **Type them through the map.** The exporter writes `mlflow.spanType` as `json.dumps(...)`, so a custom span's type belongs in `_SPAN_TYPES` (`"ug.ai_decide": "CHAIN"`), not in a bare string set on the span.
 - **Keep the span PII-free.** One span per mode transition and per dropped late answer (not for every classified turn; a degrade has no span of its own, it is an evidence fragment, a log line and the root attribute `ug.voice_degraded`), carrying the engine, cue, source, intent, confidence, probabilities, latency, path (same-turn / announced / late-dropped), reason, and the mode before and after. Never copy utterance text: LiveKit's own user-turn spans already hold the transcript.
-- **Put per-call rollups on the root span** through the `enrichment` dict (`ug.voice_mode`, `ug.voice_mode_transitions`, `ug.decide_engine`, `ug.expressive_tags`, `ug.voice_degraded`). Attribute values can be `str`, `bool`, `int` or `float`, so the dict need not be string-only. Fill the final values in the shutdown callback, before `force_flush`.
+- **Put per-call rollups on the root span** through the `enrichment` dict (`ug.voice_mode`, `ug.voice_mode_transitions`, `ug.decide_engine`, `ug.expressive_tags`, `ug.voice_degraded`). Attribute values can be `str`, `bool`, `int` or `float`, so the dict need not be string-only. Fill the final values in the shutdown callback, before `force_flush`. Do not `shutdown()` the provider in that callback: livekit-agents 1.8.3 ends `job_entrypoint` afterwards, and a shut-down batch processor drops it. Flush again when the root ends (a span processor on `parent is None`); process atexit shutdown is the backstop.
 - **Enrichment is fail-soft, so a typo fails silently.** Assert in a test that the keys you expect really land on the root span.
 
 (Source anchors for these notes are in the Voice Studio repo's `docs/gotchas.md`, section "Repo (voice-agents-ug-demo)".)
@@ -133,4 +146,4 @@ Set all three or tracing stays off: `DATABRICKS_TRACE_CATALOG`, `DATABRICKS_TRAC
 
 - Delta table: `<catalog>.<schema>.<prefix>_otel_spans` (raw spans) — queryable in SQL.
 - MLflow: the traces appear under the MLflow experiment (set `MLFLOW_EXPERIMENT_NAME` if reading via MLflow); typed spans (AGENT/LLM/TOOL) show inputs/outputs per node.
-- Common miss: no traces = one of the three `DATABRICKS_TRACE_*` vars unset (fail-soft silently disabled it), or spans never flushed (missing the shutdown callback).
+- Common miss: no traces = one of the three `DATABRICKS_TRACE_*` vars unset (fail-soft silently disabled it), or spans never flushed (missing the shutdown callback). Traces in the span table but missing from the experiment = the root (`job_entrypoint`) was dropped, usually by `provider.shutdown()` inside the shutdown callback.

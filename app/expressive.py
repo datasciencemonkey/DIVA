@@ -11,7 +11,8 @@ cue. So the session installs
 stock filters run, and drops every other bracketed group: an unknown tag, or a stage direction such as
 `[whispers menacingly into the microphone]`. Neither stock filter matches that block, so a placeholder passes
 straight through them, and `decode_tags` turns it back into `[tag]` for the TTS. The vocabulary is the only
-thing that can put bracketed text on the air, which is G13: a cue the TTS does not perform is never read aloud.
+thing that can put bracketed text on the air (matched case- and spacing-insensitively; only members ever reach
+the voice), which is G13: a cue the TTS does not perform is never read aloud.
 
 Pure: standard library only, no LiveKit import. The stock filters only appear in the tests.
 """
@@ -21,13 +22,14 @@ import logging
 import re
 from collections.abc import AsyncIterable, AsyncIterator, Callable
 
+from src.expressive_palette import PALETTE, flatten
+
 logger = logging.getLogger(__name__)
 
-# ElevenLabs audio tags for the Halloween voice. Left out on purpose: crying (distressing), sound effects such
-# as gunshot or explosion (startling, off-brand) and accent tags (risk of offensive impressions).
-SPOOKY_TAGS: tuple[str, ...] = (
-    "whispers", "sighs", "laughs", "mischievously", "nervously", "exhales", "inhales deeply",
-)
+# The audio tags the Halloween voice performs: the verified palette (src/expressive_palette.py), flattened. Left
+# out on purpose: crying (distressing), sound effects such as gunshot or explosion (startling, off-brand) and
+# accent tags (risk of offensive impressions).
+SPOOKY_TAGS: tuple[str, ...] = flatten(PALETTE)
 
 # The longest `[name]`, brackets included, that can be a tag: a name is at most MAX_TAG_LEN - 2 characters.
 MAX_TAG_LEN = 34
@@ -49,10 +51,16 @@ _PLACEHOLDER: dict[str, str] = {}  # tag name -> its private-use character
 _DECODE: dict[int, str] = {}       # that character's ordinal -> "[name]" (a str.translate table)
 
 
+def canonical_tag(raw: str) -> str:
+    """The form a tag is matched in: lowercase, inner whitespace collapsed to single spaces, ends trimmed. The
+    model may write `[Whispers]` or `[ building   tension ]`; both reach the voice as the canonical tag."""
+    return " ".join(raw.split()).lower()
+
+
 def _placeholder(name: str) -> str:
     """The private-use character standing in for `[name]`; one per name, for the life of the process.
 
-    Names come from the server-side vocabulary (a handful), never from the model, so the 6,400 characters
+    Names come from the server-side vocabulary (a few dozen), never from the model, so the 6,400 characters
     of the block are never a constraint.
     """
     placeholder = _PLACEHOLDER.get(name)
@@ -126,13 +134,13 @@ def _encode_pieces(pieces, allowed, on_tag) -> str:
             # never allowed, so it is dropped here
             out.append(_PRIVATE_USE.sub("", text))
         # a group: a short allowed name is a tag; anything else (an unknown tag, a direction) is dropped
-        elif len(text) <= MAX_TAG_LEN - 2 and text in allowed:
-            out.append(_placeholder(text))
+        elif len(name := canonical_tag(text)) <= MAX_TAG_LEN - 2 and name in allowed:
+            out.append(_placeholder(name))
             if on_tag is not None:
                 try:
-                    on_tag(text)
+                    on_tag(name)
                 except Exception:  # a counter must never be able to silence the reply
-                    logger.warning("on_tag callback failed for %r", text, exc_info=True)
+                    logger.warning("on_tag callback failed for %r", name, exc_info=True)
     return "".join(out)
 
 
@@ -144,15 +152,16 @@ def encode_tags(
 
     Streams: it holds back at most one partial `[...` (MAX_GROUP_LEN characters) with one character of
     look-ahead, so a tag is told from a markdown link (`](`), which passes through untouched. Allowed tags
-    become placeholders and `on_tag(name)` is called for each. Every other closed `[...]` up to MAX_GROUP_LEN
-    characters (an unknown tag, or a stage direction) is dropped so the voice never reads it, and an empty
-    vocabulary (standard, fallback, OpenAI) drops every tag. What `_scan` cannot judge is left as text for
-    the stock filter (see its list); the prompt's cue rules ask for no other bracketed text.
+    become placeholders and `on_tag(name)` is called for each, with the canonical name (`canonical_tag`: the
+    model's case and spacing are forgiven). Every other closed `[...]` up to MAX_GROUP_LEN characters (an
+    unknown tag, or a stage direction) is dropped so the voice never reads it, and an empty vocabulary
+    (standard, fallback, OpenAI) drops every tag. What `_scan` cannot judge is left as text for the stock
+    filter (see its list); the prompt's cue rules ask for no other bracketed text.
     """
     async def encode(text: AsyncIterable[str]) -> AsyncIterator[str]:
         # Read once per reply: the TTS for an utterance is chosen when it starts, so a voice-mode flip
         # mid-reply must not let tags reach a TTS that would read them out.
-        allowed = vocabulary()
+        allowed = frozenset(canonical_tag(t) for t in vocabulary())
         held = ""
         async for chunk in text:
             pieces, held = _scan(held + chunk, final=False)

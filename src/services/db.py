@@ -28,10 +28,20 @@ async def create_pool():
     (projects/<p>/branches/<b>/endpoints/<e>); host lives at status.hosts.host;
     generate_database_credential takes that path positionally and returns .token.
     """
+    from psycopg_pool import AsyncConnectionPool
+
+    # SDK import, its HTTP calls and the DNS lookup are all blocking; on the loop they stall
+    # a voice job ~1.3s (LiveKit's event_loop_blocked span).
+    conninfo = await asyncio.to_thread(_build_conninfo)
+    pool = AsyncConnectionPool(conninfo, min_size=1, max_size=4, open=False)
+    await pool.open(timeout=15)
+    return pool
+
+
+def _build_conninfo() -> str:
     import socket
 
     from databricks.sdk import WorkspaceClient
-    from psycopg_pool import AsyncConnectionPool
 
     w = WorkspaceClient()  # respects DATABRICKS_CONFIG_PROFILE / Apps-injected auth
     ep_path = os.environ["LAKEBASE_ENDPOINT"]
@@ -49,9 +59,7 @@ async def create_pool():
         conninfo += f" hostaddr={socket.getaddrinfo(host, 5432)[0][4][0]}"
     except Exception:  # noqa: BLE001
         pass
-    pool = AsyncConnectionPool(conninfo, min_size=1, max_size=4, open=False)
-    await pool.open(timeout=15)
-    return pool
+    return conninfo
 
 
 async def _run_query(pool, sql: str, params: dict | None = None) -> list[dict]:

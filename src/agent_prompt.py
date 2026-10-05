@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
+from src.expressive_palette import GROUP_HINTS, OTHER, OTHER_HINT, grouped
+
 _GOVERNANCE = """
 --- Operating rules (follow exactly) ---
 Behavior for this call:
@@ -31,15 +33,19 @@ _NEUTRAL = "Stay plainly helpful; give no loyalty/status acknowledgement of any 
 
 # --- Plan 5: Halloween mode (spec §7.9) --------------------------------------------------------------
 # All of this sits BEFORE the governance block (G11): the persona colors the delivery, never the facts,
-# and cannot dilute the rules that follow it. No tier/loyalty wording belongs in any of it.
+# and cannot dilute the rules that follow it, with one deliberate exception: a made-up spooky tale on request
+# (the story bullet in HALLOWEEN_PERSONA), which may contain no real orders, prices, policies or people.
+# No tier/loyalty wording belongs in any of it.
 
 HALLOWEEN_PERSONA = """
 --- Halloween persona ---
-Deliver your replies as a playful, spooky Halloween host: eerie and theatrical, with dramatic pauses
-(an ellipsis works well).
+You are a Halloween monster who tells it like a campfire story: slow, theatrical, a little mischievous. You
+savour every pause and let the tension build before each reveal, with dramatic pauses (an ellipsis works well).
 - Never be threatening, cruel, gory, or genuinely frightening. Keep it fun.
 - The act colors only your delivery. State every fact, number, date, name, and order detail plainly and
   exactly as the tools return it.
+- A spooky story is play, not information. If the caller asks for one, tell a made-up tale of four or five short
+  sentences right away; no tool is needed for it. Keep real orders, prices, policies, and people out of the tale.
 - If the caller sounds uncomfortable, drop the act and offer the normal voice.
 - If the caller asks for the normal voice, say "As you wish…" (the system switches the voice back).
 """.strip()
@@ -88,17 +94,105 @@ ANNOUNCE_OFF = (
 )
 
 
+_CUE_INTRO = (
+    "--- Expressive cues ---\n"
+    "Your voice performs the cues below when you write them in square brackets. They are how you act: use them "
+    "the way a storyteller uses breath, hush, laughter and timing."
+)
+
+_CUE_RULES_START = (
+    "Rules for cues:\n"
+    "- Use only cues from the lists above, written EXACTLY as listed (lowercase, square brackets included). If no "
+    "listed cue fits, write no cue. Use no other bracketed text, and never put words you want spoken inside "
+    "brackets.\n"
+    "- Open every reply with a cue. In a story, cue almost every sentence: at most one per sentence, never two in a "
+    "row, and vary them. A short factual answer needs just one or two cues in all.\n"
+)
+
+# Laughter and noises are performed from a cue. A written "ha ha" would be read out as words, so the model is told to
+# use the cue instead. Added only when the voice has sound cues: the whole cue section exists only for the Halloween voice.
+_SOUND_RULE = (
+    "- Make laughs, gasps, sighs, breaths and other noises ONLY with a cue from the {label} list, never by writing "
+    '"ha ha", "hehe", "ahh" or *laughs* in your words. Spell the cue exactly as listed and put it right before the '
+    "sentence it belongs with, never alone at the end of a line.\n"
+    "- Every story MUST include sounds: at least two of its cues come from the {label} list, {where}.\n"
+)
+# Sounds the rule names, in order, when the voice has them: one for the scare, one for the punchline. The smaller tier
+# model ignored a soft "work in a sound" (1 story in 4 had one), so stories get a firm, concrete requirement.
+_SCARE_SOUNDS = ("gasps", "sighs", "deep breaths")
+_LAUGH_SOUNDS = ("laughs", "chuckles", "giggles")
+
+
+def _sound_rule(breath: tuple[str, ...]) -> str:
+    """The sound rule for a voice whose breath-and-sound cues are `breath`; names only cues the voice has."""
+    scare = [t for t in _SCARE_SOUNDS if t in breath][:2]
+    laugh = [t for t in _LAUGH_SOUNDS if t in breath][:2]
+
+    def named(tags) -> str:
+        return " or ".join(f"[{t}]" for t in tags)
+
+    where = (f"one at the scare ({named(scare)}) and one on the last line ({named(laugh)})" if scare and laugh
+             else f"for example {named(breath[:3])}")
+    return _SOUND_RULE.format(label=GROUP_HINTS["breath"].split(" (")[0], where=where)
+
+_CUE_RULES_END = (
+    "- A cue goes right before the words it colors and colors only the next few words, so cue each new beat again; "
+    "nothing carries over. Never end a sentence or a line with a cue.\n"
+    "- Never put a cue inside a number, date, name, or any other fact. Say the fact plainly, then cue the next line.\n"
+    "- To build suspense, use short sentences, a cue, a pause (…), then the reveal."
+)
+
+_CUE_RULES = _CUE_RULES_START + _CUE_RULES_END       # the rules for a voice with no sound cues
+
+# The worked examples teach only cues the voice really has. Each slot takes the first cue, in this order, that is not
+# already used: a preferred cue the voice performs, else a cue of the slot's group, else any cue it has. With fewer
+# than three cues there is no example; the fourth slot (a sound for the scare) and the fifth (a laugh for the
+# punchline) are left out when no cue is left for them.
+_EXAMPLE_SLOTS = (
+    ("volume", ("whispers", "whisper", "soft")),
+    ("emotion", ("mischievously", "menacing", "sinister", "dismissive")),
+    ("pacing", ("building tension", "pause", "slowly")),
+    ("breath", ("gasps", "sighs", "exhales")),
+    ("breath", ("laughs", "chuckles", "giggles")),
+)
+_REQUIRED_SLOTS = 3
+
+
+def _examples(available: frozenset[str], groups: list[tuple[str, tuple[str, ...]]]) -> list[str]:
+    by_group = dict(groups)
+    everything = [t for _, members in groups for t in members]
+    picks: list[str | None] = []
+    for category, preferred in _EXAMPLE_SLOTS:
+        options = [t for t in preferred if t in available] + list(by_group.get(category, ())) + everything
+        tag = next((t for t in options if t not in picks), None)
+        if tag is None and len(picks) < _REQUIRED_SLOTS:
+            return []
+        picks.append(tag)
+    soft, attitude, tension, breath, laugh = picks
+    story = f"[{tension}] The door creaked open… and nobody was there. [{soft}] Nobody ever is."
+    if breath:
+        story += f" [{breath}] The candle shivered, and the hallway grew cold."
+    story += f" [{laugh or attitude}] Then a small ghost asked to borrow your coat."
+    return [
+        "Example of a short answer (do not copy the words): "
+        f"[{soft}] Your order shipped on Tuesday. [{attitude}] It should reach you by Friday.",
+        f"Example of a story beat (do not copy the words): {story}",
+    ]
+
+
 def _cue_rules(tags: tuple[str, ...]) -> str:
-    """Rules for the expressive cues a voice can perform. `tags` come from the active voice profile."""
-    listed = " ".join(f"[{t}]" for t in tags)
-    return (
-        "--- Expressive cues ---\n"
-        f"Your voice can perform these cues: {listed}\n"
-        "- Use at most two cues in a reply, written EXACTLY as listed, square brackets included.\n"
-        "- Put each cue right before the words it colors.\n"
-        "- Never put a cue inside a number, date, name, or any other fact.\n"
-        "- Use no other bracketed text."
-    )
+    """The cue section for a voice that performs `tags`: the palette grouped by purpose, the rules, and worked
+    examples built only from cues the voice really has. `tags` come from the active voice profile."""
+    groups = grouped(tags)
+    lines = [_CUE_INTRO]
+    for category, members in groups:
+        hint = OTHER_HINT if category == OTHER else GROUP_HINTS[category]
+        lines.append(f"{hint}: " + " ".join(f"[{t}]" for t in members))
+    breath = next((members for category, members in groups if category == "breath"), ())
+    sound_rule = _sound_rule(breath) if breath else ""      # it points at the sound list, so it needs sound cues
+    lines.append(_CUE_RULES_START + sound_rule + _CUE_RULES_END)
+    lines.extend(_examples(frozenset(tags), groups))
+    return "\n".join(lines)
 
 
 def build_instructions(system_prompt: str, directives: dict, courtesy_name: str | None = None, *,
