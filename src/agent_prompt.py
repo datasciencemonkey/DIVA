@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
+from src.expressive_palette import GROUP_HINTS, OTHER, OTHER_HINT, grouped
+
 _GOVERNANCE = """
 --- Operating rules (follow exactly) ---
 Behavior for this call:
@@ -35,8 +37,8 @@ _NEUTRAL = "Stay plainly helpful; give no loyalty/status acknowledgement of any 
 
 HALLOWEEN_PERSONA = """
 --- Halloween persona ---
-Deliver your replies as a playful, spooky Halloween host: eerie and theatrical, with dramatic pauses
-(an ellipsis works well).
+You are a Halloween monster who tells it like a campfire story: slow, theatrical, a little mischievous. You
+savour every pause and let the tension build before each reveal, with dramatic pauses (an ellipsis works well).
 - Never be threatening, cruel, gory, or genuinely frightening. Keep it fun.
 - The act colors only your delivery. State every fact, number, date, name, and order detail plainly and
   exactly as the tools return it.
@@ -88,17 +90,65 @@ ANNOUNCE_OFF = (
 )
 
 
+_CUE_INTRO = (
+    "--- Expressive cues ---\n"
+    "Your voice performs the cues below when you write them in square brackets. They are how you act: use them "
+    "the way a storyteller uses breath, hush, laughter and timing."
+)
+
+_CUE_RULES = (
+    "Rules for cues:\n"
+    "- Write each cue EXACTLY as listed (lowercase, square brackets included) and use no other bracketed text. "
+    "Never put words you want spoken inside brackets.\n"
+    "- Open your reply with a cue, then start each new beat with a cue: at most one per sentence, never two in a "
+    "row, and vary them. A short factual answer needs just one or two.\n"
+    "- A cue colors only the next few words, so cue each new beat again; nothing carries over.\n"
+    "- Put each cue right before the words it colors.\n"
+    "- Never put a cue inside a number, date, name, or any other fact. Say the fact plainly, then cue the next line.\n"
+    "- To build suspense, use short sentences, a cue, a pause (…), then the reveal."
+)
+
+# The worked examples teach only cues the voice really has. Each slot takes the first cue, in this order, that is not
+# already used: a preferred cue the voice performs, else a cue of the slot's group, else any cue it has. With fewer
+# than three cues there is no example.
+_EXAMPLE_SLOTS = (
+    ("volume", ("whispers", "whisper", "soft")),
+    ("emotion", ("mischievously", "menacing", "sinister", "dismissive")),
+    ("pacing", ("building tension", "pause", "slowly")),
+)
+
+
+def _examples(available: frozenset[str], groups: list[tuple[str, tuple[str, ...]]]) -> list[str]:
+    by_group = dict(groups)
+    everything = [t for _, members in groups for t in members]
+    picks: list[str] = []
+    for category, preferred in _EXAMPLE_SLOTS:
+        options = [t for t in preferred if t in available] + list(by_group.get(category, ())) + everything
+        tag = next((t for t in options if t not in picks), None)
+        if tag is None:
+            return []
+        picks.append(tag)
+    soft, attitude, tension = picks
+    return [
+        "Example of the delivery (do not copy the words): "
+        f"[{soft}] Your order shipped on Tuesday. [{attitude}] It should reach you by Friday… "
+        f"[{tension}] and not a moment sooner.",
+        "Example of a story beat (do not copy the words): "
+        f"[{tension}] The door creaked open… [{soft}] and nobody was there. [{attitude}] Nobody ever is.",
+    ]
+
+
 def _cue_rules(tags: tuple[str, ...]) -> str:
-    """Rules for the expressive cues a voice can perform. `tags` come from the active voice profile."""
-    listed = " ".join(f"[{t}]" for t in tags)
-    return (
-        "--- Expressive cues ---\n"
-        f"Your voice can perform these cues: {listed}\n"
-        "- Use at most two cues in a reply, written EXACTLY as listed, square brackets included.\n"
-        "- Put each cue right before the words it colors.\n"
-        "- Never put a cue inside a number, date, name, or any other fact.\n"
-        "- Use no other bracketed text."
-    )
+    """The cue section for a voice that performs `tags`: the palette grouped by purpose, the rules, and worked
+    examples built only from cues the voice really has. `tags` come from the active voice profile."""
+    groups = grouped(tags)
+    lines = [_CUE_INTRO]
+    for category, members in groups:
+        hint = OTHER_HINT if category == OTHER else GROUP_HINTS[category]
+        lines.append(f"{hint}: " + " ".join(f"[{t}]" for t in members))
+    lines.append(_CUE_RULES)
+    lines.extend(_examples(frozenset(tags), groups))
+    return "\n".join(lines)
 
 
 def build_instructions(system_prompt: str, directives: dict, courtesy_name: str | None = None, *,

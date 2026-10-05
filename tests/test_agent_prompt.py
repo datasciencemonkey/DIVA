@@ -1,5 +1,8 @@
+import re
+
 from src.agent_prompt import (ANNOUNCE_OFF, ANNOUNCE_ON, BRIDGE_ON, HALLOWEEN_PERSONA, OFF_NOTE, ON_NOTE,
                               VOICE_REQUESTS, build_instructions)
+from src.expressive_palette import GROUP_HINTS, PALETTE, flatten
 
 _D_WARM = {"recognition_tone": "warm", "be_proactive": True, "thoroughness": "thorough", "offer_human_escalation": True}
 _D_NEUTRAL = {"recognition_tone": "neutral", "be_proactive": False, "thoroughness": "concise", "offer_human_escalation": False}
@@ -51,11 +54,18 @@ def test_persona_sits_before_governance_block():
     assert out.index("Halloween") < out.index("Governance (non-negotiable)")  # ... and before governance
 
 
+_FULL = flatten()
+
+
+def _cues(tags=_FULL):
+    return build_instructions("s", _D_NEUTRAL, persona=HALLOWEEN_PERSONA, expressive_tags=tags)
+
+
 def test_cue_rules_only_present_with_tags():
-    with_tags = build_instructions("s", _D_NEUTRAL, persona=HALLOWEEN_PERSONA, expressive_tags=("whispers",))
+    with_tags = _cues(("whispers",))
     without = build_instructions("s", _D_NEUTRAL, persona=HALLOWEEN_PERSONA, expressive_tags=())
     assert "[whispers]" in with_tags and "[whispers]" not in without
-    assert "at most two" in with_tags and "at most two" not in without  # the cue rules, not just the tags
+    assert "Expressive cues" in with_tags and "Expressive cues" not in without   # the cue rules, not just the tags
 
 
 def test_voice_request_line_only_when_asked_and_no_tier_words():
@@ -119,3 +129,92 @@ def test_bridge_reconciles_with_the_switch_notes_no_double_up():
     # BRIDGE_ON must not appear baked into any built prompt — it is spoken by the controller, never prompted.
     assert BRIDGE_ON not in build_instructions("s", _D_NEUTRAL, persona=HALLOWEEN_PERSONA,
                                                expressive_tags=("whispers",), voice_requests=True)
+
+
+# --- Plan 6: monster persona, grouped cue rules and worked examples (#31) ---
+# These pin structure and a handful of rule phrases, not long stretches of prose: T4 tunes the wording against
+# the real tier models.
+
+def test_cue_rules_do_not_cap_a_reply_at_two_cues():
+    assert "at most two" not in _cues().lower()
+
+
+def test_the_palette_is_shown_grouped_and_spelled_exactly_as_the_vocabulary_spells_it():
+    out = _cues()
+    for category, members in PALETTE.items():
+        line = next(l for l in out.splitlines() if l.startswith(GROUP_HINTS[category]))
+        assert line == f"{GROUP_HINTS[category]}: " + " ".join(f"[{t}]" for t in members)
+
+
+def test_only_the_vocabulary_is_listed():
+    one, *others = flatten()
+    out = _cues((one,))
+    assert f"[{one}]" in out
+    assert all(f"[{t}]" not in out for t in others)
+
+
+def test_tags_the_palette_does_not_know_are_listed_as_other_cues():
+    assert "Other cues: [zzzz cue]" in _cues(("zzzz cue",))
+
+
+def test_rules_keep_facts_and_brackets_clean():
+    out = _cues()
+    assert "Never put a cue inside a number, date, name, or any other fact" in out
+    assert "no other bracketed text" in out.lower()
+    assert "never two in a row" in out
+
+
+def test_the_worked_examples_use_only_cues_the_voice_has():
+    vocab = set(flatten())
+    out = _cues()
+    lines = [l for l in out.splitlines() if l.startswith(("Example of the delivery", "Example of a story beat"))]
+    assert len(lines) == 2
+    used = {c for l in lines for c in re.findall(r"\[([^\]]+)\]", l)}
+    assert used and used <= vocab
+
+
+def test_examples_borrow_cues_when_a_category_is_missing_but_never_leave_the_vocabulary():
+    three = flatten()[:3]                      # typically all one category: the other slots must borrow
+    lines = [l for l in _cues(three).splitlines()
+             if l.startswith(("Example of the delivery", "Example of a story beat"))]
+    assert len(lines) == 2
+    assert {c for l in lines for c in re.findall(r"\[([^\]]+)\]", l)} <= set(three)
+
+
+def test_no_example_with_fewer_than_three_cues():
+    assert "Example of" not in _cues(flatten()[:2])
+
+
+def test_standard_and_fallback_prompts_carry_no_cue_section_and_no_brackets():
+    for persona in (None, HALLOWEEN_PERSONA):
+        out = build_instructions("Support.", _D_NEUTRAL, persona=persona, expressive_tags=())
+        assert "Expressive cues" not in out and "[" not in out
+
+
+def test_the_halloween_persona_is_a_monster_but_keeps_every_safety_line():
+    p = HALLOWEEN_PERSONA
+    assert "monster" in p.lower()
+    assert "Never be threatening, cruel, gory, or genuinely frightening" in p
+    assert "exactly as the tools return it" in p
+    assert "drop the act" in p
+    assert 'say "As you wish…"' in p
+
+
+def test_the_persona_and_the_full_cue_section_carry_no_tier_words():
+    # Warm directives, as in test_added_prompt_text_carries_no_tier_words. That test lists only two cues, which
+    # renders no worked examples; the full vocabulary reaches every line of the cue section (G9).
+    out = build_instructions("Support agent.", _D_WARM, persona=HALLOWEEN_PERSONA, expressive_tags=_FULL,
+                             voice_requests=True).lower()
+    assert "example of" in out
+    assert all(w not in out for w in _TIER_WORDS)
+
+
+def test_the_cue_section_stays_within_a_prompt_budget():
+    section = _cues().split("--- Expressive cues ---")[1].split("Governance (non-negotiable)")[0]
+    assert len(section) <= 4000      # about 1,000 tokens at the very most; T4 records the real figure
+
+
+def test_the_steady_instructions_still_reach_a_same_turn_patch_with_the_cue_rules():
+    steady = _cues()
+    patched = f"{steady}\n\n{ON_NOTE}"          # what VoiceModeController patches into the switching reply
+    assert "Expressive cues" in patched and patched.endswith("Follow the rules above.")
