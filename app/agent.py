@@ -63,6 +63,7 @@ def _setup_process(proc: agents.JobProcess) -> None:
     if _trace_provider is not None:
         otel_trace.set_tracer_provider(_trace_provider)   # MLflow's LiveKit guide sets both global and LiveKit
         set_tracer_provider(_trace_provider, metadata={"livekit.agent_name": _AGENT_NAME})
+    import databricks.sdk  # noqa: F401  # warm the slow first import here, not in a caller's job
 
 
 server = AgentServer(setup_fnc=_setup_process)
