@@ -2,17 +2,22 @@
 
 Reuses ReferenceApp app/agent.py's span-enrichment seam verbatim:
   - _SPAN_TYPES, _as_json_value, _SpanEnrichmentExporter, build_tracer_provider
-Adds: the ug.ai_decide span type (in _SPAN_TYPES) and fill_ug_metadata (ug.* attributes, PII-free).
+Adds: the ug.ai_decide span type (in _SPAN_TYPES), fill_ug_metadata (ug.* attributes, PII-free), and
+per-trace root enrichment for a process-wide provider (register_trace_enrichment).
 """
 from __future__ import annotations
 
 import ast
 import json
 import os
+import threading
+from collections.abc import Callable
+from typing import Any
 
+from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.resources import SERVICE_NAME, Resource
-from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace import SpanProcessor, TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, SpanExporter
 
 
@@ -25,11 +30,16 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor, SpanExporter
 # controller opens on a mode transition or dropped late answer, app/voice_mode.py); the exporter JSON-encodes the type, so it is typed here
 # rather than with a bare string on the span.
 _SPAN_TYPES = {
+    "job_entrypoint": "AGENT",  # livekit-agents 1.8.3 root; without a type the tree does not render
     "agent_session": "AGENT",
     "llm_node": "LLM",
     "function_tool": "TOOL",
     "ug.ai_decide": "CHAIN",
 }
+
+# livekit-agents 1.8.3 ends `job_entrypoint` after user shutdown callbacks. A short bound so
+# on_end can export the root without waiting on the batch processor's default schedule.
+_ROOT_FLUSH_TIMEOUT_MS = 5_000
 
 
 def _as_json_value(raw: str | None, wrap_key: str) -> str | None:
@@ -44,6 +54,28 @@ def _as_json_value(raw: str | None, wrap_key: str) -> str | None:
     return json.dumps({wrap_key: raw})
 
 
+# Root-span enrichment per trace. The provider is process-wide (installed before LiveKit opens the job's
+# root), and the THREAD executor can run several jobs in one process, so each job's ug.* dict is keyed by
+# its trace id rather than shared.
+_ROOT_ENRICHMENT: dict[int, dict[str, Any]] = {}
+_ROOT_ENRICHMENT_LOCK = threading.Lock()
+
+
+def register_trace_enrichment(enrichment: dict[str, Any]) -> None:
+    """Attach `enrichment` to the root of the current trace. Call it from the job entrypoint, where the
+    current span is LiveKit's `job_entrypoint`. The dict is read at export time, so keep filling it."""
+    ctx = trace.get_current_span().get_span_context()
+    if ctx.is_valid:
+        with _ROOT_ENRICHMENT_LOCK:
+            _ROOT_ENRICHMENT[ctx.trace_id] = enrichment
+
+
+def _take_root_enrichment(trace_id: int) -> dict[str, Any] | None:
+    """A trace has one root, exported once, so its entry is removed as it is read."""
+    with _ROOT_ENRICHMENT_LOCK:
+        return _ROOT_ENRICHMENT.pop(trace_id, None)
+
+
 class _SpanEnrichmentExporter(SpanExporter):
     """Adds MLflow-native attributes to spans at export time.
 
@@ -52,9 +84,10 @@ class _SpanEnrichmentExporter(SpanExporter):
       - Any span: mlflow.spanType → typed trace tree; per-type I/O → span detail view
     """
 
-    def __init__(self, inner: SpanExporter, enrichment: dict[str, str]) -> None:
+    def __init__(self, inner: SpanExporter,
+                 root_enrichment: Callable[[int], dict[str, Any] | None] = _take_root_enrichment) -> None:
         self._inner = inner
-        self._enrichment = enrichment  # filled live as session details become known
+        self._root_enrichment = root_enrichment  # trace id -> the job's ug.* dict, read when the root exports
 
     def export(self, spans):
         for span in spans:
@@ -69,8 +102,8 @@ class _SpanEnrichmentExporter(SpanExporter):
         changed = False
 
         # Root span: identity + conversation previews
-        if span.parent is None and self._enrichment:
-            attrs.update(self._enrichment)
+        if span.parent is None and (enrichment := self._root_enrichment(span.context.trace_id)):
+            attrs.update(enrichment)
             changed = True
 
         # Span-type classification
@@ -119,8 +152,47 @@ class _SpanEnrichmentExporter(SpanExporter):
         self._inner.shutdown()
 
 
-def build_tracer_provider(enrichment: dict[str, str] | None = None) -> TracerProvider | None:
-    """OTLP span exporter to Databricks UC + MLflow.
+class _RootFlushSpanProcessor(SpanProcessor):
+    """Force-flush when a root span ends so `job_entrypoint` is exported before the job process exits.
+
+    Register *after* `BatchSpanProcessor`: processors run in add order, so the batch processor
+    queues the span first and this flush then exports it. `force_flush` is a no-op here to avoid
+    recursing when the provider flushes every processor.
+    """
+
+    def __init__(self, provider: TracerProvider, timeout_millis: int = _ROOT_FLUSH_TIMEOUT_MS) -> None:
+        self._provider = provider
+        self._timeout_millis = timeout_millis
+
+    def on_end(self, span) -> None:
+        if span.parent is not None:
+            return
+        try:
+            self._provider.force_flush(timeout_millis=self._timeout_millis)
+        except Exception:
+            pass  # tracing must never break the voice pipeline
+
+    def force_flush(self, timeout_millis: int = 30000) -> bool:  # noqa: ARG002
+        return True
+
+
+def flush_open_traces(provider: TracerProvider) -> None:
+    """Export finished spans. Do not shut the provider down.
+
+    livekit-agents 1.8.3 wraps the job in `job_entrypoint` and ends it *after* user shutdown
+    callbacks (and after `job_shutdown`). `TracerProvider.shutdown()` makes the batch processor
+    drop anything that ends later, which orphans `agent_session` and hides the call in MLflow.
+    LiveKit's own `_shutdown_telemetry` flushes only exporters the framework attached. Process
+    atexit shutdown remains the backstop.
+    """
+    provider.force_flush()
+
+
+def build_tracer_provider() -> TracerProvider | None:
+    """OTLP span exporter to Databricks UC + MLflow. Build it once per process and hand it to LiveKit's
+    `set_tracer_provider` before any job starts (the worker's setup_fnc): livekit-agents 1.8.3 opens the
+    job's root, `job_entrypoint`, before the entrypoint runs, and a provider set later never sees that root.
+    Root enrichment comes from `register_trace_enrichment`.
 
     Fail-soft: returns None (tracing disabled) when DATABRICKS_TRACE_* vars are absent.
     """
@@ -137,14 +209,14 @@ def build_tracer_provider(enrichment: dict[str, str] | None = None) -> TracerPro
             "X-Databricks-UC-Table-Name": f"{catalog}.{schema}.{prefix}_otel_spans",
         },
     )
-    if enrichment is not None:
-        exporter = _SpanEnrichmentExporter(exporter, enrichment)
+    exporter = _SpanEnrichmentExporter(exporter)
     provider = TracerProvider(
         resource=Resource.create(
             {SERVICE_NAME: os.getenv("OTEL_SERVICE_NAME", "ug-voice-agent")}
         )
     )
     provider.add_span_processor(BatchSpanProcessor(exporter))
+    provider.add_span_processor(_RootFlushSpanProcessor(provider))
     return provider
 
 
