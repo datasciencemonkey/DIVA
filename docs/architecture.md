@@ -257,7 +257,7 @@ adds five:
 |---|---|---|
 | **G9** | Mode is independent of tier: it never changes the routed model, the directives or escalation | The bind is a frozen dataclass the voice-mode controller never touches |
 | **G10** | AI Decide sees only the caller | The engine's input is built from three fields: the utterance, the previous agent line and the current mode |
-| **G11** | The persona can't override governance | Persona and cue rules sit before the governance block, and the one-reply switch notes end by re-asserting it; facts are spoken exactly as the tools return them |
+| **G11** | The persona can't override governance | Persona and cue rules sit before the governance block, and the one-reply switch notes end by re-asserting it; facts are spoken exactly as the tools return them. The one deliberate exception is a made-up spooky tale on request, which may contain no real orders, prices, policies or people |
 | **G12** | An explicit exit is always honored | The explicit exit rule beats the engine, and exits are never capped |
 | **G13** | Expressive tags are never read aloud and never shown | A fail-closed tag filter in front of the TTS, and tag-stripped transcripts (a few malformed bracket shapes are not handled) |
 

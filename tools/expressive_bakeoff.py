@@ -19,6 +19,10 @@ only, so this tool never calls an account or model endpoint.
     uv run --frozen python tools/expressive_bakeoff.py --json /tmp/bakeoff.json
     uv run --frozen python tools/expressive_bakeoff.py --from-palette      # re-verify the shipped palette
     uv run --frozen python tools/expressive_bakeoff.py --stability-check   # 0.0 vs 0.5 on the reference passage
+
+Exit codes: 0 done. 1 a request failed; or --from-palette found a shipped tag read aloud; or --stability-check heard a
+cue read aloud. (In a plain candidate run a spoken-aloud candidate is an expected, excluded result and still exits 0.)
+2 bad arguments, missing .env.local values, or over the synthesis budget.
 """
 from __future__ import annotations
 
@@ -206,6 +210,16 @@ def transcribe(wav: bytes, api_key: str) -> str:
     return r.json()["results"]["channels"][0]["alternatives"][0]["transcript"]
 
 
+def exit_code(counts: dict[str, int], failures: list[str], from_palette: bool) -> int:
+    """1 when a request failed or a row errored, or, in --from-palette mode, when a shipped tag was read aloud (G13).
+
+    In a plain candidate run a spoken-aloud candidate is an expected, excluded result, so it still exits 0 there.
+    """
+    if from_palette and counts["spoken-aloud"]:
+        return 1
+    return 1 if (failures or counts["error"]) else 0
+
+
 async def _run_live(args, tags: list[str], carriers: tuple[str, ...]) -> int:
     import aiohttp
     from livekit.agents import NOT_GIVEN
@@ -282,7 +296,7 @@ async def _run_live(args, tags: list[str], carriers: tuple[str, ...]) -> int:
         print("failures:", "; ".join(failures[:5]))
     if args.json:
         Path(args.json).write_text(json.dumps(raw, indent=2), encoding="utf-8")
-    return 1 if (failures or counts["error"]) else 0
+    return exit_code(counts, failures, args.from_palette)
 
 
 # ------------------------------------------------------------------ CLI

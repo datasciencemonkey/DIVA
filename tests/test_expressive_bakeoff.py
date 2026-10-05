@@ -114,3 +114,23 @@ def test_dry_run_touches_nothing_and_reports_the_count(capsys):
 def test_a_typo_in_only_is_refused_before_any_call(capsys):
     assert bake.main(["--dry-run", "--only", "[sighs]"]) == 2
     assert "not a valid tag" in capsys.readouterr().out
+
+
+CLEAN = {"performed": 67, "spoken-aloud": 0, "no-audible-effect": 0, "error": 0}
+
+
+def test_from_palette_exits_1_when_a_shipped_tag_is_read_aloud():
+    # The mode that re-verifies the shipped palette against G13 must fail on the one result it exists to catch.
+    assert bake.exit_code({**CLEAN, "performed": 66, "spoken-aloud": 1}, [], from_palette=True) == 1
+
+
+def test_a_plain_candidate_run_keeps_exit_0_when_a_candidate_is_read_aloud():
+    # A spoken-aloud candidate is an expected, excluded outcome there, not a failure.
+    assert bake.exit_code({**CLEAN, "performed": 60, "spoken-aloud": 7}, [], from_palette=False) == 0
+
+
+def test_a_failed_request_or_an_error_row_exits_1_in_every_mode():
+    assert bake.exit_code(CLEAN, [], from_palette=True) == 0
+    assert bake.exit_code(CLEAN, [], from_palette=False) == 0
+    assert bake.exit_code(CLEAN, ["'[sighs] ...': TimeoutError"], from_palette=False) == 1
+    assert bake.exit_code({**CLEAN, "error": 1}, [], from_palette=True) == 1

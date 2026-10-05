@@ -33,7 +33,9 @@ _NEUTRAL = "Stay plainly helpful; give no loyalty/status acknowledgement of any 
 
 # --- Plan 5: Halloween mode (spec §7.9) --------------------------------------------------------------
 # All of this sits BEFORE the governance block (G11): the persona colors the delivery, never the facts,
-# and cannot dilute the rules that follow it. No tier/loyalty wording belongs in any of it.
+# and cannot dilute the rules that follow it, with one deliberate exception: a made-up spooky tale on request
+# (the story bullet in HALLOWEEN_PERSONA), which may contain no real orders, prices, policies or people.
+# No tier/loyalty wording belongs in any of it.
 
 HALLOWEEN_PERSONA = """
 --- Halloween persona ---
