@@ -99,9 +99,12 @@ governance stay exactly as they were.
   conversational LLM. A deterministic policy applies at most one change per turn, and an exit always wins.
   `UG_DECIDE_ENGINE=uaig_chat` swaps in a gateway-served chat model as the decider; `UG_AI_DECIDE=0` turns the
   feature off.
-- **Expressive voice.** In Halloween mode the Databricks LLM writes inline cues such as `[whispers]`, and
-  ElevenLabs (`eleven_v3_conversational`) performs them. Cues are never read aloud or shown. If ElevenLabs is
-  unavailable the call carries on in a darker Deepgram voice (`aura-2-zeus-en`).
+- **Expressive voice.** In Halloween mode the Databricks LLM plays a campfire-storyteller monster and writes inline
+  cues such as `[whispers]` or `[building tension]`, and ElevenLabs (`eleven_v3_conversational`) performs them. Cues
+  are never read aloud or shown. Ask for a scary story and it makes one up on the spot; facts about orders, prices
+  and policies still come only from the tools. If ElevenLabs is unavailable the call carries on in a darker Deepgram
+  voice (`aura-2-zeus-en`). The cues come from a [verified palette](#the-expressive-palette), and you can
+  [check the voice yourself](#verifying-the-voice).
 - **Themed UI.** The Control pillar shows each mode change live (mode, confidence, latency, path), and the whole
   studio cross-fades into an "All Hallows' Console" theme — moon, fog, embers, bats, display type, a
   jack-o'-lantern on the Control pillar — then cleanly back when the agent exits. Honors `prefers-reduced-motion`.
@@ -125,6 +128,74 @@ reference them:
    Halloween mode uses the Deepgram fallback voice.
 4. **Confirm the app can reach `api.elevenlabs.io`.** Outbound egress to it has not been verified yet.
 
+### The expressive palette
+
+The monster may write only the cues below. Each was synthesized through the same ElevenLabs plugin and voice the app
+uses, then transcribed back with Deepgram: none was read aloud, and each made the voice do something other than read
+the word. The prompt shows the cues to the model in these four groups. Any other bracketed cue or stage direction is
+dropped from the audio and the transcript, so a cue the voice does not perform never reaches the caller or the screen.
+
+| Group | Cues |
+|---|---|
+| **Breath and sounds** (reactions, laughter, breathing) | `deep breaths`, `exhales`, `inhales deeply`, `sighs`, `gasps`, `gulps`, `clears throat`, `heavy breathing`, `shaky breath`, `laughs`, `laughing`, `chuckles`, `evil laugh`, `maniacal laughter`, `giggles`, `snorts`, `wheezing`, `groans`, `exhales sharply`, `panting`, `menacing laugh` |
+| **Volume** (how softly or heavily a line is spoken) | `whispers`, `whisper`, `whispering`, `soft`, `softly`, `quietly`, `hushed`, `low voice`, `deep voice`, `growls`, `raspy`, `rumbling` |
+| **Attitude** (the feeling behind a line) | `dismissive`, `mischievously`, `nervously`, `menacing`, `sinister`, `ominous`, `eerie`, `sarcastic`, `curious`, `amused`, `dramatic`, `somber`, `fearful`, `cold`, `gleeful`, `smug`, `playful`, `excited`, `panicking`, `deadpan`, `thoughtful` |
+| **Pacing and tension** (timing and suspense) | `building tension`, `pause`, `long pause`, `dramatic pause`, `slowly`, `suspenseful`, `hesitates`, `trailing off`, `rushed`, `measured`, `slow`, `short pause`, `drawn out` |
+
+The list lives in `src/expressive_palette.py`. Change it only by re-running the bake-off and updating
+[the contract](docs/discovery/expressive-tags-contract.md), which records the method, the results and their limits.
+"Did something other than read the word" is weaker than "sounds right": the check sees the words Deepgram hears and
+the clip length, not tone or loudness, so the listening test below matters.
+
+### Verifying the voice
+
+Two manual tools under `tools/` check the voice against the live services. They are not part of the test suite. They
+read their settings from the gitignored `.env.local` and never print a key, host or token.
+
+```bash
+uv run --frozen python tools/expressive_bakeoff.py --from-palette     # every shipped tag is performed, none read aloud
+uv run --frozen python tools/expressive_bakeoff.py --stability-check  # 0.0 vs 0.5 on the reference passage
+uv run --frozen python tools/expressive_llm_check.py                   # cue richness on the three tier models
+```
+
+**The bake-off** needs `ELEVEN_API_KEY`, `UG_HALLOWEEN_VOICE_ID` and `DEEPGRAM_API_KEY` in `.env.local`. It
+synthesizes each cue in front of two plain sentences (138 syntheses for the whole palette, 150 at most per run),
+transcribes the audio and prints a verdict per cue. The line to look for is `spoken-aloud=0`. `--dry-run` prints the
+plan without credentials or network.
+
+**The LLM check** sends seven scripted caller utterances to each tier's model with the exact Halloween instructions the
+agent uses. It reports cues per 100 words, distinct cues, how many cues are on the list, stage directions, stacked
+cues, facts kept verbatim, cues that split a fact, and how many input tokens the cue section adds. Every request goes
+to the Databricks-served model through Unity Gateway.
+
+- **Settings.** It reads `DATABRICKS_HOST`, `DATABRICKS_TOKEN` and the `UG_MODEL_*` names from `.env.local`, the same
+  values the agent uses. It authenticates with that token, not a Databricks CLI profile.
+- **Flags.** `--dry-run` prints the number of calls and stops (no credentials, no network). `--samples N` sets the
+  replies per utterance (default 3). `--tiers Standard,Premium,VIP` picks the tiers (default all three). `--json PATH`
+  saves every reply with its metrics (keep the file outside the repo).
+- **Cost.** A default run makes 69 calls (3 tiers x (7 utterances x 3 samples + 2 probe calls)) and refuses to start
+  above 100. The cue section adds +658 input tokens to a request (measured; only the ElevenLabs Halloween voice carries
+  it, the normal voice and the Deepgram fallback do not).
+- **Exit codes.** `0` every tier passes, `1` a target was missed, `2` configuration or budget (missing `.env.local`
+  values, an unknown tier, too many calls), `3` a gateway request failed.
+
+The latest pass rests on 2 samples per utterance (48 calls), not the default 3. Several targets allow no misses at all
+(a stage direction, a stacked cue, a missing fact), so one stray reply can trip them: read the pass as encouraging, not
+proof, and re-run with the default after any change to the prompt, a tier model, the palette or the voice. The figures, and how the prompt was tuned, are in
+[the contract](docs/discovery/expressive-tags-contract.md#llm-compliance-results).
+
+The persona now lets the monster tell a made-up story. Without that line, the Premium and VIP models answered "tell me a
+scary story" with "I don't have a story from my tools", because the governance says to answer only from the tools. The
+persona says a spooky story is play (four or five short sentences, no tool needed) and keeps real orders, prices,
+policies and people out of it; facts about the business still come only from the tools. It is a deliberate carve-out,
+so a listening test of a story is part of the recipe.
+
+Then listen once: run the studio locally (`PORT=8080 uv run --frozen python app/web_server.py` and
+`uv run --frozen python app/agent.py dev` in a second terminal), open http://localhost:8080, start a call, say
+"switch to the spooky voice", then "tell me a scary story". You should hear breaths, whispers and pauses, and
+no tag read out loud. The transcript shows no brackets. Check that the story stays make-believe: no real order, price,
+policy or person in it.
+
 ## What's inside
 
 | Path | What it is |
@@ -132,6 +203,7 @@ reference them:
 | `app/` | The LiveKit agent worker (`agent.py`), its tools and tracing, the web tier (`web_server.py`) and the studio UI (`web/public/`) |
 | `src/` | Routing policy, the governance prompt, the synthetic-world generator, and the Lakebase / gateway / retrieval services |
 | `infra/` | The Lakebase schema, ANN and BM25 indexes, and `apply_schema.py` |
+| `tools/` | Manual verification tools: the TTS→STT tag bake-off (`expressive_bakeoff.py`) and the live LLM cue check (`expressive_llm_check.py`: `--dry-run`, `--samples`, `--tiers`, `--json`). See [Verifying the voice](#verifying-the-voice) |
 | `start_app.py`, `app.yaml` | The single-container Databricks App launcher and spec |
 | `skills/building-voice-agents-on-databricks/` | The agent skill: deploy, worker + tools, observability ([what you can ask it](#agent-skill)) |
 | `docs/discovery/` | Verified contracts for the platform behavior the code depends on |

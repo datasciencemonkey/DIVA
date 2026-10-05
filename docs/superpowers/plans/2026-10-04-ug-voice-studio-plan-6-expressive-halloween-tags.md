@@ -10,6 +10,20 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-04-ug-voice-studio-plan-6-expressive-halloween-tags-design.md` (issues: epic #28; T1 #29, T2 #30, T3 #31, T4 #32, T5 #33)
 
+> **As shipped.** The code is authoritative wherever it differs from the plan text below; the plan's code blocks were not
+> rewritten to match it. Differences:
+>
+> - **Task 3 fix round (`c51e97d`):** the two worked examples in `src/agent_prompt.py` were rewritten so they obey the rules
+>   they teach, and the first label is now "Example of a short answer".
+> - **Task 4 tuning:** a persona bullet that lets the monster tell a made-up story (business facts still come only from the
+>   tools); rewritten cue rules (only listed cues, open every reply with a cue, cue a story sentence by sentence, never end a
+>   line with a cue); a four-beat story example.
+> - **Task 4 harness** (`tools/expressive_llm_check.py`): a lookup result goes in as a recorded tool call plus its output, not
+>   pasted into the caller's message; the order question also asks for the total; a story reply under 25 words counts as a
+>   refusal (`Targets.story_min_words`); it prints the median reply length; it adds `--json`, a `--samples >= 1` guard, and
+>   prints only the class and HTTP status of a failed request.
+> - Results and limits: `docs/discovery/expressive-tags-contract.md`.
+
 ## Global Constraints
 
 Every task's requirements implicitly include all of these.
