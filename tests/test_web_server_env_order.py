@@ -11,7 +11,7 @@ def _line_of(prefix: str) -> int:
 
 
 def test_env_local_is_loaded_before_the_src_imports():
-    """Issue #41: db.py reads UG_SCHEMA and embeddings.py reads UG_EMBED_MODEL / UG_EMBED_DIM at import
+    """Issue #41: db.py reads UG_SCHEMA and embeddings.py reads UG_EMBED_MODEL at import
     time, so if app/web_server.py imports src before calling _load_env_local(), values that live only in
     .env.local are ignored by the web tier (app/agent.py already loads it first)."""
     assert _line_of("_load_env_local()") < _line_of("from src.")
