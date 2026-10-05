@@ -154,7 +154,8 @@ document can't talk to it directly. The one indirect route is the agent's previo
 agent just said, including the caller's first name from the greeting. Unity Gateway doesn't decide intent itself; the
 decision is app logic that calls a decision service.
 
-As of 2026-10-04 the voice-mode path is implemented and unit-tested but hasn't run live end to end. As shipped,
+As of 2026-10-05 the voice-mode path is unit-tested and has run live on a local instance (see the Plan 5 live-run notes
+in [gotchas](gotchas.md)), but not yet on a deployed app. As shipped,
 `app.yaml` leaves `UG_HALLOWEEN_VOICE_ID` unset, so Halloween mode speaks in the Deepgram fallback voice until it is
 set. The ElevenLabs voice also needs the `elevenlabs-api-key` secret resource attached to the app before deploying (its
 `valueFrom` only resolves once the resource exists) and outbound access to `api.elevenlabs.io`. The default engine
