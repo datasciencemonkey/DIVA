@@ -121,6 +121,15 @@ Re-verified against installed 1.8.3 (2026-10-02). C3–C13 + text-transform/PUA 
 - **New secrets aren't declared in `app.yaml` directly.** ✅ `valueFrom:` points at an **app resource key** bound to the
   `ug-voice-studio` scope out-of-band. Adding `ELEVEN_API_KEY` = create the secret in the scope + attach an app resource
   (`elevenlabs-api-key`) + add the `valueFrom` entry in `app.yaml`.
+- **A second app on the same LiveKit project needs its own `AGENT_NAME`.** ✅ Workers that register under one name are
+  candidates for the same dispatch (from LiveKit's explicit-dispatch model; not observed). The web tier and the worker
+  read the same `AGENT_NAME`, so set it to something unique in the deploy copy of `app.yaml`. `diva-v1` registered as
+  `diva-v1-agent` next to the older app's `ug-agent`, and its first call reached its own worker.
+- **The worker log shows a few sub-second "event loop blocked" warnings on a first call.** ✅ On 2026-10-05 a deployed
+  app logged five, 0.15 to 0.53 s each: the first import of `psycopg_pool` in the job entrypoint, pydantic building the
+  tool schemas on the first LLM turns (one of 0.53 s), and, after the call had ended, OpenTelemetry's `force_flush`
+  making a synchronous OTLP export in the shutdown callback. None broke the call. Candidates if it ever matters: import
+  `psycopg_pool` and build the tool schemas in `prewarm`, and run the flush in a thread.
 
 ## Plan 5 build findings (policy / expressive / profiles)
 
