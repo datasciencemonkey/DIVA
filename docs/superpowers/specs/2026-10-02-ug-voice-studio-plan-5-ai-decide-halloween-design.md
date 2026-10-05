@@ -3,7 +3,7 @@
 > **Update 2026-10-05 (#45):** the alternate `uaig_chat` engine described below (a Unity Gateway chat model standing in as the decider, with `UG_DECIDE_ENGINE`, `UG_DECIDE_MODEL` and `UG_DECIDE_REASONING_EFFORT`) was removed. AI Decide now uses only the Databricks `ai_decide` REST API. This spec is kept as the record of the original design.
 
 **Date:** 2026-10-02
-**Status:** Implemented — build/UI/deploy tasks complete and reviewed; code-complete on `plan-5-halloween-mode`. Owner-gated discovery (Task 1) and live validation (Task 13) remain.
+**Status:** Implemented. Merged to `main` in PR #25 (2026-10-04) and running on a Databricks App, where AI Decide switches the mode in both directions and the ElevenLabs voice speaks (2026-10-05). The ElevenLabs model and voice are pinned (`eleven_v3_conversational`, the voice chosen by ear), the Plan 6 bake-off found no shipped cue read aloud, and `tools/ai_decide_check.py` checks the live `ai_decide` function.
 **Branch / worktree:** `plan-5-halloween-mode` (from `plan-4-frontend` @ `da942cb`), worktree
 `../voice-agents-ug-demo-worktrees/plan-5-halloween-mode`.
 **Builds on:** master spec `2026-09-24-unity-gateway-voice-studio-design.md` (§6 lifecycle, §7 speech stack,
@@ -75,8 +75,8 @@ voice turn's budget. So two things are built in:
 - The decision engine sits behind a one-method interface with a second engine: a small UAIG-served chat
   model asked the same question. Configuration picks which one runs (§7.6).
 
-**Still to confirm with the owner (§13):** that "auto decide" means `ai_decide`. If it just meant
-"decide automatically", the design is unchanged and runs with `UG_DECIDE_ENGINE=uaig_chat`.
+**Settled (§13):** the owner confirmed on 2026-10-05 that "auto decide" means `ai_decide`, which is now the only
+decider.
 
 ## 3. Current voice architecture (as built on `plan-4-frontend` @ `da942cb`)
 
@@ -514,7 +514,8 @@ gateway in `src/services/uaig_chat.py`) and expects `{"intent", "confidence"}` b
   background call, not the turn); the turn waits at most `UG_DECIDE_CUE_WAIT_S` (0.8 s).
 - `UG_AI_DECIDE=0` turns the feature off: no calls are made and the mode stays standard.
 
-**Task 1 gates**, recorded in `docs/discovery/ai-decide-contract.md`:
+**Task 1 gates** (the live check is `tools/ai_decide_check.py` and what it found is in `docs/gotchas.md`; the contract
+file this spec first named was never written):
 
 - **Enabled:** HTTP 200 from the target workspace.
 - **Latency:** p50 / p95 over 30 calls per engine.
@@ -713,15 +714,14 @@ The master spec's eight invariants (§12) hold unchanged. New for Plan 5:
   - `.env.example`.
   - AI Decide enabled on the workspace (admin → Previews).
 - **Docs:**
-  - `docs/discovery/expressive-tts-contract.md` and `docs/discovery/ai-decide-contract.md` (Task 1).
+  - `docs/discovery/expressive-tags-contract.md` (the Plan 6 bake-off), `docs/gotchas.md` and `tools/ai_decide_check.py`
+    (what Task 1 set out to record).
   - The master spec's *Future extensions* points here.
   - `README.md`.
   - The skill bundle `skills/building-voice-agents-on-databricks/references/{agent-and-tools,deployment,observability}.md`
     gets the C7/C8 pitfalls, the AI Decide pattern, and the new secret.
-- **Merge note:** the original checkout has an unrelated, uncommitted `uv.lock` change on
-  `plan-4-frontend`. Plan 5 relocks inside its own worktree, so reconcile the two at merge time.
 
-## 12. Risks to verify in plan Task 1 (discovery)
+## 12. Risks
 
 - **R8 — ElevenLabs streaming at our 1.8.3 pin** (bumped from 1.5.6, which could not stream the tag-performing model).
   - Check: the installed plugin's constructor; which model ids stream (`eleven_v3` vs newer turbo
@@ -729,21 +729,27 @@ The master spec's eight invariants (§12) hold unchanged. New for Plan 5:
   - Gate: tags performed correctly in ≥ 9 of 10 scripted lines, median time to first audio ≤ 400 ms, and
     the owner approves the voice by ear.
   - If it fails: `UG_HALLOWEEN_TTS=openai`.
+  - Settled: `eleven_v3_conversational` streams and performs the tags, the voice was chosen by ear, and the Plan 6
+    bake-off found no shipped cue read aloud.
 - **R9 — AI Decide on the target workspace:** is it enabled, does the token's scope work, latency from
   the App's region, accuracy on the labeled set (gates in §7.6). Same checks for the `uaig_chat` engine,
-  including whether it accepts a reasoning-effort setting.
+  including whether it accepts a reasoning-effort setting. Settled: `ai_decide` is enabled on the workspace and
+  answers (`tools/ai_decide_check.py`), and the deployed app switches the mode in both directions. The `uaig_chat`
+  engine has since been removed (#45).
 - **R10 — Speculative head start:** measure the gap between the final transcript and end of turn on
   real calls.
-- **R11 — Network egress** from the Databricks App to `api.elevenlabs.io`.
+- **R11 — Network egress** from the Databricks App to `api.elevenlabs.io`. Settled: reachable from a deployed app with
+  no extra setup (2026-10-05).
 - **R12 — Span nesting:** does `ug.ai_decide` nest under LiveKit's user-turn span?
-- **R13 — Python 3.11 compile** of `agent-requirements` with the ElevenLabs plugin (and its `codecs` extra).
+- **R13 — Python 3.11 compile** of `agent-requirements` with the ElevenLabs plugin (and its `codecs` extra). Settled:
+  the 3.11 build installs and runs on a deployed app.
 - **R14 — AI Decide Beta drift:** the underlying model and its speed are expected to change; pin
-  `options.version = "1.0"`; the parser rejects unknown shapes; the engine switch is the way out.
+  `options.version = "1.0"`; the parser rejects unknown shapes; `UG_AI_DECIDE=0` is the way out.
 
-## 13. Open questions (defaults chosen, so nothing blocks)
+## 13. Questions and the defaults chosen
 
-- **Does "auto decide" mean Databricks AI Decide (`ai_decide`)?** Default: **yes**. If not, set
-  `UG_DECIDE_ENGINE=uaig_chat`; the architecture is the same.
+- **Does "auto decide" mean Databricks AI Decide (`ai_decide`)?** **Yes**, as the owner confirmed on 2026-10-05, so the
+  `ai_decide` REST API is the only decider (the `uaig_chat` alternative was removed in #45).
 - **Expressive cues in standard mode?** Default: **no** — v1 limits them to Halloween, so the standard
   voice is untouched.
 - **Seasonal gating (October only)?** Default: **none** — available year-round on request.

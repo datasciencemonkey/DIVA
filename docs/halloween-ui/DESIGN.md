@@ -1,6 +1,6 @@
 # Halloween UI — Full-Theme Design
 
-**Status:** design spec (build from this; do not treat as final CSS).
+**Status:** design spec for the shipped theme. The CSS in `app/web/public/studio.css` is the source of truth.
 **Scope:** escalate the restrained `data-voice-mode="halloween"` accent into a cohesive, tasteful,
 full-studio seasonal skin that reverts perfectly to the normal studio on exit.
 **Codename:** *All Hallows' Console* — mission control at midnight on Halloween. Crafted, not cartoon.

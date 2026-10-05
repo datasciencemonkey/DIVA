@@ -5,7 +5,7 @@ the Voice Studio. **Append a new entry whenever a design review, verification pa
 check turns up something that would surprise the next engineer.** Keep each entry to: the trap →
 the consequence → what to do, with a source anchor.
 
-Legend: ✅ verified against installed source/repo this session · 📄 from vendor docs · ⚠️ unverified / to confirm.
+Legend: ✅ verified against installed source/repo this session · 📄 from vendor docs.
 
 ---
 
@@ -43,9 +43,9 @@ Legend: ✅ verified against installed source/repo this session · 📄 from ven
   has no `eleven_v4*` routing; v4 would need 1.8.4+, unavailable here). `UG_HALLOWEEN_TTS_MODEL` default = `eleven_v3_conversational`.
 - **The bump forced extra pins:** `livekit` 1.1.5→1.1.18, `livekit-api` 1.1.0→1.2.1 (hard deps of agents 1.8.3). Re-bumping the livekit
   stack later is a ~7-pin edit.
-- **`openai` SDK was downgraded 3.14→2.54** (livekit-agents 1.8.3 requires `openai<3`). The repo doesn't import `openai` directly and the
-  suite is green, but the live UAIG Responses path hasn't run on 2.x — **verify against the live gateway at the live step.**
-- **C1–C13 anchors now sit on 1.8.3 source** — the 1.5.6 line numbers in spec §4 are stale; re-verification against 1.8.3 is in progress.
+- **`openai` SDK was downgraded 3.14→2.54** (livekit-agents 1.8.3 requires `openai<3`). The gateway's Responses path runs on
+  2.x, on local calls and on a deployed app.
+- **C1–C13 anchors now sit on 1.8.3 source** — the 1.5.6 line numbers in spec §4 are stale; the re-verification against 1.8.3 is in the next section.
 
 ### Original 1.5.6 limitation (kept as the "why")
 
@@ -55,13 +55,13 @@ Legend: ✅ verified against installed source/repo this session · 📄 from ven
   (v3/v3_conversational, ~280 ms TTFA) and **1.8.4** (v4/v4_turbo, ~100 ms). At 1.5.6 you can only *stream* Flash/turbo
   (no tags), or run `eleven_v3` over **HTTP `/stream` per-sentence** (~0.7–1.9 s TTFA — **fails** the ≤400 ms R8 gate).
   ⇒ **Streamed inline tags require bumping agents+plugins to ≥1.7.1 / 1.8.4, which forces re-verifying the C1–C13 1.5.6
-  source anchors.** (Decision pending 2026-10-02.)
+  source anchors.** (Done the same day: the stack is on 1.8.3, above.)
 - **Missing `ELEVEN_API_KEY` raises `ValueError` at construction** — check the env before constructing, don't rely on a lazy failure.
 - **`prewarm()` is a no-op on the ElevenLabs plugin** — the spec's "cue-time prewarm" has no effect; the WebSocket opens lazily on first `.stream()`.
 - **A profile-owned TTS is not wired to the session.** The session subscribes `error`/`metrics_collected` and calls `prewarm()`
   only on its *own* `activity.tts`. For a profile-owned TTS: subscribe to its `error`/`metrics` yourself, build the
   `StreamAdapter` once, and `aclose()` it at shutdown (`StreamAdapter.aclose()` does NOT close the wrapped TTS).
-- **Two `SPOOKY_TAGS` are undocumented** (`nervously`, `inhales deeply`); ElevenLabs documents `[whispers]`/`[laughs]`/`[sighs]`/`[exhales]`/`[mischievously]`, and v3 sometimes *speaks* a tag aloud — test each tag per voice/model (Task 1).
+- **Two `SPOOKY_TAGS` are undocumented** (`nervously`, `inhales deeply`); ElevenLabs documents `[whispers]`/`[laughs]`/`[sighs]`/`[exhales]`/`[mischievously]`, and v3 sometimes *speaks* a tag aloud. Plan 6 tested both with the configured voice and model: both were performed and neither was read aloud (`docs/discovery/expressive-tags-contract.md`).
 - **Low R13 risk:** the plugin adds no new transitive deps beyond numpy (`av` is already a core dep).
 
 ## LiveKit 1.8.3 re-verification (supersedes the stale 1.5.6 §4 anchors)
@@ -72,7 +72,7 @@ Re-verified against installed 1.8.3 (2026-10-02). C3–C13 + text-transform/PUA 
 - **`eleven_v3_conversational` (a "dialogue" model) honors only `stability`** among voice settings — `similarity_boost`/`style`/`speed` are dropped (plugin warns), as are `chunk_length_schedule`/`streaming_latency`/`enable_ssml_parsing`. ⇒ Task 5 `build_tts` sets only `stability` (= `UG_HALLOWEEN_STABILITY`). Routing: `is_dialogue_model(m) = m.startswith("eleven_v3")` → text-to-dialogue WS (tags performed + streamed). No `eleven_v4*` exists at 1.8.3.
 - **C1 OBSOLETE:** `Agent.update_options(tts=...)` now EXISTS (live per-agent TTS swap via `_update_models`). Our `tts_node` override stays the approach (per-utterance profile routing, no agent mutation); session-level `tts` is still getter-only.
 - **C2 OBSOLETE:** Deepgram `update_options` now takes model/encoding/sample_rate/bit_rate AND invalidates the pooled WS — an in-place model change now takes effect.
-- **§7.8 tag filter integration:** TTS-branch filtering is now a configurable `text_transforms` list (applied in `generation.py`) and plain callables are accepted — the encode/decode transforms plug in there. **Confirm the exact `AgentSession` kwarg name (`tts_text_transforms` vs `text_transforms`) when wiring Task 10.** Transcript stripping still needs `transcription_node`.
+- **§7.8 tag filter integration:** TTS-branch filtering is now a configurable `text_transforms` list (applied in `generation.py`) and plain callables are accepted — the encode/decode transforms plug in there. The `AgentSession` kwarg is `tts_text_transforms` (`app/agent.py`). Transcript stripping still needs `transcription_node`.
 - **C6:** `preemptive_generation=` is deprecated → set via `turn_handling=TurnHandlingOptions(...)`; default behavior unchanged (ON).
 - **C3 nuance:** `on_user_turn_completed` exceptions are now caught (raise → drop turn + log, no session crash); "never raise / time-box" is still good practice but soft now.
 - **The job's root span opens before the entrypoint, so the tracer provider must already exist (issue #35).** ✅ 1.8.3 starts the `job_entrypoint` span before our entrypoint runs. A provider installed inside the entrypoint never saw that span, so MLflow, which lists only traces that have a root, showed nothing. The provider is now installed once per worker process in `_setup_process` (`app/agent.py`), with per-trace enrichment and a root-span flush in `app/tracing.py`. The unit tests cover the enrichment and flush logic, and the owner confirmed on a live call (2026-10-05) that traces now appear in MLflow with their root span. Tracing stays off unless `DATABRICKS_TRACE_CATALOG`, `_SCHEMA` and `_TABLE_PREFIX` are all set.
@@ -92,37 +92,36 @@ Re-verified against installed 1.8.3 (2026-10-02). C3–C13 + text-transform/PUA 
   Supported AWS regions include us-east-1/-2 and us-west-2 (our workspace is us-east-1). `options.version:"1.0"` pins the
   **function API**, not the model — the served model can change and probability calibration can drift without a version
   bump, so re-check thresholds after any change.
-- **No official `ai_decide` latency or pricing.** 📄⚠️ The 0.8–2 s figure circulating is measured on TypeSafe's *Jev*,
-  not Databricks-hosted `ai_decide`. Keep a p50/p95 measurement gate in discovery; neither pricing page lists `ai_decide` yet.
+- **No official `ai_decide` latency or pricing.** 📄 The 0.8–2 s figure circulating is measured on TypeSafe's *Jev*,
+  not Databricks-hosted `ai_decide`, and as of 2026-10-02 neither pricing page listed `ai_decide`. Measured on our
+  workspace: 500 to 720 ms across the four calls of one `tools/ai_decide_check.py` run, and 583 ms for one turn on a deployed app.
 - **Claude models on the gateway reject `response_format: json_object`** (they accept `json_schema` only). 📄 Keep the
-  world generator (`UG_GEN_MODEL`, which asks for JSON) on a GPT-family model. Also: `/ai-gateway/openai/v1/chat/completions` with bare
-  `databricks-gpt-*` names is used in-repo but only `/responses` + `/embeddings` were formally verified in discovery —
-  live-test chat-completions or use `/ai-gateway/mlflow/v1`.
+  world generator (`UG_GEN_MODEL`, which asks for JSON) on a GPT-family model. The generator calls
+  `/ai-gateway/openai/v1/chat/completions` (`src/services/uaig_chat.py`), the voice LLM `/responses` and retrieval
+  `/embeddings`; all three work against the gateway, and the generator has produced the worlds in use.
 
 ## Repo (voice-agents-ug-demo)
 
 - **`src/services/gateway.post()` is sync-only** (blocking `requests`). ✅ Don't call it (or `uaig_chat.complete_json`)
   from the async turn hook — it blocks the event loop. The decider must use its own `httpx.AsyncClient` (httpx is already pinned).
-- **`_SPAN_TYPES` (`app/tracing.py:25`) has no `CHAIN` entry, and the exporter JSON-encodes the value.** ✅ To tag the
-  `ug.ai_decide` span `mlflow.spanType="CHAIN"`, add a `"ug.ai_decide": "CHAIN"` entry to the map — don't set a bare raw string.
-- **The evidence router dispatches on fragment keys, not a type discriminator.** ✅ `handleEvidence` (`studio.js:944-953`)
-  checks `obj.bind` / `obj.retrieval` / `obj.usage`. A new `voice_mode` payload needs its own `if (obj.voice_mode) applyVoiceMode(...)` branch.
-- **The transcript renders `seg.text` verbatim with no stripping today.** ✅ `handleTranscription` (`studio.js:1077-1105`)
-  sets `textContent = seg.text` directly — add client-side tag stripping there as the belt-and-braces layer.
+- **`_SPAN_TYPES` (`app/tracing.py`) maps a span name to its MLflow span type, and the exporter JSON-encodes the value.** ✅ To
+  tag a span, add an entry to the map (`"ug.ai_decide": "CHAIN"` is there) — don't set a bare raw string.
+- **The evidence router dispatches on fragment keys, not a type discriminator.** ✅ `handleEvidence` (`studio.js`) checks
+  `obj.bind` / `obj.retrieval` / `obj.usage` / `obj.voice_mode`. A new kind of payload needs its own `if (obj.…)` branch.
+- **The transcript is stripped of expressive tags on the client too.** ✅ `handleTranscription` (`studio.js`) renders
+  `stripExpressiveTags(seg.text)`, the belt-and-braces layer behind the server-side filter.
 
 ## Worktrees & deploy
 
 - **Apps runtime is Python 3.11; local `.venv` is 3.12.** Recompile `agent-requirements.txt` for **3.11** (including the
   ElevenLabs plugin + its `codecs` extra) or the deploy build breaks.
-- **`uv.lock` diverges across worktrees.** The main checkout has an uncommitted `uv.lock` change on `plan-4-frontend`;
-  Plan 5 relocks in its own worktree — reconcile at merge.
 - **The git stash stack is shared across all worktrees.** Never use bare `git stash` / `git stash pop` (you could pop
   another session's work) — prefer a WIP commit, or `git stash push -u -m "<unique-tag>"` then `apply <sha>`.
 - **New secrets aren't declared in `app.yaml` directly.** ✅ `valueFrom:` points at an **app resource key** bound to the
   `ug-voice-studio` scope out-of-band. Adding `ELEVEN_API_KEY` = create the secret in the scope + attach an app resource
   (`elevenlabs-api-key`) + add the `valueFrom` entry in `app.yaml`.
 - **A second app on the same LiveKit project needs its own `AGENT_NAME`.** ✅ Workers that register under one name are
-  candidates for the same dispatch (from LiveKit's explicit-dispatch model; not observed). The web tier and the worker
+  candidates for the same dispatch (LiveKit's explicit-dispatch model; we never ran two under one name, since each app got its own). The web tier and the worker
   read the same `AGENT_NAME`, so set it to something unique in the deploy copy of `app.yaml`. `diva-v1` registered as
   `diva-v1-agent` next to the older app's `ug-agent`, and its first call reached its own worker.
 - **The worker log shows a few sub-second "event loop blocked" warnings on a first call.** ✅ On 2026-10-05 a deployed
@@ -137,7 +136,7 @@ Re-verified against installed 1.8.3 (2026-10-02). C3–C13 + text-transform/PUA 
 - **Expressive pipeline — G13 residual shapes** (reach the TTS as text; low-likelihood, prompt-forbidden): nested `[a [b]]`, a newline inside brackets, a closed group ≥119 inner chars, and an allowed tag glued to a parenthetical `[sighs](softly)` (parsed as a markdown link → "sighs" spoken). By design, any closed non-link `[...]` of 33–118 chars is DROPPED from audio AND transcript even in standard mode (a legit aside like `[Note: closes at 5 PM]` is lost — fine for a voice assistant). Task 11's client strip must match: closed `[...]` ≤120, not followed by `(`.
 - **ElevenLabs `VoiceSettings` requires `similarity_boost`.** `VoiceSettings(stability=…)` alone raises `TypeError`. Pass `similarity_boost=NOT_GIVEN` (the plugin drops it → only `stability` is sent, no "ignored option" warning). For `eleven_v3*` dialogue models `stability` is the ONLY effective setting (style/speed/similarity are ignored + warned).
 - **Expressive tags are gated on the MODEL, not just the vendor.** Only `eleven_v3*` models perform inline audio tags; flash/turbo/multilingual speak `[laughs]` literally. The halloween profile attaches `SPOOKY_TAGS` only when the model starts with `eleven_v3` (mirrors the plugin's `DIALOGUE_TTS_MODEL_PREFIX`). If Task 1 pins a turbo model for latency, tags are automatically off (dark voice, no inline cues) — fail-closed for G13.
-- **Missing `UG_HALLOWEEN_VOICE_ID` → Deepgram fallback** (NOT ElevenLabs' stock voice). So `{ELEVEN_API_KEY set, no voice_id}` → the Halloween profile is the Deepgram dark voice. Task 12 must add `UG_HALLOWEEN_VOICE_ID` to `app.yaml` + `.env.example`; Task 13 must set it.
+- **Missing `UG_HALLOWEEN_VOICE_ID` → Deepgram fallback** (NOT ElevenLabs' stock voice). So `{ELEVEN_API_KEY set, no voice_id}` → the Halloween profile is the Deepgram dark voice. `.env.example` lists `UG_HALLOWEEN_VOICE_ID` and `app.yaml` carries it as a commented placeholder; set it in your own deploy copy.
 - **`build_tts` can raise** `ValueError` (missing voice id / plugin key check) or `ImportError` (plugin absent) → Task 8/10 wrap it and degrade. The ElevenLabs plugin calls `Plugin.register_plugin` on first import, which raises off the main thread — so import it at the TOP of `app/agent.py` (the entrypoint runs on the subprocess main thread), not lazily inside a worker thread.
 
 ## Plan 5 live-run + reskin findings (2026-10-04)

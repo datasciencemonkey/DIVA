@@ -36,9 +36,8 @@ On a deployed app, four things live outside the repo, so the repo can only refer
    deploying, since `valueFrom` only resolves once the resource exists.
 3. **Pick a voice and set `UG_HALLOWEEN_VOICE_ID`** (a commented placeholder in `app.yaml`). Until it is set,
    Halloween mode uses the Deepgram fallback voice.
-4. **Confirm the app can reach `api.elevenlabs.io`.** It could from the first deployed app we tried (2026-10-05, no
-   fallback in the logs). A workspace with egress controls may block it, and the call then carries on in the Deepgram
-   fallback voice.
+4. **Let the app reach `api.elevenlabs.io`.** It needed no setup on the workspace we deployed to. If yours restricts
+   outbound access, allow that host; otherwise the call carries on in the Deepgram fallback voice.
 
 ## The cues
 
@@ -87,9 +86,9 @@ uv run python tools/expressive_llm_check.py --dry-run      # what the LLM check 
   `--tiers Standard,Premium,VIP` picks the tiers (default all three), and `--json PATH` saves every reply with its
   metrics (keep the file outside the repo). Exit codes: `0` every tier passes, `1` a target was missed, `2`
   configuration or budget (missing `.env.local` values, an unknown tier, too many calls), `3` a gateway request failed.
-- **Small samples.** The last full run used 2 samples per utterance, and the laughter rule was spot-checked only (three
-  stories per tier). Read the results as encouraging, not proof, and re-run after any change to the prompt, a tier
-  model, the palette or the voice. The figures are in
+- **Sample size.** The last full run used 2 samples per utterance, and the laughter rule was spot-checked on three
+  stories per tier. Read the results as encouraging, not proof, and re-run the check after any change to the prompt, a
+  tier model, the palette or the voice. The figures are in
   [the contract](discovery/expressive-tags-contract.md#llm-compliance-results).
 
 Then listen once. Run the studio locally (see the [Quickstart](../README.md#quickstart-local)), start a call, say
