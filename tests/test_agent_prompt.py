@@ -167,16 +167,30 @@ def test_rules_keep_facts_and_brackets_clean():
 def test_the_worked_examples_use_only_cues_the_voice_has():
     vocab = set(flatten())
     out = _cues()
-    lines = [l for l in out.splitlines() if l.startswith(("Example of the delivery", "Example of a story beat"))]
+    lines = [l for l in out.splitlines() if l.startswith(("Example of a short answer", "Example of a story beat"))]
     assert len(lines) == 2
     used = {c for l in lines for c in re.findall(r"\[([^\]]+)\]", l)}
     assert used and used <= vocab
 
 
+def test_worked_examples_obey_the_rules_they_teach():
+    # Models follow examples over rules, so each example must itself keep the density and placement rules above it.
+    lines = [line for line in _cues().splitlines() if line.startswith("Example of")]
+    assert len(lines) == 2
+    for line in lines:
+        body = line.split(": ", 1)[1]
+        assert not re.search(r"\]\s*\[", body), f"two cues in a row: {line}"
+        for sentence in re.split(r"(?<=[.!?])\s+", body):
+            assert len(re.findall(r"\[[^\]]+\]", sentence)) <= 1, f"two cues in one sentence: {sentence}"
+    short = next(line for line in lines if line.startswith("Example of a short answer"))
+    assert len(re.findall(r"\[[^\]]+\]", short)) <= 2, f"a short answer needs just one or two cues: {short}"
+    assert "shipped on Tuesday" in short and "by Friday" in short, f"a cue splits a fact: {short}"
+
+
 def test_examples_borrow_cues_when_a_category_is_missing_but_never_leave_the_vocabulary():
     three = flatten()[:3]                      # typically all one category: the other slots must borrow
     lines = [l for l in _cues(three).splitlines()
-             if l.startswith(("Example of the delivery", "Example of a story beat"))]
+             if l.startswith(("Example of a short answer", "Example of a story beat"))]
     assert len(lines) == 2
     assert {c for l in lines for c in re.findall(r"\[([^\]]+)\]", l)} <= set(three)
 

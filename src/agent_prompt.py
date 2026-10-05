@@ -130,11 +130,10 @@ def _examples(available: frozenset[str], groups: list[tuple[str, tuple[str, ...]
         picks.append(tag)
     soft, attitude, tension = picks
     return [
-        "Example of the delivery (do not copy the words): "
-        f"[{soft}] Your order shipped on Tuesday. [{attitude}] It should reach you by Friday… "
-        f"[{tension}] and not a moment sooner.",
+        "Example of a short answer (do not copy the words): "
+        f"[{soft}] Your order shipped on Tuesday. [{attitude}] It should reach you by Friday.",
         "Example of a story beat (do not copy the words): "
-        f"[{tension}] The door creaked open… [{soft}] and nobody was there. [{attitude}] Nobody ever is.",
+        f"[{tension}] The door creaked open… and nobody was there. [{soft}] Nobody ever is.",
     ]
 
 
