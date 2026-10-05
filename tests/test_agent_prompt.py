@@ -257,3 +257,42 @@ def test_the_story_example_cues_each_beat_with_cues_from_different_groups():
     cues = re.findall(r"\[([^\]]+)\]", story)
     category = {tag: name for name, members in PALETTE.items() for tag in members}
     assert len(cues) >= 3 and len({category[c] for c in cues}) >= 3
+
+
+# --- Plan 6: laughter and noises only as cues, and only for the Halloween voice ---
+
+def test_laughter_and_noises_are_asked_for_as_cues_never_as_written_words():
+    out = _cues()
+    assert "ONLY with a cue from the Breath and sounds list" in out
+    assert '"ha ha"' in out and "*laughs*" in out              # the spellings it must not write: TTS would read them out
+    assert "Every story MUST include sounds" in out
+
+
+def test_the_sound_rule_exists_only_where_there_are_sound_cues_to_point_at():
+    no_sounds = tuple(t for t in flatten() if t not in PALETTE["breath"])
+    assert "Breath and sounds list" not in _cues(no_sounds)
+    for persona in (None, HALLOWEEN_PERSONA):                   # standard / fallback: no tags, so no cue section at all
+        out = build_instructions("Support.", _D_NEUTRAL, persona=persona, expressive_tags=())
+        assert "ONLY with a cue" not in out and "ha ha" not in out
+
+
+def test_the_sound_rule_names_exact_cues_the_voice_has_and_says_where_they_go():
+    # gpt-5-nano wrote [gasp] for [gasps] and left sounds out of 3 stories in 4; the rule names exact cues, one per place.
+    lines = _cues().splitlines()
+    placing = next(l for l in lines if l.startswith("- Make laughs"))
+    assert "right before the sentence it belongs with" in placing and "never alone at the end of a line" in placing
+    story = next(l for l in lines if l.startswith("- Every story MUST include sounds"))
+    named = re.findall(r"\[([^\]]+)\]", story)
+    assert "one at the scare" in story and "one on the last line" in story
+    assert len(named) >= 2 and set(named) <= set(PALETTE["breath"])
+    few = ("deep breaths", "whispers", "building tension")          # one sound cue and no laugh among them
+    story = next(l for l in _cues(few).splitlines() if l.startswith("- Every story MUST include sounds"))
+    assert re.findall(r"\[([^\]]+)\]", story) == ["deep breaths"] and "for example" in story
+
+
+def test_the_story_example_uses_a_sound_and_ends_on_a_laugh():
+    story = next(l for l in _cues().splitlines() if l.startswith("Example of a story beat"))
+    cues = re.findall(r"\[([^\]]+)\]", story)
+    laughs = {t for t in PALETTE["breath"] if re.search(r"laugh|chuckle|giggle", t)}
+    assert cues[-1] in laughs
+    assert sum(1 for c in cues if c in PALETTE["breath"]) >= 2      # a gasp or sigh for the scare, then the laugh

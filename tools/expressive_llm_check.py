@@ -3,8 +3,9 @@
 Builds the exact Halloween instructions the agent sends (persona + cue rules + governance, via
 `build_instructions`), runs scripted caller utterances against each tier's model through the Unity Gateway
 Responses API (the endpoint the agent uses; Databricks-served models only), and reports per model: cues per 100 words, distinct cues, allowlist
-compliance (before and after case/spacing are forgiven), stage directions, stacked cues, facts kept verbatim, cues
-that split a fact, the median reply length, and the prompt's token overhead. A lookup result reaches the model as a
+compliance (before and after case/spacing are forgiven), stage directions, stacked cues, sound cues (laugh, gasp,
+sigh, breath) in the stories, laughter spelled out as words instead of a cue, facts kept verbatim, cues that split a
+fact, the median reply length, and the prompt's token overhead. A lookup result reaches the model as a
 recorded tool call and its output, the way the agent's tools deliver it. Exit code 1 if any model misses a target.
 
 Credentials come from the gitignored .env.local and are never printed. A failed request prints only the exception's
@@ -32,16 +33,28 @@ if str(REPO_ROOT) not in sys.path:
 
 from app.expressive import SPOOKY_TAGS, canonical_tag, strip_tags  # noqa: E402
 from src.agent_prompt import HALLOWEEN_PERSONA, build_instructions  # noqa: E402
+from src.expressive_palette import PALETTE  # noqa: E402
 from src.policy.routing import route_for  # noqa: E402
 
 TIERS = ("Standard", "Premium", "VIP")
 DEFAULT_MAX_CALLS = 100
 MAX_TAG_NAME = 32
 STORY_MIN_WORDS = 25          # a shorter reply to "tell me a story" is a refusal, which measures nothing
+STORY_SOUND_SHARE = 0.75      # at least this share of the story replies must carry a laugh, gasp, sigh or breath cue
+BREATH = frozenset(PALETTE["breath"])    # the "breath and sounds" group: laughter, gasps, sighs, breathing
 DATASET_PROMPT = ("You are the voice assistant for Northwind Outfitters, an outdoor-gear retailer. Answer only "
                   "from your tools. Keep replies to short, friendly spoken sentences.")
 
 _CUE = re.compile(r"\[([^\[\]\n]{0,118})\](?!\()")
+
+# Laughter spelled out as words. The TTS would read these aloud instead of laughing, so a laugh must be a cue.
+_WRITTEN_LAUGH = re.compile(
+    r"\b(?:ha){2,}h?\b"                 # haha, hahaha
+    r"|\bha(?:[\s,.!-]+ha)+\b"          # ha ha, ha, ha, ha-ha
+    r"|\b(?:he){2,}\b"                  # hehe
+    r"|\b(?:mu|mw|bw)a(?:ha)+h?\b"      # muahaha, mwahaha, bwahaha
+    r"|\*[^*\n]{2,30}\*",               # *laughs*, *sighs*
+    re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -81,6 +94,8 @@ class ReplyMetrics:
     facts_verbatim: bool
     cues_inside_facts: int        # facts that only survive once the cues are removed: a cue split them
     stacked: int                  # a cue immediately followed by another
+    sounds: int                   # cues from the breath-and-sounds group (laughs, gasps, sighs, breaths)
+    written_laughs: int           # laughter spelled out as words ("ha ha", "hehe", "*laughs*"): the TTS would read it aloud
 
     @property
     def per_100(self) -> float:
@@ -101,6 +116,8 @@ def measure(reply: str, vocabulary: frozenset[str], facts: tuple[str, ...] = ())
         facts_verbatim=all(f.lower() in plain for f in facts),
         cues_inside_facts=sum(1 for f in facts if f.lower() in plain and f.lower() not in low_reply),
         stacked=len(re.findall(r"\]\s*\[", reply)),
+        sounds=sum(1 for n in names if n in vocabulary and n in BREATH),
+        written_laughs=len(_WRITTEN_LAUGH.findall(plain)),
     )
 
 
@@ -111,6 +128,7 @@ class Targets:
     factual_min_cues: int = 1           # every factual reply
     compliance: float = 0.95            # share of cues that are vocabulary members once canonicalised
     story_min_words: int = 0            # a story reply shorter than this is a refusal, not a story (0: not checked)
+    story_sound_share: float = 0.0      # share of story replies that must carry a laugh, gasp, sigh or breath cue (0: not checked)
 
 
 def evaluate(rows: list[tuple[Scenario, ReplyMetrics]], targets: Targets = Targets()) -> list[str]:
@@ -122,6 +140,11 @@ def evaluate(rows: list[tuple[Scenario, ReplyMetrics]], targets: Targets = Targe
     short_stories = sum(1 for s, m in rows if s.kind == "story" and m.words < targets.story_min_words)
     if short_stories:
         problems.append(f"{short_stories} story replies under {targets.story_min_words} words (a refusal is not a story)")
+    stories = [m for s, m in rows if s.kind == "story"]
+    if targets.story_sound_share and stories:
+        with_sound = sum(1 for m in stories if m.sounds)
+        if with_sound / len(stories) < targets.story_sound_share:
+            problems.append(f"only {with_sound}/{len(stories)} story replies have a sound cue (laugh, gasp, sigh, breath)")
     distinct = set().union(*(m.distinct for _, m in rows)) if rows else set()
     if len(distinct) < targets.distinct_cues:
         problems.append(f"only {len(distinct)} distinct cues (< {targets.distinct_cues})")
@@ -134,6 +157,7 @@ def evaluate(rows: list[tuple[Scenario, ReplyMetrics]], targets: Targets = Targe
     for label, count in (("cues inside a fact", sum(m.cues_inside_facts for _, m in rows)),
                          ("stage directions", sum(m.directions for _, m in rows)),
                          ("stacked cues", sum(m.stacked for _, m in rows)),
+                         ("laughs written out as words", sum(m.written_laughs for _, m in rows)),
                          ("replies missing a fact", sum(1 for _, m in rows if not m.facts_verbatim))):
         if count:
             problems.append(f"{count} {label}")
@@ -234,7 +258,7 @@ def main(argv=None) -> int:
                     replies.append((scenario.key, reply, rows[-1][1]))
                     if scenario.key == "story" and not first_story:
                         first_story = reply
-            problems = evaluate(rows, Targets(story_min_words=STORY_MIN_WORDS))
+            problems = evaluate(rows, Targets(story_min_words=STORY_MIN_WORDS, story_sound_share=STORY_SOUND_SHARE))
             failed |= bool(problems)
             story = [m.per_100 for s, m in rows if s.kind == "story"]
             factual = [m.per_100 for s, m in rows if s.kind == "factual"]
@@ -246,6 +270,10 @@ def main(argv=None) -> int:
             print(f"- distinct cues: {len(set().union(*(m.distinct for _, m in rows)))}   "
                   f"compliance: {sum(m.canonical for _, m in rows) / total:.0%} "
                   f"(exact spelling {sum(m.exact for _, m in rows) / total:.0%})")
+            stories = [m for s, m in rows if s.kind == "story"]
+            print(f"- sound cues (laugh, gasp, sigh, breath): {sum(m.sounds for _, m in rows)} of {total} cues   "
+                  f"story replies with one: {sum(1 for m in stories if m.sounds)}/{len(stories)}   "
+                  f"laughs written out as words: {sum(m.written_laughs for _, m in rows)}")
             print(f"- stage directions: {sum(m.directions for _, m in rows)}   stacked: {sum(m.stacked for _, m in rows)}   "
                   f"cues inside facts: {sum(m.cues_inside_facts for _, m in rows)}   "
                   f"replies missing a fact: {sum(1 for _, m in rows if not m.facts_verbatim)}")

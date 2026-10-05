@@ -100,27 +100,60 @@ _CUE_INTRO = (
     "the way a storyteller uses breath, hush, laughter and timing."
 )
 
-_CUE_RULES = (
+_CUE_RULES_START = (
     "Rules for cues:\n"
     "- Use only cues from the lists above, written EXACTLY as listed (lowercase, square brackets included). If no "
     "listed cue fits, write no cue. Use no other bracketed text, and never put words you want spoken inside "
     "brackets.\n"
     "- Open every reply with a cue. In a story, cue almost every sentence: at most one per sentence, never two in a "
     "row, and vary them. A short factual answer needs just one or two cues in all.\n"
+)
+
+# Laughter and noises are performed from a cue. A written "ha ha" would be read out as words, so the model is told to
+# use the cue instead. Added only when the voice has sound cues: the whole cue section exists only for the Halloween voice.
+_SOUND_RULE = (
+    "- Make laughs, gasps, sighs, breaths and other noises ONLY with a cue from the {label} list, never by writing "
+    '"ha ha", "hehe", "ahh" or *laughs* in your words. Spell the cue exactly as listed and put it right before the '
+    "sentence it belongs with, never alone at the end of a line.\n"
+    "- Every story MUST include sounds: at least two of its cues come from the {label} list, {where}.\n"
+)
+# Sounds the rule names, in order, when the voice has them: one for the scare, one for the punchline. The smaller tier
+# model ignored a soft "work in a sound" (1 story in 4 had one), so stories get a firm, concrete requirement.
+_SCARE_SOUNDS = ("gasps", "sighs", "deep breaths")
+_LAUGH_SOUNDS = ("laughs", "chuckles", "giggles")
+
+
+def _sound_rule(breath: tuple[str, ...]) -> str:
+    """The sound rule for a voice whose breath-and-sound cues are `breath`; names only cues the voice has."""
+    scare = [t for t in _SCARE_SOUNDS if t in breath][:2]
+    laugh = [t for t in _LAUGH_SOUNDS if t in breath][:2]
+
+    def named(tags) -> str:
+        return " or ".join(f"[{t}]" for t in tags)
+
+    where = (f"one at the scare ({named(scare)}) and one on the last line ({named(laugh)})" if scare and laugh
+             else f"for example {named(breath[:3])}")
+    return _SOUND_RULE.format(label=GROUP_HINTS["breath"].split(" (")[0], where=where)
+
+_CUE_RULES_END = (
     "- A cue goes right before the words it colors and colors only the next few words, so cue each new beat again; "
     "nothing carries over. Never end a sentence or a line with a cue.\n"
     "- Never put a cue inside a number, date, name, or any other fact. Say the fact plainly, then cue the next line.\n"
     "- To build suspense, use short sentences, a cue, a pause (…), then the reveal."
 )
 
+_CUE_RULES = _CUE_RULES_START + _CUE_RULES_END       # the rules for a voice with no sound cues
+
 # The worked examples teach only cues the voice really has. Each slot takes the first cue, in this order, that is not
 # already used: a preferred cue the voice performs, else a cue of the slot's group, else any cue it has. With fewer
-# than three cues there is no example; the fourth slot (a breath or sound) is left out when no cue is left for it.
+# than three cues there is no example; the fourth slot (a sound for the scare) and the fifth (a laugh for the
+# punchline) are left out when no cue is left for them.
 _EXAMPLE_SLOTS = (
     ("volume", ("whispers", "whisper", "soft")),
     ("emotion", ("mischievously", "menacing", "sinister", "dismissive")),
     ("pacing", ("building tension", "pause", "slowly")),
-    ("breath", ("sighs", "exhales", "gasps")),
+    ("breath", ("gasps", "sighs", "exhales")),
+    ("breath", ("laughs", "chuckles", "giggles")),
 )
 _REQUIRED_SLOTS = 3
 
@@ -135,11 +168,11 @@ def _examples(available: frozenset[str], groups: list[tuple[str, tuple[str, ...]
         if tag is None and len(picks) < _REQUIRED_SLOTS:
             return []
         picks.append(tag)
-    soft, attitude, tension, breath = picks
+    soft, attitude, tension, breath, laugh = picks
     story = f"[{tension}] The door creaked open… and nobody was there. [{soft}] Nobody ever is."
     if breath:
         story += f" [{breath}] The candle shivered, and the hallway grew cold."
-    story += f" [{attitude}] Then a small ghost asked to borrow your coat."
+    story += f" [{laugh or attitude}] Then a small ghost asked to borrow your coat."
     return [
         "Example of a short answer (do not copy the words): "
         f"[{soft}] Your order shipped on Tuesday. [{attitude}] It should reach you by Friday.",
@@ -155,7 +188,9 @@ def _cue_rules(tags: tuple[str, ...]) -> str:
     for category, members in groups:
         hint = OTHER_HINT if category == OTHER else GROUP_HINTS[category]
         lines.append(f"{hint}: " + " ".join(f"[{t}]" for t in members))
-    lines.append(_CUE_RULES)
+    breath = next((members for category, members in groups if category == "breath"), ())
+    sound_rule = _sound_rule(breath) if breath else ""      # it points at the sound list, so it needs sound cues
+    lines.append(_CUE_RULES_START + sound_rule + _CUE_RULES_END)
     lines.extend(_examples(frozenset(tags), groups))
     return "\n".join(lines)
 

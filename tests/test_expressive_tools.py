@@ -116,3 +116,36 @@ def test_evaluate_flags_a_story_reply_that_is_a_refusal_once_a_minimum_is_set():
     assert chk.evaluate(rows, chk.Targets(distinct_cues=1)) == []                       # no minimum unless asked for
     problems = chk.evaluate(rows, chk.Targets(distinct_cues=1, story_min_words=40))
     assert any("story" in p and "40 words" in p for p in problems), problems
+
+
+SOUNDS = VOCAB | {"laughs", "gasps"}
+
+
+def test_measure_counts_sound_cues_from_the_breath_group_only_when_the_vocabulary_has_them():
+    reply = "[laughs] One. [whispers] Two. [gasps] Three."
+    assert chk.measure(reply, SOUNDS).sounds == 2
+    assert chk.measure(reply, VOCAB).sounds == 0            # neither is a vocabulary member here, so neither counts
+
+
+def test_measure_counts_laughter_written_out_as_words():
+    for text in ("Ha ha ha, boo!", "Hahaha! Boo.", "They giggled, hehe.", "Muahaha, boo.", "Boo *laughs* and leaves."):
+        assert chk.measure(text, VOCAB).written_laughs >= 1, text
+    for text in ("Ahab chased the whale.", "He had a hard time with the hat.", "Order 48213 shipped on Tuesday."):
+        assert chk.measure(text, VOCAB).written_laughs == 0, text
+    assert chk.measure("[laughs] It shipped. [gasps] It arrives Friday.", SOUNDS).written_laughs == 0   # a cue is not written out
+
+
+def test_evaluate_wants_a_sound_cue_in_most_stories_once_a_share_is_set():
+    story = chk.SCENARIOS[0]
+    rich = "[whispers] One. [building tension] Two. [laughs] Three. [whispers] Four. [gasps] Five."
+    flat = "[whispers] One. [building tension] Two. [whispers] Three. [building tension] Four. [whispers] Five."
+    rows = [(story, chk.measure(flat, SOUNDS))] * 3 + [(story, chk.measure(rich, SOUNDS))]
+    assert chk.evaluate(rows, chk.Targets(distinct_cues=1)) == []                       # not checked unless asked for
+    problems = chk.evaluate(rows, chk.Targets(distinct_cues=1, story_sound_share=0.75))
+    assert any("1/4 story replies have a sound cue" in p for p in problems), problems
+
+
+def test_evaluate_flags_laughter_written_out_as_words():
+    rows = [_row(chk.SCENARIOS[0], "[whispers] Ha ha ha! [sighs] Boo. [building tension] Yes. [whispers] No. [sighs] Hm.")]
+    problems = chk.evaluate(rows, chk.Targets(distinct_cues=1))
+    assert any("written out as words" in p for p in problems), problems
