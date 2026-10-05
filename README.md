@@ -26,7 +26,7 @@ every call lands in MLflow as a trace.
 | ✅ | **[Lakebase](https://www.databricks.com/product/lakebase) + [Lakebase Search](https://www.databricks.com/blog/lakebase-search-state-art-full-text-and-vector-search-postgres)** | Postgres holds each generated world (a fictional company's documents, customers and records), and Lakebase Search ANN finds the passages the agent answers from. |
 | ✅ | **[Unity Gateway](https://www.databricks.com/blog/unity-ai-gateway-generally-available)** | Serves every chat and embedding call, so it powers all the LLMs. The app routes each loyalty tier to a model, the gateway serves it, and token usage and an indicative cost show up live. |
 | ✅ | **[MLflow traces](https://docs.databricks.com/aws/en/mlflow3/genai/tracing/trace-unity-catalog)** | When tracing is on, each call's spans go over OpenTelemetry into a Unity Catalog table and show up as an MLflow trace. |
-| ✅ | **[AI Decide](https://www.databricks.com/blog/introducing-aidecide-make-fast-decisions-your-governed-data)** (`ai_decide`) | Makes a fast decision on every turn, beside the LLM, about whether to change the experience mid-call. Say "switch to the spooky voice" and the whole studio follows. |
+| ✅ | **[AI Decide](https://www.databricks.com/blog/introducing-aidecide-make-fast-decisions-your-governed-data)** (`ai_decide`) | Makes a fast decision on every turn, beside the LLM, through the [`ai_decide` REST API](https://docs.databricks.com/api/ai-functions/v1/ai-decide), about whether to change the experience mid-call. Say "switch to the spooky voice" and the whole studio follows. |
 
 The reference implementation is the **Unity Gateway Voice Studio**, a customer-support agent where each fictional
 company gets its own generated dataset. On a call the studio shows Unity Gateway's four pillars live: **Choice** (which
@@ -211,7 +211,7 @@ The call connects but no agent joins. Follow the skill.
 | `infra/` | The Lakebase schema, ANN and BM25 indexes, and `apply_schema.py` |
 | `start_app.py`, `app.yaml` | The single-container Databricks App launcher and spec |
 | `skills/` | The agent skill |
-| `tools/` | Manual voice checks: the TTS→STT cue bake-off and the live LLM cue check (see [Halloween mode](docs/halloween-voice.md#verify-the-voice)) |
+| `tools/` | Manual voice checks: a live AI Decide check, the TTS→STT cue bake-off and the live LLM cue check (see [Halloween mode](docs/halloween-voice.md#verify-the-voice)) |
 | `docs/` | Architecture, Halloween mode, [gotchas](docs/gotchas.md), verified platform contracts and design specs ([index](docs/README.md)) |
 | `tests/` | Over 1,000 tests. Leave out `test_integration_data_plane.py` unless you mean to run it: it is live and writes two worlds to Lakebase |
 
@@ -229,7 +229,7 @@ with these; [`docs/README.md`](docs/README.md#more-reading) has the longer list.
   Docs: [Lakebase Postgres](https://docs.databricks.com/aws/en/oltp/)
 - **MLflow traces:** Docs: [Store OpenTelemetry traces in Unity Catalog](https://docs.databricks.com/aws/en/mlflow3/genai/tracing/trace-unity-catalog)
 - **AI Decide:** [Introducing ai_decide: make fast decisions on your governed data](https://www.databricks.com/blog/introducing-aidecide-make-fast-decisions-your-governed-data) ·
-  Docs: [`ai_decide` SQL function](https://docs.databricks.com/aws/en/sql/language-manual/functions/ai_decide)
+  Docs: [REST API](https://docs.databricks.com/api/ai-functions/v1/ai-decide) · [`ai_decide` SQL function](https://docs.databricks.com/aws/en/sql/language-manual/functions/ai_decide)
 - **The voice stack:** [LiveKit Agents](https://docs.livekit.io/agents/) · [Deepgram](https://developers.deepgram.com/docs/models-languages-overview)
 
 ## License

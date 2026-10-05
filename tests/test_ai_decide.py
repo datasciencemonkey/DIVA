@@ -1,4 +1,4 @@
-"""Decision engines (spec §7.6): request builders, strict response parsers and `DecideClient`.
+"""The Databricks `ai_decide` call (spec §7.6): the request builder, the strict response parser and `DecideClient`.
 
 No live calls. The client is driven through a fake async http and, for the real httpx request/response
 path, an `httpx.MockTransport`.
@@ -15,21 +15,17 @@ import pytest
 
 from src.policy.voice_mode import IntentVerdict
 from src.services import ai_decide as ad
-from src.services.ai_decide import (
-    DecideClient, build_ai_decide_body, build_uaig_chat_body, parse_ai_decide, parse_uaig_chat,
-)
+from src.services.ai_decide import DecideClient, build_ai_decide_body, parse_ai_decide
 
 HOST, TOKEN = "https://ws.example.com", "dapi-secret-token"
 ERROR, TIMEOUT = IntentVerdict("none", 0.0, "error"), IntentVerdict("none", 0.0, "timeout")
 PROBS = {"enter": 0.93, "exit": 0.01, "none": 0.06}
 AI_DECIDE_URL = "https://ws.example.com/api/2.0/ai-functions/ai-decide"
-CHAT_URL = "https://ws.example.com/ai-gateway/openai/v1/chat/completions"
 
 
 @pytest.fixture(autouse=True)
 def _clean_env(monkeypatch):
-    for name in ("UG_DECIDE_ENGINE", "UG_DECIDE_MODEL", "UG_DECIDE_REASONING_EFFORT", "UG_DECIDE_TIMEOUT_S"):
-        monkeypatch.delenv(name, raising=False)
+    monkeypatch.delenv("UG_DECIDE_TIMEOUT_S", raising=False)
 
 
 def answer(**fields):
@@ -41,13 +37,6 @@ def ad_reply(choice="enter", confidence=0.93, probabilities=PROBS):
     """A well-formed ai_decide REST body: the answer sits under `response`, beside `metadata`."""
     return {"response": answer(type="choice", choice=choice, probabilities=probabilities, confidence=confidence),
             "metadata": {"version": "1.0"}}
-
-
-def chat_reply(content):
-    return {"choices": [{"message": {"role": "assistant", "content": content}}]}
-
-
-ENTER_JSON = '{"intent": "enter", "confidence": 0.8}'
 
 
 class FakeResponse:
@@ -137,39 +126,7 @@ def test_builders_do_not_share_their_criteria_with_callers():
     assert build_ai_decide_body("hi", "", "standard")["questions"]["voice_mode"]["criteria"]["enter"] != "mutated"
 
 
-def test_uaig_chat_body_and_parse():
-    # uaig_chat body carries the same instructions/criteria and json_object; GPT-family model
-    b = build_uaig_chat_body("make it spooky", "", "standard", "databricks-gpt-5-4-nano")
-    assert b["model"] == "databricks-gpt-5-4-nano" and b["response_format"] == {"type": "json_object"}
-    assert parse_uaig_chat(chat_reply(ENTER_JSON)).intent == "enter"
-    assert parse_uaig_chat(None).source == "error"
-
-
-def test_uaig_chat_body_carries_the_same_criteria_and_only_the_three_state_fields():
-    b = build_uaig_chat_body("make it spooky", "Boo!", "halloween", "m")
-    system, user = b["messages"]
-    assert (system["role"], user["role"]) == ("system", "user")
-    ai = build_ai_decide_body("make it spooky", "Boo!", "halloween")["questions"]["voice_mode"]
-    assert ai["instructions"] in system["content"]
-    assert all(text in system["content"] for text in ai["criteria"].values())
-    assert "JSON" in system["content"]  # OpenAI rejects json_object unless the prompt asks for JSON
-    assert json.loads(user["content"]) == build_ai_decide_body("make it spooky", "Boo!", "halloween")["state"]
-
-
-def test_uaig_chat_user_message_keeps_non_ascii_text_readable():
-    user = build_uaig_chat_body("un café hanté s'il vous plaît", "", "standard", "m")["messages"][1]["content"]
-    assert "café" in user and "\\u" not in user
-
-
-def test_uaig_chat_body_sets_no_temperature_and_reasoning_effort_only_when_given():
-    base = build_uaig_chat_body("x", "", "standard", "m")
-    assert "temperature" not in base  # reasoning models reject a non-default value
-    assert "reasoning_effort" not in base
-    assert "reasoning_effort" not in build_uaig_chat_body("x", "", "standard", "m", reasoning_effort="")
-    assert build_uaig_chat_body("x", "", "standard", "m", reasoning_effort="low")["reasoning_effort"] == "low"
-
-
-# ---------------------------------------------------------------- response parsers
+# ---------------------------------------------------------------- response parser
 
 def test_parse_ai_decide_valid_and_failure_modes():
     ok = {"answers": {"voice_mode": {"type": "choice", "choice": "enter",
@@ -187,7 +144,7 @@ def test_parse_ai_decide_returns_the_full_verdict():
     assert parse_ai_decide(ad_reply("exit", 0.8, probs)["response"]) == IntentVerdict("exit", 0.8, "model", probs)
 
 
-def test_a_none_answer_from_the_engine_is_a_model_verdict_not_a_failure():
+def test_a_none_answer_from_the_function_is_a_model_verdict_not_a_failure():
     v = parse_ai_decide(answer(choice="none", confidence=0.97))
     assert (v.intent, v.confidence, v.source) == ("none", 0.97, "model")
 
@@ -233,33 +190,7 @@ def test_parse_ai_decide_keeps_probabilities_only_when_complete_and_valid():
         assert (v.intent, v.confidence, v.source, v.probabilities) == ("enter", 0.9, "model", None), bad
 
 
-def test_parse_uaig_chat_valid():
-    assert parse_uaig_chat(chat_reply('{"intent": "exit", "confidence": 0.75}')) == IntentVerdict("exit", 0.75, "model")
-    assert parse_uaig_chat(chat_reply('{"intent": "none", "confidence": 1}')) == IntentVerdict("none", 1.0, "model")
-
-
-MALFORMED_CHAT = [
-    None, {}, [], "x", 7,
-    {"choices": []}, {"choices": "x"}, {"choices": [{}]}, {"choices": [{"message": None}]},
-    {"choices": [{"message": {}}]}, {"choices": [{"message": {"content": None}}]},
-    chat_reply(""), chat_reply("not json"), chat_reply("[]"), chat_reply('"enter"'), chat_reply("null"),
-    chat_reply('{"intent": "enter"}'),
-    chat_reply('{"confidence": 0.9}'),
-    chat_reply('{"intent": "ZZZ", "confidence": 0.9}'),
-    chat_reply('{"intent": "enter", "confidence": 1.5}'),
-    chat_reply('{"intent": "enter", "confidence": -1}'),
-    chat_reply('{"intent": "enter", "confidence": "0.9"}'),
-    chat_reply('{"intent": "enter", "confidence": true}'),
-    chat_reply('{"intent": "enter", "confidence": NaN}'),
-]
-
-
-@pytest.mark.parametrize("resp", MALFORMED_CHAT)
-def test_parse_uaig_chat_rejects_every_malformed_shape(resp):
-    assert parse_uaig_chat(resp) == ERROR
-
-
-# ---------------------------------------------------------------- DecideClient: engines
+# ---------------------------------------------------------------- DecideClient: the call
 
 async def test_classify_never_raises_on_timeout_or_garbage():
     class Boom:
@@ -269,14 +200,14 @@ async def test_classify_never_raises_on_timeout_or_garbage():
         async def aclose(self):
             pass
 
-    c = DecideClient("http://h", "t", engine="ai_decide", http=Boom())
+    c = DecideClient("http://h", "t", http=Boom())
     v, ms = await c.classify("spooky please", "", "standard")
     assert v.source in ("timeout", "error") and v.intent == "none" and ms >= 0
 
 
-async def test_ai_decide_engine_posts_the_rest_body_and_parses_the_answer():
+async def test_the_client_posts_the_rest_body_and_parses_the_answer():
     http = FakeHttp(FakeResponse(200, ad_reply()))
-    c = DecideClient(HOST, TOKEN, engine="ai_decide", http=http)
+    c = DecideClient(HOST, TOKEN, http=http)
     v, ms = await c.classify("spooky please", "How can I help?", "standard")
     assert v == IntentVerdict("enter", 0.93, "model", PROBS)
     assert isinstance(ms, float) and ms >= 0
@@ -287,18 +218,7 @@ async def test_ai_decide_engine_posts_the_rest_body_and_parses_the_answer():
     assert call["timeout"] == c.timeout_s
 
 
-async def test_uaig_chat_engine_posts_a_chat_completion_and_parses_the_json():
-    http = FakeHttp(FakeResponse(200, chat_reply(ENTER_JSON)))
-    c = DecideClient(HOST, TOKEN, engine="uaig_chat", model="databricks-gpt-5-4-nano", http=http)
-    v, _ = await c.classify("make it spooky", "", "standard")
-    assert v == IntentVerdict("enter", 0.8, "model")
-    (call,) = http.calls
-    assert call["url"] == CHAT_URL
-    assert call["headers"]["Authorization"] == f"Bearer {TOKEN}"
-    assert call["json"] == build_uaig_chat_body("make it spooky", "", "standard", "databricks-gpt-5-4-nano")
-
-
-async def test_the_engine_answering_none_is_not_mistaken_for_a_failure():
+async def test_the_function_answering_none_is_not_mistaken_for_a_failure():
     http = FakeHttp(FakeResponse(200, ad_reply("none", 0.97, {"enter": 0.02, "exit": 0.01, "none": 0.97})))
     v, _ = await DecideClient(HOST, TOKEN, http=http).classify("are you open on halloween", "", "standard")
     assert (v.intent, v.source) == ("none", "model")
@@ -306,26 +226,23 @@ async def test_the_engine_answering_none_is_not_mistaken_for_a_failure():
 
 # ---------------------------------------------------------------- DecideClient: failing closed
 
-@pytest.mark.parametrize("engine, good", [("ai_decide", ad_reply()), ("uaig_chat", chat_reply(ENTER_JSON))])
 @pytest.mark.parametrize("status", [400, 401, 403, 404, 429, 500, 503])
-async def test_an_http_error_fails_closed_without_a_retry(engine, good, status):
-    http = FakeHttp(FakeResponse(status, good))  # even a payload that parses is not trusted on an error status
-    v, ms = await DecideClient(HOST, TOKEN, engine=engine, http=http).classify("spooky please", "", "standard")
+async def test_an_http_error_fails_closed_without_a_retry(status):
+    http = FakeHttp(FakeResponse(status, ad_reply()))  # even a payload that parses is not trusted on an error status
+    v, ms = await DecideClient(HOST, TOKEN, http=http).classify("spooky please", "", "standard")
     assert v == ERROR and ms >= 0
     assert len(http.calls) == 1
 
 
-@pytest.mark.parametrize("engine", ["ai_decide", "uaig_chat"])
-@pytest.mark.parametrize("payload", [None, {}, [], "ok", {"response": None}, {"response": {}}, {"choices": []}])
-async def test_an_unusable_200_body_fails_closed(engine, payload):
-    v, _ = await DecideClient(HOST, TOKEN, engine=engine, http=FakeHttp(FakeResponse(200, payload))).classify(
+@pytest.mark.parametrize("payload", [None, {}, [], "ok", {"response": None}, {"response": {}}])
+async def test_an_unusable_200_body_fails_closed(payload):
+    v, _ = await DecideClient(HOST, TOKEN, http=FakeHttp(FakeResponse(200, payload))).classify(
         "spooky please", "", "standard")
     assert v == ERROR
 
 
-@pytest.mark.parametrize("engine", ["ai_decide", "uaig_chat"])
-async def test_a_body_that_is_not_json_fails_closed(engine):
-    v, _ = await DecideClient(HOST, TOKEN, engine=engine, http=FakeHttp(FakeResponse(200, bad_json=True))).classify(
+async def test_a_body_that_is_not_json_fails_closed():
+    v, _ = await DecideClient(HOST, TOKEN, http=FakeHttp(FakeResponse(200, bad_json=True))).classify(
         "spooky please", "", "standard")
     assert v == ERROR
 
@@ -348,7 +265,7 @@ async def test_transport_failures_map_to_timeout_or_error_and_never_raise(failur
     assert len(http.calls) == 1  # no retries on the hot path
 
 
-async def test_a_slow_engine_times_out_at_timeout_s_and_reports_the_wait():
+async def test_a_slow_call_times_out_at_timeout_s_and_reports_the_wait():
     c = DecideClient(HOST, TOKEN, http=HangingHttp(), timeout_s=0.05)
     v, ms = await c.classify("spooky please", "", "standard")
     assert v == TIMEOUT
@@ -388,27 +305,18 @@ async def test_a_failure_is_reported_once_per_reason_and_leaks_neither_token_nor
 
 # ---------------------------------------------------------------- DecideClient: real httpx
 
-async def test_round_trip_through_a_real_httpx_client_for_both_engines():
+async def test_round_trip_through_a_real_httpx_client():
     seen = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         seen.append((request.method, request.url.path, request.headers["authorization"], json.loads(request.content)))
-        if request.url.path == "/api/2.0/ai-functions/ai-decide":
-            return httpx.Response(200, json=ad_reply("exit", 0.6, {"enter": 0.1, "exit": 0.6, "none": 0.3}))
-        return httpx.Response(200, json=chat_reply(ENTER_JSON))
+        return httpx.Response(200, json=ad_reply("exit", 0.6, {"enter": 0.1, "exit": 0.6, "none": 0.3}))
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
-        ai = DecideClient(HOST, TOKEN, engine="ai_decide", http=http)
-        chat = DecideClient(HOST, TOKEN, engine="uaig_chat", http=http)
-        v1, _ = await ai.classify("stop that", "Boo!", "halloween")
-        v2, _ = await chat.classify("spooky please", "", "standard")
+        v, _ = await DecideClient(HOST, TOKEN, http=http).classify("stop that", "Boo!", "halloween")
 
-    assert v1 == IntentVerdict("exit", 0.6, "model", {"enter": 0.1, "exit": 0.6, "none": 0.3})
-    assert v2 == IntentVerdict("enter", 0.8, "model")
-    assert [(m, p, a) for m, p, a, _ in seen] == [
-        ("POST", "/api/2.0/ai-functions/ai-decide", f"Bearer {TOKEN}"),
-        ("POST", "/ai-gateway/openai/v1/chat/completions", f"Bearer {TOKEN}"),
-    ]
+    assert v == IntentVerdict("exit", 0.6, "model", {"enter": 0.1, "exit": 0.6, "none": 0.3})
+    assert [(m, p, a) for m, p, a, _ in seen] == [("POST", "/api/2.0/ai-functions/ai-decide", f"Bearer {TOKEN}")]
     assert seen[0][3] == build_ai_decide_body("stop that", "Boo!", "halloween")
 
 
@@ -440,30 +348,14 @@ def _client(**kwargs):
     return DecideClient(HOST, TOKEN, http=FakeHttp(None), **kwargs)
 
 
-def test_engine_defaults_to_ai_decide_and_env_or_argument_selects(monkeypatch):
+def test_the_only_engine_is_the_databricks_ai_decide_function():
     assert _client().engine == "ai_decide" and _client().label == "Databricks AI Decide"
-    monkeypatch.setenv("UG_DECIDE_ENGINE", "uaig_chat")
-    assert _client().engine == "uaig_chat"
-    assert _client(engine="ai_decide").engine == "ai_decide"  # an argument beats the environment
-    monkeypatch.setenv("UG_DECIDE_ENGINE", " UAIG_Chat ")
-    assert _client().engine == "uaig_chat"
 
 
-def test_an_unknown_engine_falls_back_to_ai_decide_and_says_so(capsys):
-    assert _client(engine="bogus").engine == "ai_decide"
-    assert "bogus" in capsys.readouterr().out
-
-
-def test_the_uaig_chat_label_names_its_model():
-    assert "databricks-gpt-5-4-nano" in _client(engine="uaig_chat").label
-    assert "my-model" in _client(engine="uaig_chat", model="my-model").label
-
-
-def test_uaig_chat_model_defaults_to_a_gpt_family_model_and_env_overrides(monkeypatch):
-    assert _client().model == "databricks-gpt-5-4-nano" and "gpt" in _client().model  # Claude rejects json_object
-    monkeypatch.setenv("UG_DECIDE_MODEL", "databricks-gpt-5-4-mini")
-    assert _client().model == "databricks-gpt-5-4-mini"
-    assert _client(model="other-gpt").model == "other-gpt"
+@pytest.mark.parametrize("removed", [{"engine": "ai_decide"}, {"model": "any-model"}])
+def test_the_engine_and_model_keywords_are_gone(removed):
+    with pytest.raises(TypeError):
+        DecideClient(HOST, TOKEN, http=FakeHttp(None), **removed)
 
 
 @pytest.mark.parametrize("env, expected", [
@@ -495,21 +387,6 @@ async def test_a_host_with_its_own_scheme_is_left_alone():
     http = FakeHttp(FakeResponse(200, ad_reply()))
     await DecideClient("http://localhost:9999", TOKEN, http=http).classify("x", "", "standard")
     assert http.calls[0]["url"] == "http://localhost:9999/api/2.0/ai-functions/ai-decide"
-
-
-async def test_reasoning_effort_env_is_sent_only_when_set(monkeypatch):
-    http = FakeHttp(FakeResponse(200, chat_reply(ENTER_JSON)))
-    c = DecideClient(HOST, TOKEN, engine="uaig_chat", http=http)
-    await c.classify("x", "", "standard")
-    assert "reasoning_effort" not in http.calls[-1]["json"]
-
-    monkeypatch.setenv("UG_DECIDE_REASONING_EFFORT", "  ")
-    await DecideClient(HOST, TOKEN, engine="uaig_chat", http=http).classify("x", "", "standard")
-    assert "reasoning_effort" not in http.calls[-1]["json"]
-
-    monkeypatch.setenv("UG_DECIDE_REASONING_EFFORT", "minimal")
-    await DecideClient(HOST, TOKEN, engine="uaig_chat", http=http).classify("x", "", "standard")
-    assert http.calls[-1]["json"]["reasoning_effort"] == "minimal"
 
 
 # ---------------------------------------------------------------- structure

@@ -1,5 +1,7 @@
 # UG Voice Studio — Plan 5: Expressive Mode + AI Decide Halloween Voice — Implementation Plan
 
+> **Update 2026-10-05 (#45):** the `uaig_chat` fallback engine this plan builds was removed later. AI Decide now uses only the Databricks `ai_decide` REST API. The plan is kept as the record of how it was built.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. This project is governed by `docs/constitution.md` — read it first.
 
 **Goal:** Add a governed, auto-decided "Halloween mode" to the voice studio: Databricks `ai_decide` (fallback: a UAIG-served nano model) decides per turn whether the caller wants a spooky voice, a deterministic policy applies at most one mode transition, and in Halloween mode the Databricks LLM emits expressive tags (`[whispers]`…) that **ElevenLabs** performs — all outside the conversational LLM, same for every tier, and traced live on the Control pillar.

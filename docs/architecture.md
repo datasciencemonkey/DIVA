@@ -51,7 +51,7 @@ sequence under the diagram.
 +------------------+          | | [6] STT -> LLM -> TTS      | |          +----------------------+
 | Deepgram         |<===[6]==>| | [6] voice mode: AI Decide  | |--[6]---->| Databricks AI Decide |
 | STT nova-3       |          | |    standard  -> Deepgram   | |          | enter / exit / none  |
-| TTS aura-2       |          | |    halloween -> ElevenLabs | |          | (or a Gateway model) |
+| TTS aura-2       |          | |    halloween -> ElevenLabs | |          | (REST API)           |
 +------------------+          | |                            | |          +----------------------+
                               | | [7] tools: semantic_search | |
 +------------------+          | |            record_lookup   | |          +----------------------+
@@ -158,18 +158,25 @@ As of 2026-10-05 the voice-mode path is unit-tested and has run live on a local 
 in [gotchas](gotchas.md)), but not yet on a deployed app. As shipped,
 `app.yaml` leaves `UG_HALLOWEEN_VOICE_ID` unset, so Halloween mode speaks in the Deepgram fallback voice until it is
 set. The ElevenLabs voice also needs the `elevenlabs-api-key` secret resource attached to the app before deploying (its
-`valueFrom` only resolves once the resource exists) and outbound access to `api.elevenlabs.io`. The default engine
-needs AI Decide enabled on the workspace (admin, Previews).
+`valueFrom` only resolves once the resource exists) and outbound access to `api.elevenlabs.io`. AI Decide needs the
+`ai_decide` function enabled on the workspace (admin, Previews).
 
-### Two engines, one interface
+### One decider: the `ai_decide` REST API
 
-`src/services/ai_decide.py` puts both engines behind one `classify()` call that fails closed. `UG_DECIDE_ENGINE`
-picks the engine:
+`src/services/ai_decide.py` makes one call per turn to the documented
+[`ai_decide` REST API](https://docs.databricks.com/api/ai-functions/v1/ai-decide), and nothing else decides the
+intent. The request follows the reference:
 
-| Engine | Request | Notes |
-|---|---|---|
-| `ai_decide` (default) | `POST {DATABRICKS_HOST}/api/2.0/ai-functions/ai-decide` with one `choice` question (`enter` / `exit` / `none`) | Needs AI Decide enabled on the workspace (admin, Previews) and a token with the `ai-functions` scope. Returns a probability per label and a confidence |
-| `uaig_chat` | `POST {DATABRICKS_HOST}/ai-gateway/openai/v1/chat/completions` to the small chat model in `UG_DECIDE_MODEL`, in JSON mode | The same question, answered by a model served through Unity Gateway. Use it when AI Decide isn't enabled on the workspace or is too slow |
+- `POST {DATABRICKS_HOST}/api/2.0/ai-functions/ai-decide`
+- `state`: the caller's words, the agent's previous line and the current mode, which is all the decider sees
+- `questions`: one `choice` question, `voice_mode`, with `instructions` and `criteria` for `enter`, `exit` and `none`
+- `options.version`: `"1.0"`
+
+The answer comes back at `response.answers.voice_mode`: the `choice`, a `probabilities` map and a `confidence`. The call
+needs AI Decide enabled on the workspace (admin, Previews) and a token that may call the `ai-functions` API.
+`classify()` fails closed: any error, timeout or unusable reply becomes `none`. To confirm the function itself is
+answering, run `tools/ai_decide_check.py`: it sends four sample utterances to the real endpoint and prints what came
+back.
 
 `UG_AI_DECIDE=0` turns the feature off: no calls, and the call stays in the standard voice.
 
@@ -271,7 +278,7 @@ adds five:
 
 | What goes wrong | What happens |
 |---|---|
-| AI Decide isn't enabled, errors, times out or returns something unexpected | The engine's verdict is `none`, so the mode stays put unless the rule-based check hears an explicit command, which it applies at once. Setting `UG_DECIDE_ENGINE=uaig_chat` swaps in a gateway-served model (a config choice, not an automatic failover) |
+| AI Decide isn't enabled, errors, times out or returns something unexpected | The engine's verdict is `none`, so the mode stays put unless the rule-based check hears an explicit command, which it applies at once |
 | The answer misses the end of the turn | If the words aren't an explicit command, the reply uses the current voice; the switch lands as an announced switch, or is dropped if the caller has finished another turn in the meantime |
 | `ELEVEN_API_KEY` or `UG_HALLOWEEN_VOICE_ID` is missing | Halloween mode runs on the Deepgram fallback voice: spooky persona, darker voice, no tags |
 | ElevenLabs fails mid-call | The call is marked degraded (`ug.voice_degraded`, "Fallback voice" on the Control pillar) and Halloween mode carries on in the fallback voice for the rest of the call |
@@ -300,6 +307,6 @@ Then walk the connection steps:
 | 6 | during the call, say "Can you do a spooky Halloween voice?" | the Control pillar's "Voice mode · AI Decide" row changes to Halloween and the agent speaks in the spooky voice; "go back to the normal voice" returns it to Standard. A plain request like this is also caught by the rule-based check, so it works even when AI Decide is down |
 | 6 | say "Change your voice to something creepy", which the rule-based check doesn't match | the same switch, decided by the engine, sometimes as a short announcement right after the agent's reply; the worker log has no `[ug] ai_decide engine=… failed` line |
 
-The last row needs AI Decide enabled on the workspace (or `UG_DECIDE_ENGINE=uaig_chat`). If either `ELEVEN_API_KEY` or
+The last row needs AI Decide enabled on the workspace. If either `ELEVEN_API_KEY` or
 `UG_HALLOWEEN_VOICE_ID` is missing, Halloween mode speaks in the Deepgram fallback voice, and with `UG_AI_DECIDE=0` the
 call stays in the standard voice.
