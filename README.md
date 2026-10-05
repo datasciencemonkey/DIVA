@@ -38,6 +38,23 @@ your own data, prompts and tools.
 The repo also ships an [Agent Skill](https://agentskills.io), `building-voice-agents-on-databricks`, so your coding
 agent already knows the patterns and the traps. See [Agent skill](#agent-skill).
 
+## See it
+
+A call in the standard voice. **Choice** routes the Standard tier to `system.ai.gpt-5-nano` through Unity Gateway, and
+**Control** shows the governance checks and the voice mode:
+
+![Choice and Control during a call: the governed tier Standard routed to system.ai.gpt-5-nano, the governance checks, and the voice mode](docs/img/studio-choice-control.jpg)
+
+The lower panels: **Context** (empty until the caller asks something), **Costs** (927 tokens, an indicative $0.0004) and
+the live transcript:
+
+![Context, Costs and the live transcript during a call](docs/img/studio-call-context-costs.jpg)
+
+Ask for a spooky voice and AI Decide decides on that turn. The panel shows the decision (confidence 0.90, 583 ms), the
+probability of each option, and the ElevenLabs voice now speaking, and the whole studio changes theme:
+
+![Halloween mode: Databricks AI Decide chose to enter it with confidence 0.90 in 583 ms, and the voice is ElevenLabs](docs/img/studio-halloween-ai-decide.jpg)
+
 ## How it works
 
 ```mermaid
