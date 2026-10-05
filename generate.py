@@ -35,6 +35,6 @@ if __name__ == "__main__":
     p.add_argument("--prompt",
                    default="Answer questions about the company's products, orders, and policies.")
     # Generator model is decoupled from the routing tiers: use a chat model that
-    # supports response_format=json_object (verified: databricks-gpt-5-4).
-    p.add_argument("--model", default=os.getenv("UG_GEN_MODEL", "databricks-gpt-5-4"))
+    # supports response_format=json_object (verified: system.ai.gpt-5-4, the name .env.example uses).
+    p.add_argument("--model", default=os.getenv("UG_GEN_MODEL", "system.ai.gpt-5-4"))
     asyncio.run(_main(p.parse_args()))

@@ -123,11 +123,11 @@ walkthrough is in
 uv sync
 cp .env.example .env.local     # fill in LiveKit, Deepgram, Databricks (host + token), Lakebase and model settings
 
-# One-time Lakebase setup. These two scripts read the shell environment, not .env.local.
+# One-time Lakebase setup. These two scripts read the shell environment, not .env.local
+# (export UG_GEN_MODEL / UG_EMBED_MODEL too if you use models other than the defaults).
 export DATABRICKS_CONFIG_PROFILE=<your-profile>      # or DATABRICKS_HOST + DATABRICKS_TOKEN
 export LAKEBASE_ENDPOINT=projects/<project>/branches/<branch>/endpoints/<endpoint>
 export LAKEBASE_DATABASE=databricks_postgres UG_SCHEMA=ug
-export UG_GEN_MODEL=system.ai.gpt-5-4 UG_EMBED_MODEL=system.ai.gte-large-en   # the models from .env.local
 uv run python infra/apply_schema.py                  # schema + ANN/BM25 indexes
 uv run python generate.py "Northwind Outfitters"     # optional: generate a world from the CLI
 

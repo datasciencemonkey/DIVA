@@ -5,7 +5,7 @@ import pytest
 pytestmark = pytest.mark.skipif(
     not os.getenv("LAKEBASE_ENDPOINT"), reason="live Lakebase env not set")
 
-_GEN_MODEL = os.getenv("UG_GEN_MODEL", "databricks-gpt-5-4")
+_GEN_MODEL = os.getenv("UG_GEN_MODEL", "system.ai.gpt-5-4")
 
 
 async def test_generate_two_datasets_and_retrieve_isolated():
