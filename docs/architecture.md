@@ -12,14 +12,15 @@ what the caller wants on every turn and a small deterministic policy applies it,
 
 On the Databricks side DIVA builds on three pieces the
 [Agent Bricks](https://www.databricks.com/blog/agent-bricks-dais-2026) announcement names: Databricks Apps hosts it,
-Unity Gateway serves and governs its models, and Lakebase holds its data. The agent itself is a LiveKit Agents worker.
+Unity Gateway serves and governs its models, and Lakebase holds its data. The agent itself is a custom agent, a
+LiveKit Agents worker. MLflow records every call as a trace, and AI Decide makes the per-turn voice-mode decision.
 
 Everything runs in one of four places:
 
 | Where | What runs there |
 |---|---|
 | **The caller's browser** | The studio single-page app and `livekit-client` |
-| **External SaaS** | LiveKit Cloud (WebRTC media and agent dispatch), Deepgram (speech-to-text, the standard text-to-speech voice and the fallback Halloween voice) and ElevenLabs (the expressive Halloween voice, when configured and only while that mode is on) |
+| **External SaaS** | LiveKit Cloud (WebRTC media and agent dispatch), Deepgram (speech-to-text, the standard text-to-speech voice and the fallback Halloween voice) and ElevenLabs (the expressive Halloween voice, when configured; it speaks only while that mode is on) |
 | **One Databricks App** | `start_app.py` boots both tiers in one container: the web / token tier (`app/web_server.py`) and the agent worker (`app/agent.py`) |
 | **Your Databricks workspace** | Unity Gateway (chat and embeddings), Databricks AI Decide (the voice-mode classifier), Lakebase Postgres with [Lakebase Search](https://www.databricks.com/blog/lakebase-search-state-art-full-text-and-vector-search-postgres) (the worlds), Unity Catalog and MLflow (traces) |
 
@@ -132,17 +133,19 @@ sequence under the diagram.
 8. **Show.** The worker publishes PII-free evidence packets (the routing decision, retrieval hits, cumulative
    token usage, and the voice mode) on the LiveKit data channel, and the studio renders them as the Choice / Control
    / Context / Costs pillars. The voice mode appears on the Control pillar as a live "Voice mode · AI Decide" row.
-9. **Trace.** When the session ends, `app/tracing.py` enriches the OpenTelemetry spans (`ug.*` attributes,
-   MLflow span types) and flushes them over OTLP into a Unity Catalog table, where they read as MLflow traces.
-   Each voice-mode change adds a `ug.ai_decide` span. Tracing is fail-soft: with no trace table configured,
-   calls still work.
+9. **Trace.** The worker installs one OpenTelemetry tracer provider when its process starts (`_setup_process` in
+   `app/agent.py`), so the job's root span is captured. `app/tracing.py` enriches the spans as they export (`ug.*`
+   attributes, MLflow span types), the root span is flushed as soon as it ends, and the spans go over OTLP into a
+   Unity Catalog table, where they read as MLflow traces. Each voice-mode change adds a `ug.ai_decide` span. Tracing
+   is fail-soft: with no trace table configured, calls still work.
 
 ## Voice mode: how AI Decide picks the voice
 
 Every call starts in the standard voice. On each caller turn, Databricks AI Decide (`ai_decide`, an AI Function that
 was in Beta at the time of writing and is opt-in per workspace) answers one multiple-choice question about the
 caller's words: do they want the spooky voice (`enter`), want it gone (`exit`), or neither (`none`)? It only classifies.
-A deterministic policy in the app decides whether that answer changes the mode.
+A deterministic policy in the app decides whether that answer changes the mode. Setup, settings and how to verify the
+voice are in [Halloween mode](halloween-voice.md).
 
 That question runs outside the conversational LLM, so the answer doesn't depend on which tier's model is talking. The
 decider's input is the caller's utterance, the agent's previous line (its last 200 characters, as context) and the
@@ -177,10 +180,12 @@ picks the engine:
    request about the assistant's voice or mode, such as "spooky voice" or "normal voice"; a plain mention of Halloween
    doesn't count) or the call is already in Halloween mode, so even a terse "stop" gets the full wait. The wait is at
    most `UG_DECIDE_CUE_WAIT_S` (0.8 s). On any other turn the answer is used only if it has already arrived. On a cue
-   the Halloween voice is also built early, although ElevenLabs still connects on first use.
+   the Halloween voice is also built early and a short warm stream is opened to ElevenLabs, even if the turn ends
+   without a switch.
 3. **Same-turn switch.** If a verdict is in time and the policy says switch, the mode changes before the reply is
-   generated, so this reply already uses the new persona and voice. The verdict is the engine's answer or, when the
-   engine gave no usable one, the rule-based check's (an explicit exit always wins).
+   generated, so this reply already uses the new persona and voice. Going into Halloween mode, the agent first says a
+   short bridge line in the outgoing voice ("One moment… let me set the scene."). The verdict is the engine's answer
+   or, when the engine gave no usable one, the rule-based check's (an explicit exit always wins).
 4. **Announced switch.** Otherwise the reply goes out in the current voice (the prompt tells the LLM to say "One
    moment…" to a voice request, never to refuse). When the engine's answer lands, the policy says switch and the
    caller hasn't finished a newer turn, the agent switches and says a short announcement in the new voice. An answer
@@ -220,9 +225,9 @@ with no tags. If ElevenLabs fails during a call, the worker marks the call degra
 fallback voice for the rest of the call (the utterance in flight may be cut off). That TTS instance sits outside the
 session's own error count, so a vendor failure can't close the call.
 
-When the Halloween voice can perform tags (ElevenLabs on an `eleven_v3*` model), the prompt lets the LLM write a short
-allow-list of cues (`[whispers]`, `[sighs]`, `[laughs]` and a few more), which the voice is meant to perform rather
-than read out. Before the text reaches the TTS it runs through four stages: `encode_tags` swaps the allowed tags for
+When the Halloween voice can perform tags (ElevenLabs on an `eleven_v3*` model), the prompt lets the LLM write cues
+from a verified allow-list of 67 (`[whispers]`, `[building tension]`, `[laughs]` and more, in four groups; see
+[Halloween mode](halloween-voice.md#the-cues)), which the voice is meant to perform rather than read out. Before the text reaches the TTS it runs through four stages: `encode_tags` swaps the allowed tags for
 placeholders and drops any other tag, LiveKit's stock `filter_markdown` and `filter_emoji` run as usual, and
 `decode_tags` puts the tags back (`app/expressive.py`). The encode step exists because the stock markdown filter holds
 back everything after a bare `[`, which would stall streaming speech. The agent's lines in the on-screen transcript are
