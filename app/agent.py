@@ -27,6 +27,7 @@ load_dotenv(_REPO_ROOT / ".env.local", override=False)
 
 import httpx
 from openai.types import Reasoning
+from opentelemetry import trace as otel_trace
 from livekit import agents
 from livekit.agents import APIConnectOptions, AgentServer, AgentSession
 from livekit.agents.telemetry import set_tracer_provider
@@ -41,15 +42,30 @@ from src.services.session_bind import bind_session
 from app.expressive import decode_tags, encode_tags
 from app.studio_agent import StudioAgent
 from app.tools import SessionContext, build_tools
-from app.tracing import build_tracer_provider, fill_ug_metadata
+from app.tracing import build_tracer_provider, fill_ug_metadata, flush_open_traces, register_trace_enrichment
 from app.voice_mode import VoiceModeController
 from app.voice_profiles import build_tts, resolve_profiles
-
-server = AgentServer()
 
 logger = logging.getLogger(__name__)
 
 _AGENT_NAME = os.environ.get("AGENT_NAME", "ug-agent")
+
+_trace_provider = None   # one per job process, installed by _setup_process
+
+
+def _setup_process(proc: agents.JobProcess) -> None:
+    """Install the OTel provider before the process takes a job. livekit-agents 1.8.3 opens the job's root,
+    `job_entrypoint`, before the entrypoint runs, on whatever provider is installed then; set from the
+    entrypoint, ours sees only the children and the root goes to LiveKit Cloud alone, so MLflow (which lists
+    only traces with a root) never shows the call. Installed here, LiveKit adopts it instead."""
+    global _trace_provider
+    _trace_provider = build_tracer_provider()
+    if _trace_provider is not None:
+        otel_trace.set_tracer_provider(_trace_provider)   # MLflow's LiveKit guide sets both global and LiveKit
+        set_tracer_provider(_trace_provider, metadata={"livekit.agent_name": _AGENT_NAME})
+
+
+server = AgentServer(setup_fnc=_setup_process)
 
 
 def _read_meta(ctx):
@@ -184,17 +200,16 @@ async def entrypoint(ctx: agents.JobContext):
 
     # --- OTel tracing (fail-soft) ---
     trace_enrichment: dict[str, Any] = {}   # ug.voice_* adds ints/bools, not only strings (spec §7.11)
-    trace_provider = build_tracer_provider(trace_enrichment)
+    trace_provider = _trace_provider
     bind = None
     session_ctx = None
     controller = None   # the VoiceModeController, built after the governed bind; the flush reads its state
     if trace_provider is not None:
-        set_tracer_provider(trace_provider, metadata={"livekit.agent_name": _AGENT_NAME})
+        register_trace_enrichment(trace_enrichment)   # the current span here is this job's job_entrypoint
 
         async def _flush_traces() -> None:
             fill_ug_metadata(trace_enrichment, bind, session_ctx, voice_mode=controller)
-            trace_provider.force_flush()
-            trace_provider.shutdown()
+            flush_open_traces(trace_provider)
 
         ctx.add_shutdown_callback(_flush_traces)
 
