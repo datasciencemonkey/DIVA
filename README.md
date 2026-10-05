@@ -41,6 +41,7 @@ agent already knows the patterns and the traps. See [Agent skill](#agent-skill).
 ## How it works
 
 ```mermaid
+%%{init: {"flowchart": {"nodeSpacing": 18, "rankSpacing": 26, "padding": 8}}}%%
 flowchart LR
     B["Browser<br/>studio UI"]
 
@@ -62,9 +63,9 @@ flowchart LR
         ML[("Unity Catalog + MLflow<br/>call traces")]
     end
 
-    B -->|"studio + token"| W
-    B <-->|"WebRTC audio + data"| LK
-    LK <-->|"dispatch, audio, data"| A
+    B -->|"studio, token"| W
+    B <-->|"audio + data"| LK
+    LK <-->|"audio + data"| A
     A <-->|"STT + TTS"| DG
     A -.-> EL
     A -->|"chat + embeddings"| UG
