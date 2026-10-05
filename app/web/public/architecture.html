@@ -630,7 +630,7 @@
                 <text class="d-note" x="316" y="914">drafts docs &#183; customers &#183; records</text>
 
                 <rect class="d-node d-node--inset" x="620" y="868" width="196" height="72" rx="12"/>
-                <text class="d-role" x="636" y="894" style="fill:var(--text-hi);font-weight:700">FMAPI</text>
+                <text class="d-role" x="636" y="894" style="fill:var(--text-hi);font-weight:700">Unity Gateway</text>
                 <text class="d-note" x="636" y="914">embeddings</text>
 
                 <rect class="d-node d-node--inset" x="900" y="868" width="196" height="72" rx="12" style="stroke:color-mix(in srgb, var(--c-context) 34%, var(--hairline))"/>
@@ -645,12 +645,14 @@
 
               <!-- ============ EDGES (painted over the node fills so every arrowhead lands visibly on its target) ============ -->
               <g>
-                <!-- Caller <-> Studio web tier (SPA + token request) -->
+                <!-- Caller <-> Studio web tier (the SPA, and the signed JWT back). The web tier never calls LiveKit. -->
                 <path class="d-edge" d="M196 288 L232 288"/>
                 <path class="d-edge" d="M224 294 L232 288 L224 282"/>
-                <!-- Studio web tier -> LiveKit (JWT + dispatch + metadata) -->
-                <path class="d-edge" d="M436 288 L470 288"/>
-                <path class="d-edge" d="M462 294 L470 288 L462 282"/>
+                <path class="d-edge" d="M204 294 L196 288 L204 282"/>
+                <!-- Caller <-> LiveKit : the browser joins the room itself with that JWT (WebRTC audio), passing under the web tier -->
+                <path class="d-edge e-lava" d="M118 344 C118 396, 554 396, 554 344"/>
+                <path class="d-edge e-lava" d="M112 352 L118 344 L124 352"/>
+                <path class="d-edge e-lava" d="M548 352 L554 344 L560 352"/>
                 <!-- LiveKit -> Agent : audio in (arcs up to the STT left edge) -->
                 <path class="d-edge e-lava" d="M638 262 C664 262, 662 124, 686 124"/>
                 <path class="d-edge e-lava" d="M678 130 L686 124 L678 118"/>
@@ -692,6 +694,7 @@
               <!-- ============ EDGE LABELS — kept sparse; node text + hue carry the rest ============ -->
               <g>
                 <text class="edge-label--sm" x="214" y="276" text-anchor="middle">SPA</text>
+                <text class="edge-label--sm t-lava" x="336" y="408" text-anchor="middle">joins with the JWT &#183; WebRTC audio</text>
                 <text class="edge-label--sm t-lava" x="598" y="206">audio in</text>
                 <text class="edge-label--sm t-lava" x="634" y="396" text-anchor="end">audio out</text>
                 <text class="edge-label--sm" x="556" y="72" text-anchor="middle">evidence</text>
@@ -699,11 +702,11 @@
                 <text class="edge-label--sm t-context" x="1004" y="572" text-anchor="middle">read-only tools</text>
               </g>
 
-              <!-- the live-call spine: an invisible authored path threading caller -> studio -> LiveKit ->
+              <!-- the live-call spine: an invisible authored path threading caller -> LiveKit ->
                    (audio in) STT -> Voice mode -> LLM -> the model the app picked at the gateway. The signal packet
                    rides it via MotionPathPlugin so the loop tracks the drawn topology exactly. -->
               <path id="spinePath" aria-hidden="true" fill="none" stroke="none"
-                    d="M118 288 L554 288 C 600 288, 610 262, 638 262 C 664 262, 662 124, 686 124 L 788 124 C 800 124, 800 130, 800 142 L 800 326 C 800 335, 806 338, 818 338 L 914 338 C 942 338, 948 402, 976 402 L 1172 402"/>
+                    d="M118 344 C 118 396, 554 396, 554 344 C 554 300, 600 262, 638 262 C 664 262, 662 124, 686 124 L 788 124 C 800 124, 800 130, 800 142 L 800 326 C 800 335, 806 338, 818 338 L 914 338 C 942 338, 948 402, 976 402 L 1172 402"/>
               <!-- travelling signal packet — one looping motion along the spine above -->
               <circle class="d-packet" id="flowPacket" cx="0" cy="0" r="6"/>
             </svg>
@@ -827,7 +830,7 @@
         </span>
         <div class="gov-body">
           <b>Dispatch tokens carry PII-free metadata</b>
-          <p>The short-TTL LiveKit token embeds only <span class="mono">{data_generation_id, customer_id}</span>: identifiers, not identity. Token usage is metered per turn for the Costs pillar, so no caller name ever rides the wire.</p>
+          <p>The short-TTL LiveKit token's metadata embeds only <span class="mono">{data_generation_id, customer_id}</span>: identifiers, not identity. The one personal detail in the token is the name the caller gives for the greeting, carried as its sanitized <span class="mono">name</span> claim. Token usage is metered per turn for the Costs pillar.</p>
         </div>
       </div>
 
@@ -837,7 +840,7 @@
         </span>
         <div class="gov-body">
           <b>AI Decide picks the voice, never the treatment</b>
-          <p>Voice mode is decided every turn outside the conversational LLM, and it never changes the routed model, the directives or escalation (G9). AI Decide sees only the caller's words, the agent's previous line and the current mode: never the tier, name, customer id, dataset prompt or retrieved documents (G10). A deterministic policy makes at most one change per turn, and an explicit exit is always honored (G12).</p>
+          <p>Voice mode is decided every turn outside the conversational LLM, and it never changes the routed model, the directives or escalation (G9). AI Decide sees only the caller's words, the agent's previous line (its last 200 characters) and the current mode: never the tier, name, customer id, dataset prompt or retrieved documents (G10). The one indirect route is that previous line, which can echo the caller's first name from the greeting. A deterministic policy makes at most one change per turn, and an explicit exit is always honored (G12).</p>
         </div>
       </div>
 
@@ -861,7 +864,7 @@
     <p>
       <b>Two writes, then read-only forever.</b> One time per world, the studio drafts synthetic
       documents, customers, and records through the gateway and embeds them into Lakebase
-      (<span class="mono">schema ug</span>) with FMAPI. After that, every path a live call touches
+      (<span class="mono">schema ug</span>) with a Unity Gateway embedding model. After that, every path a live call touches
       (routing, retrieval, tier lookup) only reads, and the voice mode is per-call state that is
       never written to Lakebase.
     </p>
@@ -968,7 +971,7 @@
         svgOrigin: (bb.x + bb.width / 2) + " " + (bb.y + bb.height / 2), clearProps: "transform" });
   }
 
-  /* One looping signal packet down the live call spine: caller -> studio -> LiveKit ->
+  /* One looping signal packet down the live call spine: caller -> LiveKit ->
      STT -> voice mode -> LLM turn -> the model the app picked at the gateway. Rides the
      authored #spinePath via MotionPathPlugin so the motion tracks the drawn edges instead of
      cutting across the boxes. */
