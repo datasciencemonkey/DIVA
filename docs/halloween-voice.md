@@ -36,7 +36,9 @@ On a deployed app, four things live outside the repo, so the repo can only refer
    deploying, since `valueFrom` only resolves once the resource exists.
 3. **Pick a voice and set `UG_HALLOWEEN_VOICE_ID`** (a commented placeholder in `app.yaml`). Until it is set,
    Halloween mode uses the Deepgram fallback voice.
-4. **Confirm the app can reach `api.elevenlabs.io`.** Outbound egress to it has not been verified yet.
+4. **Confirm the app can reach `api.elevenlabs.io`.** It could from the first deployed app we tried (2026-10-05, no
+   fallback in the logs). A workspace with egress controls may block it, and the call then carries on in the Deepgram
+   fallback voice.
 
 ## The cues
 
