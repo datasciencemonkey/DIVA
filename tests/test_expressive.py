@@ -8,6 +8,7 @@ The chain under test is the one the session installs as `tts_text_transforms`:
 bare `[` (C7); decode_tags restores them for the TTS. The stock filters are imported lazily, inside the tests
 that pin behavior against them: the module under test must itself import without LiveKit.
 """
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -58,10 +59,12 @@ LONG_LINK = ("[our complete returns policy, including the exceptions for opened 
 
 # ------------------------------------------------------------------ vocabulary
 
-def test_spooky_vocabulary_is_the_spec_set():
+def test_spooky_vocabulary_is_the_flattened_palette():
+    from src.expressive_palette import PALETTE, flatten
+
+    assert SPOOKY_TAGS == flatten(PALETTE)
     # crying, sound effects (gunshot, explosion) and accent tags are left out on purpose (§7.8)
-    assert SPOOKY_TAGS == ("whispers", "sighs", "laughs", "mischievously", "nervously", "exhales",
-                           "inhales deeply")
+    assert not {"crying", "gunshot", "explosion"} & set(SPOOKY_TAGS)
 
 
 # ------------------------------------------------------------------ encode / decode
@@ -457,3 +460,65 @@ def test_module_imports_without_livekit():
         "assert not bad, bad"
     )
     subprocess.run([sys.executable, "-c", code], check=True, cwd=Path(__file__).resolve().parents[1])
+
+
+# ------------------------------------------------------------------ Plan 6: the richer palette
+
+MULTI_WORD = next((t for t in SPOOKY_TAGS if " " in t), None)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("tag", SPOOKY_TAGS)
+async def test_every_palette_tag_round_trips_whole_and_split_into_characters(tag):
+    whole = await collect(encode_tags(all_tags), [f"a [{tag}] b"])
+    assert await collect(decode_tags, [whole]) == f"a [{tag}] b"
+    split = await collect(encode_tags(all_tags), list(f"a [{tag}] b"))   # one character per chunk
+    assert await collect(decode_tags, [split]) == f"a [{tag}] b"
+
+
+@pytest.mark.asyncio
+async def test_case_and_spacing_from_the_model_are_forgiven():
+    tag = SPOOKY_TAGS[0]
+    mid = await collect(encode_tags(all_tags), [f"x [  {tag.upper()}  ] y"])
+    assert has_pua(mid) and await collect(decode_tags, [mid]) == f"x [{tag}] y"
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(MULTI_WORD is None, reason="the palette has no multi-word tag")
+async def test_inner_spacing_of_a_multi_word_tag_is_collapsed():
+    first, *rest = MULTI_WORD.split()
+    messy = f"[{first.title()}   {'    '.join(rest)}]"
+    mid = await collect(encode_tags(all_tags), [messy])
+    assert await collect(decode_tags, [mid]) == f"[{MULTI_WORD}]"
+
+
+@pytest.mark.asyncio
+async def test_canonicalising_never_widens_what_can_be_spoken():
+    for bad in ("[not-a-cue]", "[whisper-ish]", "[Explosion]", "[ ]"):
+        mid = await collect(encode_tags(all_tags), [f"a {bad} b"])
+        assert mid == "a  b", bad                  # dropped, and nothing decodes to it
+
+
+@pytest.mark.asyncio
+async def test_on_tag_receives_the_canonical_name():
+    seen = []
+    tag = SPOOKY_TAGS[0]
+    await collect(encode_tags(all_tags, seen.append), [f"[{tag.title()}]"])
+    assert seen == [tag]
+
+
+@pytest.mark.asyncio
+async def test_a_vocabulary_written_with_odd_case_or_spacing_still_matches():
+    mid = await collect(encode_tags(lambda: frozenset({"Sinister  Laugh"})), ["[sinister laugh]"])
+    assert has_pua(mid)
+
+
+def test_the_studios_client_side_strip_removes_every_palette_tag():
+    js = (Path(__file__).resolve().parent.parent / "app" / "web" / "public" / "studio.js").read_text(encoding="utf-8")
+    found = re.search(r"const CUE_RE = /(.+)/g;", js)
+    assert found, "CUE_RE not found in studio.js"
+    cue = re.compile(found.group(1))                # plain enough to mean the same thing in Python
+    for tag in SPOOKY_TAGS:
+        assert cue.sub("", f"a [{tag}] b") == "a  b", tag
+    assert cue.sub("", "see [a link](http://x) here") == "see [a link](http://x) here"
+    assert cue.sub("", "plain text, no cues") == "plain text, no cues"
