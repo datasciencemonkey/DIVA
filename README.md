@@ -181,7 +181,7 @@ Databricks-served model through Unity Gateway.
   values, an unknown tier, too many calls), `3` a gateway request failed.
 
 The last full pass rests on 2 samples per utterance (48 calls), not the default 3, and it predates the laughter rule
-below, which was checked afterwards only by spot checks (12 story replies), not by a full run. Several targets allow no
+below, which was checked afterwards only by spot checks (three story replies per tier), not by a full run. Several targets allow no
 misses at all (a stage direction, a stacked cue, a missing fact), so one stray reply can trip them: read the results as
 encouraging, not proof, and re-run with the default after any change to the prompt, a tier model, the palette or the
 voice. The figures, and how the prompt was tuned, are in

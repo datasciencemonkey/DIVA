@@ -49,11 +49,12 @@ _CUE = re.compile(r"\[([^\[\]\n]{0,118})\](?!\()")
 
 # Laughter spelled out as words. The TTS would read these aloud instead of laughing, so a laugh must be a cue.
 _WRITTEN_LAUGH = re.compile(
-    r"\b(?:ha){2,}h?\b"                 # haha, hahaha
-    r"|\bha(?:[\s,.!-]+ha)+\b"          # ha ha, ha, ha, ha-ha
-    r"|\b(?:he){2,}\b"                  # hehe
-    r"|\b(?:mu|mw|bw)a(?:ha)+h?\b"      # muahaha, mwahaha, bwahaha
-    r"|\*[^*\n]{2,30}\*",               # *laughs*, *sighs*
+    r"\b\w{0,4}(?:ha){2,}h?\b"                                     # haha, muhahaha, ahahaha, nyahaha, bwahaha
+    r"|\bha(?:[\s,.!?…—-]+ha)+\b"                                   # ha ha, ha, ha, ha-ha, ha… ha
+    r"|\b(?:he){2,}\b"                                             # hehe
+    r"|\b(?:heh|hee|hah)(?:[\s,.!?…—-]+(?:heh|hee|hah))+\b"        # heh heh, hee hee
+    r"|\*[^*\n]{2,30}\*"                                           # *laughs*, *sighs*
+    r"|\(\s*(?:\w+\s+){0,2}(?:laugh|chuckl|giggl|cackl|snicker|snort|gasp|sigh|groan)\w*[^()\n]{0,20}\)",  # (laughs)
     re.IGNORECASE)
 
 

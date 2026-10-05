@@ -128,9 +128,11 @@ def test_measure_counts_sound_cues_from_the_breath_group_only_when_the_vocabular
 
 
 def test_measure_counts_laughter_written_out_as_words():
-    for text in ("Ha ha ha, boo!", "Hahaha! Boo.", "They giggled, hehe.", "Muahaha, boo.", "Boo *laughs* and leaves."):
+    for text in ("Ha ha ha, boo!", "Hahaha! Boo.", "They giggled, hehe.", "Muahaha, boo.", "Boo *laughs* and leaves.",
+                 "Muhahaha! The lamp blinked.", "(laughs) Boo.", "Heh heh, boo.", "Ha… ha… ha…"):
         assert chk.measure(text, VOCAB).written_laughs >= 1, text
-    for text in ("Ahab chased the whale.", "He had a hard time with the hat.", "Order 48213 shipped on Tuesday."):
+    for text in ("Ahab chased the whale.", "He had a hard time with the hat.", "Order 48213 shipped on Tuesday.",
+                 "Minnehaha walked by the lake.", "Not he. He was asleep."):
         assert chk.measure(text, VOCAB).written_laughs == 0, text
     assert chk.measure("[laughs] It shipped. [gasps] It arrives Friday.", SOUNDS).written_laughs == 0   # a cue is not written out
 
