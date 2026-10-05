@@ -232,3 +232,28 @@ def test_the_steady_instructions_still_reach_a_same_turn_patch_with_the_cue_rule
     steady = _cues()
     patched = f"{steady}\n\n{ON_NOTE}"          # what VoiceModeController patches into the switching reply
     assert "Expressive cues" in patched and patched.endswith("Follow the rules above.")
+
+
+# --- Plan 6 T4: wording tuned against the real tier models (tools/expressive_llm_check.py) ---
+
+def test_the_persona_lets_the_monster_tell_a_story_but_keeps_business_facts_out_of_it():
+    # Without this line the stronger tier models answered "tell me a story" with "I don't have that from my tools".
+    p = HALLOWEEN_PERSONA
+    assert "spooky story" in p and "made-up" in p
+    assert "real orders, prices, policies, and people" in p
+    assert "exactly as the tools return it" in p          # facts still come from the tools
+
+
+def test_rules_use_only_listed_cues_open_every_reply_and_never_trail_a_cue():
+    out = _cues()
+    assert "Use only cues from the lists above" in out
+    assert "Open every reply with a cue" in out
+    assert "cue almost every sentence" in out
+    assert "Never end a sentence or a line with a cue" in out
+
+
+def test_the_story_example_cues_each_beat_with_cues_from_different_groups():
+    story = next(l for l in _cues().splitlines() if l.startswith("Example of a story beat"))
+    cues = re.findall(r"\[([^\]]+)\]", story)
+    category = {tag: name for name, members in PALETTE.items() for tag in members}
+    assert len(cues) >= 3 and len({category[c] for c in cues}) >= 3

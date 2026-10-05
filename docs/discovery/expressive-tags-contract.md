@@ -122,3 +122,59 @@ Keep `UG_HALLOWEEN_STABILITY` at 0.5. Neither setting read a cue aloud, so nothi
 - **`performed` is not "performed as intended".** The tool sees only the words Deepgram hears and the clip length, which moves in steps of about 78 ms. It cannot hear timbre, loudness or mood, so it cannot tell that `whisper` whispers or that `menacing` sounds menacing. It shows only that the voice did something other than read the word out. A listen is the last check (README, "Verifying the voice").
 - **How strong the evidence is.** The strong result is that no tag was read aloud: none of the 134 tagged renderings contained a word of its tag, and the control above shows the check does fire. The `performed` verdict is weaker, because it rests on clip length. 49 of the 67 tags cleared the bar on both carriers and 18 on one carrier only (`exhales`, `snorts`, `exhales sharply`, `whisper`, `soft`, `quietly`, `sinister`, `sarcastic`, `dramatic`, `smug`, `playful`, `thoughtful`, `pause`, `long pause`, `slowly`, `hesitates`, `slow`, `short pause`). Six cleared it with no margin at all: their largest shift equals the bar exactly, 0.16 s or two audio steps, and five of them (`whispers`, `curious`, `smug`, `pause`, `slow`) would not be `performed` under a strict comparison. Their shifts on the two carriers were `snorts` (+0.16 s, 0.00 s), `whispers` (-0.16 s, +0.16 s), `curious` (+0.16 s, +0.16 s), `smug` (0.00 s, -0.16 s), `pause` (-0.16 s, 0.00 s) and `slow` (0.00 s, +0.16 s). Five renderings also differed from the plain transcript, each because Deepgram heard "were" for "went" on the second carrier (`shaky breath`, `giggles`, `snorts`, `sinister`, `amused`): recognition noise, not a tag word. Read the palette as "no tag failed", not as "every tag works". Check first by ear the six tags above and the volume cues (`whispers`, `whisper`, `whispering`, `soft`, `softly`, `quietly`, `hushed`), whose effect is loudness, which this method cannot measure.
 - **Run-to-run variation.** Each tag was rendered once per carrier, and the noise floor comes from one pair of plain renderings per carrier, shared by every tag. In the full run that pair differed by 0.08 s (one audio step), so the bar was 0.16 s, barely above its 0.15 s floor. In an earlier 4-synthesis smoke run on the same voice the first carrier's pair differed by more than 0.27 s, and `whispers`, `performed` here, came back `no-audible-effect`. Verdicts near the bar are therefore not stable from run to run, and a tag that is read aloud only now and then could pass two renderings.
+
+## LLM compliance results
+
+_Run 2026-10-04 with `tools/expressive_llm_check.py`: 7 scripted utterances x 2 samples on each tier's model (Standard / Premium / VIP), `reasoning.effort=low`, the exact Halloween instructions the agent sends, every request to the Databricks Unity Gateway. The baseline before tuning used 3 samples per utterance. Tuning was limited to one round and one re-run, so the final figures rest on 2 samples per utterance._
+
+### After tuning (7 utterances x 2 samples)
+
+**Standard** — `system.ai.gpt-5-nano`  (cue section ≈ +658 input tokens)
+- story cues/100 words: median 6.7   factual: median 12.1
+- median reply length (words): story 66   factual 16   short 16
+- distinct cues: 13   compliance: 100% (exact spelling 100%)
+- stage directions: 0   stacked: 0   cues inside facts: 0   replies missing a fact: 0
+- verdict: PASS
+
+**Premium** — `system.ai.gpt-5-5`  (cue section ≈ +658 input tokens)
+- story cues/100 words: median 7.6   factual: median 12.5
+- median reply length (words): story 66   factual 16   short 14
+- distinct cues: 8   compliance: 100% (exact spelling 100%)
+- stage directions: 0   stacked: 0   cues inside facts: 0   replies missing a fact: 0
+- verdict: PASS
+
+**VIP** — `system.ai.gpt-6-sol`  (cue section ≈ +658 input tokens)
+- story cues/100 words: median 7.5   factual: median 10.6
+- median reply length (words): story 58   factual 18   short 13
+- distinct cues: 9   compliance: 100% (exact spelling 100%)
+- stage directions: 0   stacked: 0   cues inside facts: 0   replies missing a fact: 0
+- verdict: PASS
+
+### Before -> after
+
+Baseline: the Task 3 prompt and the first version of the harness, 7 utterances x 3 samples (cue section ≈ +599 input tokens on all three models). An asterisk marks replies that were refusals, not stories.
+
+| | Standard | Premium | VIP |
+|---|---|---|---|
+| story cues/100 words (median) | 5.6 -> 6.7 | 9.1* -> 7.6 | 9.5* -> 7.5 |
+| story reply length (median words) | 110 -> 66 | 22* -> 66 | 21* -> 58 |
+| distinct cues | 12 -> 13 | 4 -> 8 | 5 -> 9 |
+| compliance | 90% -> 100% | 100% -> 100% | 100% -> 100% |
+| stage directions / stacked cues | 1 / 2 -> 0 / 0 | 0 / 0 -> 0 / 0 | 0 / 0 -> 0 / 0 |
+| replies missing a fact | 0 -> 0 | 0 -> 0 | 9 -> 0 |
+| verdict | FAIL -> PASS | FAIL -> PASS | FAIL -> PASS |
+
+What the baseline showed and what changed:
+
+- **Premium and VIP would not tell a story.** The governance block says to answer only from the tools, and a story is not in the tools, so both answered "tell me a scary story" with a 17-24 word deflection ("I don't have a story from my tools"). The deflection met the density and compliance targets but used only 4-5 distinct cues. The persona gained one bullet: a spooky story is play, not information; tell a made-up tale of four or five short sentences right away, no tool needed, and keep real orders, prices, policies and people out of it. Every other persona safety line and the whole governance block are unchanged, governance is still last, and facts about the business still come only from the tools (the "moon base" question is still answered with an "I don't have ..." abstention).
+- **Standard wrote long stories (median 110 words) and strayed from the list.** It invented cues (`calm` four times, `gently`, `closing`), garbled one (`[dramat ic pause]`, which the tool counts as a stage direction because it has three words), and twice ended a line with `[pause]` just before a newline and the next cue, which the tool counts as stacked. The cue rules now say: use only cues from the lists and write none if none fits; open every reply with a cue; in a story cue almost every sentence; a short factual answer needs just one or two cues in all; never end a sentence or a line with a cue. The story bullet's "four or five short sentences" cut Standard's stories to a median of 66 words.
+- **The story example grew** from two beats to four, with cues from four groups (pacing, volume, breath, attitude), so the models copy a length and a variety; the fourth, breath, slot is dropped for a voice with no cue left for it. The cue section grew from 2,095 to 2,331 characters, which the tool measures as +599 -> +658 input tokens.
+- **Two harness corrections, not prompt changes.** (1) VIP had treated the lookup result pasted into the caller's message as the caller's claim and answered "I don't have a verified order lookup": all 9 factual replies lacked their facts. The tool now hands over a lookup result as a recorded tool call with its output, the way the agent's tools do, and the order question also asks for the total (a model that is not asked for the total rightly leaves it out). A 27-call probe with the original prompt showed the facts mostly restored (one reply left out the unasked total) and the story refusals unchanged. (2) A reply to a story request must be at least 25 words: every observed refusal was 24 words or fewer.
+
+Reading these figures:
+
+- **Small samples.** 2 replies per utterance is thin for targets that allow nothing: a single stray reply can add a stage direction, a stacked cue or a missing fact. Standard produced 3 such incidents (a stage direction and two stacked cues, in 2 of 21 replies) before tuning and none in 14 replies after, which is encouraging, not proof. Re-run the tool with its default 3 samples whenever the prompt, a tier model, the palette or the voice changes.
+- **One-step emulation.** The tool shows the model a recorded tool result and a stand-in dataset prompt; it does not run the agent's tools or hold a multi-turn conversation.
+- **Cues, not sound.** It measures what the models write. Whether a cue sounds right is the listen in the README ("Verifying the voice").
+
+Targets (initial; changed only with evidence, recorded here): story median >= 5 cues per 100 words; >= 6 distinct cues per model; >= 1 cue in every factual reply; >= 95% of cues are vocabulary members once case/spacing are forgiven; 0 cues inside facts, stage directions, stacked cues, or missing facts. Added with the evidence above: no reply to a story request is shorter than 25 words.

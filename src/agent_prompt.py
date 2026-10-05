@@ -42,6 +42,8 @@ savour every pause and let the tension build before each reveal, with dramatic p
 - Never be threatening, cruel, gory, or genuinely frightening. Keep it fun.
 - The act colors only your delivery. State every fact, number, date, name, and order detail plainly and
   exactly as the tools return it.
+- A spooky story is play, not information. If the caller asks for one, tell a made-up tale of four or five short
+  sentences right away; no tool is needed for it. Keep real orders, prices, policies, and people out of the tale.
 - If the caller sounds uncomfortable, drop the act and offer the normal voice.
 - If the caller asks for the normal voice, say "As you wish…" (the system switches the voice back).
 """.strip()
@@ -98,42 +100,48 @@ _CUE_INTRO = (
 
 _CUE_RULES = (
     "Rules for cues:\n"
-    "- Write each cue EXACTLY as listed (lowercase, square brackets included) and use no other bracketed text. "
-    "Never put words you want spoken inside brackets.\n"
-    "- Open your reply with a cue, then start each new beat with a cue: at most one per sentence, never two in a "
-    "row, and vary them. A short factual answer needs just one or two.\n"
-    "- A cue colors only the next few words, so cue each new beat again; nothing carries over.\n"
-    "- Put each cue right before the words it colors.\n"
+    "- Use only cues from the lists above, written EXACTLY as listed (lowercase, square brackets included). If no "
+    "listed cue fits, write no cue. Use no other bracketed text, and never put words you want spoken inside "
+    "brackets.\n"
+    "- Open every reply with a cue. In a story, cue almost every sentence: at most one per sentence, never two in a "
+    "row, and vary them. A short factual answer needs just one or two cues in all.\n"
+    "- A cue goes right before the words it colors and colors only the next few words, so cue each new beat again; "
+    "nothing carries over. Never end a sentence or a line with a cue.\n"
     "- Never put a cue inside a number, date, name, or any other fact. Say the fact plainly, then cue the next line.\n"
     "- To build suspense, use short sentences, a cue, a pause (…), then the reveal."
 )
 
 # The worked examples teach only cues the voice really has. Each slot takes the first cue, in this order, that is not
 # already used: a preferred cue the voice performs, else a cue of the slot's group, else any cue it has. With fewer
-# than three cues there is no example.
+# than three cues there is no example; the fourth slot (a breath or sound) is left out when no cue is left for it.
 _EXAMPLE_SLOTS = (
     ("volume", ("whispers", "whisper", "soft")),
     ("emotion", ("mischievously", "menacing", "sinister", "dismissive")),
     ("pacing", ("building tension", "pause", "slowly")),
+    ("breath", ("sighs", "exhales", "gasps")),
 )
+_REQUIRED_SLOTS = 3
 
 
 def _examples(available: frozenset[str], groups: list[tuple[str, tuple[str, ...]]]) -> list[str]:
     by_group = dict(groups)
     everything = [t for _, members in groups for t in members]
-    picks: list[str] = []
+    picks: list[str | None] = []
     for category, preferred in _EXAMPLE_SLOTS:
         options = [t for t in preferred if t in available] + list(by_group.get(category, ())) + everything
         tag = next((t for t in options if t not in picks), None)
-        if tag is None:
+        if tag is None and len(picks) < _REQUIRED_SLOTS:
             return []
         picks.append(tag)
-    soft, attitude, tension = picks
+    soft, attitude, tension, breath = picks
+    story = f"[{tension}] The door creaked open… and nobody was there. [{soft}] Nobody ever is."
+    if breath:
+        story += f" [{breath}] The candle shivered, and the hallway grew cold."
+    story += f" [{attitude}] Then a small ghost asked to borrow your coat."
     return [
         "Example of a short answer (do not copy the words): "
         f"[{soft}] Your order shipped on Tuesday. [{attitude}] It should reach you by Friday.",
-        "Example of a story beat (do not copy the words): "
-        f"[{tension}] The door creaked open… and nobody was there. [{soft}] Nobody ever is.",
+        f"Example of a story beat (do not copy the words): {story}",
     ]
 
 
