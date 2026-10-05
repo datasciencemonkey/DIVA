@@ -14,8 +14,8 @@
 
 **A blueprint for real-time voice agents on Databricks.** You open a browser, click call, and talk to an AI support
 agent. Apart from the audio pipe, every layer runs on Databricks: the agent is a custom agent hosted on Databricks
-Apps, every chat and embedding call goes through Unity Gateway, its answers come from Lakebase, and every call lands in
-MLflow as a trace.
+Apps, every chat and embedding call goes through Unity Gateway, its answers come from Lakebase, and with tracing on
+every call lands in MLflow as a trace.
 
 ## Built on Databricks
 
@@ -23,9 +23,9 @@ MLflow as a trace.
 |:-:|---|---|
 | ✅ | **[Custom agent on Agent Bricks](https://www.databricks.com/blog/agent-bricks-dais-2026)** | The voice agent is your own code, a LiveKit Agents worker. Agent Bricks supports custom agents built with any framework and hosts them on Databricks Apps. |
 | ✅ | **[Databricks Apps](https://www.databricks.com/product/databricks-apps)** | The web tier and the agent run as one app in one container, with one deploy. |
-| ✅ | **[Lakebase](https://www.databricks.com/product/lakebase) + [Lakebase Search](https://www.databricks.com/blog/lakebase-search-state-art-full-text-and-vector-search-postgres)** | Postgres holds every world (documents, customers, records). ANN vector search grounds each answer in it. |
-| ✅ | **[Unity Gateway](https://www.databricks.com/blog/unity-ai-gateway-generally-available)** | Serves every chat and embedding call, so it powers all the LLMs. The caller's loyalty tier picks the model, and token usage and an indicative cost show up live. |
-| ✅ | **[MLflow traces](https://docs.databricks.com/aws/en/mlflow3/genai/tracing/trace-unity-catalog)** | Each call is traced over OpenTelemetry into Unity Catalog and read as an MLflow trace. |
+| ✅ | **[Lakebase](https://www.databricks.com/product/lakebase) + [Lakebase Search](https://www.databricks.com/blog/lakebase-search-state-art-full-text-and-vector-search-postgres)** | Postgres holds each generated world (a fictional company's documents, customers and records), and Lakebase Search ANN finds the passages the agent answers from. |
+| ✅ | **[Unity Gateway](https://www.databricks.com/blog/unity-ai-gateway-generally-available)** | Serves every chat and embedding call, so it powers all the LLMs. The app routes each loyalty tier to a model, the gateway serves it, and token usage and an indicative cost show up live. |
+| ✅ | **[MLflow traces](https://docs.databricks.com/aws/en/mlflow3/genai/tracing/trace-unity-catalog)** | When tracing is on, each call's spans go over OpenTelemetry into a Unity Catalog table and show up as an MLflow trace. |
 | ✅ | **[AI Decide](https://www.databricks.com/blog/introducing-aidecide-make-fast-decisions-your-governed-data)** (`ai_decide`) | Makes a fast decision on every turn, beside the LLM, about whether to change the experience mid-call. Say "switch to the spooky voice" and the whole studio follows. |
 
 The reference implementation is the **Unity Gateway Voice Studio**, a customer-support agent where each fictional
@@ -62,17 +62,17 @@ flowchart LR
         ML[("Unity Catalog + MLflow<br/>call traces")]
     end
 
-    B -->|"token"| W
-    B <-->|"WebRTC audio"| LK
-    LK -->|"dispatch"| A
+    B -->|"studio + token"| W
+    B <-->|"WebRTC audio + data"| LK
+    LK <-->|"dispatch, audio, data"| A
     A <-->|"STT + TTS"| DG
     A -.-> EL
     A -->|"chat + embeddings"| UG
-    A -->|"tools"| LB
+    A -->|"bind + tools"| LB
     A -.->|"each turn"| AD
-    A -->|"OTLP spans"| ML
+    A -.->|"OTLP spans"| ML
     W -->|"generate a world"| UG
-    W -->|"write"| LB
+    W <-->|"worlds"| LB
 
     classDef dbx fill:#FF3621,stroke:#B22416,color:#ffffff
     classDef ext fill:#F3F4F6,stroke:#9CA3AF,color:#111827
@@ -83,7 +83,7 @@ flowchart LR
     style EXT fill:#FAFAFA,stroke:#D1D5DB
 ```
 
-The red boxes run on Databricks. A call goes like this:
+The red boxes run on Databricks, and dotted lines are optional. A call goes like this:
 
 1. **Join.** The web tier mints a short-lived LiveKit token, the browser joins a room on LiveKit Cloud, and LiveKit
    dispatches the agent into it.
@@ -94,24 +94,16 @@ The red boxes run on Databricks. A call goes like this:
 4. **Ground.** `semantic_search` runs a Lakebase Search ANN query over the caller's dataset, after embedding the
    question through the gateway. `record_lookup` reads only the caller's own records.
 5. **Decide.** On every turn AI Decide runs beside the model and may switch the voice mode. A deterministic policy
-   applies the change, and the model, the tier and the governance rules stay as they were.
+   applies the change, and the model, the tier and the governance rules stay as they were (one exception: a made-up
+   spooky story needs no tool).
 6. **Show and trace.** Evidence (routing decision, retrieval hits, token usage, voice mode) streams to the UI over the
-   LiveKit data channel. Spans flush over OTLP into Unity Catalog, where they read as MLflow traces.
+   LiveKit data channel. With tracing on, spans flush over OTLP into Unity Catalog, where they read as MLflow traces.
 
 Before any call the studio can generate a world: a fictional company with documents, customers and records. Unity
 Gateway drafts them and embeds the documents, and everything is written to Lakebase in one transaction. The full
 walkthrough is in
 [`docs/architecture.md`](docs/architecture.md), and the running app serves an interactive version at
 `/architecture.html`.
-
-## Halloween mode
-
-Say "switch to the spooky voice" and the whole studio changes with it. **[AI Decide](https://www.databricks.com/blog/introducing-aidecide-make-fast-decisions-your-governed-data)**
-classifies each turn outside the LLM, the agent switches to an ElevenLabs monster voice that performs audio cues such as
-`[whispers]` and `[laughs]`, and the UI cross-fades into an "All Hallows' Console" theme. The tier, the model and the
-governance rules don't change. It's optional: without ElevenLabs the call uses a darker Deepgram voice, and
-`UG_AI_DECIDE=0` turns it off. Setup, settings, the cue palette and how to verify the voice are in
-[`docs/halloween-voice.md`](docs/halloween-voice.md).
 
 ## Prerequisites
 
@@ -138,9 +130,10 @@ export UG_GEN_MODEL=system.ai.gpt-5-4 UG_EMBED_MODEL=system.ai.gte-large-en   # 
 uv run python infra/apply_schema.py                  # schema + ANN/BM25 indexes
 uv run python generate.py "Northwind Outfitters"     # optional: generate a world from the CLI
 
-uv run python app/agent.py dev                       # agent worker
-uv run python app/web_server.py                      # studio UI on http://localhost:8000 (PORT overrides)
-uv run pytest -q --ignore=tests/test_integration_data_plane.py   # that one test is live and writes two worlds
+# Run each of these in its own terminal: the agent and the web tier keep running until you stop them.
+uv run python app/agent.py dev                       # terminal 1: agent worker; wait for "registered worker"
+uv run python app/web_server.py                      # terminal 2: studio UI on http://localhost:8000 (PORT overrides)
+uv run pytest -q --ignore=tests/test_integration_data_plane.py   # terminal 3: that one test is live and writes two worlds
 ```
 
 The agent worker reads `.env.local` itself. The web tier reads it too, but only after it has fixed `UG_SCHEMA` and
@@ -160,13 +153,24 @@ or you can hand it to a coding agent with the skill loaded. The short version:
    `uv pip compile agent-requirements.in --python-version 3.11 -o agent-requirements.txt`.
 2. Put the 6 secrets (LiveKit URL, key and secret; Deepgram key; Databricks token; ElevenLabs key) in a secret scope and
    attach each to the app as a resource. `app.yaml` reads them through `valueFrom`, which only resolves once the
-   resource exists, so attach all six before the first deploy ([details](docs/halloween-voice.md#turn-it-on)).
+   resource exists, so attach all six before the first deploy ([details](docs/halloween-voice.md#turn-it-on)). No
+   ElevenLabs key? Delete the `ELEVEN_API_KEY` entry from `app.yaml` and attach the other five: Halloween mode then uses
+   the Deepgram voice.
 3. Give the app's service principal `READ` on the scope and `CAN_MANAGE` on the workspace source folder.
 4. Start the app, `databricks sync` a staging folder with `--full`, then run `databricks apps deploy`.
 5. Tail `databricks apps logs`. You should see the web tier listening, then `registered worker` 30–60 seconds later.
 
 Stuck? [`docs/gotchas.md`](docs/gotchas.md) lists the traps we hit (LiveKit, the Databricks platform, deploys, tracing)
 and the fix for each.
+
+## Halloween mode
+
+Say "switch to the spooky voice" and the whole studio changes with it. **[AI Decide](https://www.databricks.com/blog/introducing-aidecide-make-fast-decisions-your-governed-data)**
+classifies each turn outside the LLM, the agent switches to an ElevenLabs monster voice that performs audio cues such as
+`[whispers]` and `[laughs]`, and the UI cross-fades into an "All Hallows' Console" theme. The tier, the model and the
+governance rules don't change (one exception: on request the monster tells a made-up story, which needs no tool). It's
+optional: without ElevenLabs the call uses a darker Deepgram voice, and `UG_AI_DECIDE=0` turns it off. Setup, settings,
+the cue palette and how to verify the voice are in [`docs/halloween-voice.md`](docs/halloween-voice.md).
 
 ## Make it yours
 
@@ -213,28 +217,20 @@ The call connects but no agent joins. Follow the skill.
 
 ## Further reading
 
-The repo is [datasciencemonkey/diva](https://github.com/datasciencemonkey/diva). If you're sharing it with someone, these
-are the posts and docs worth sending along.
+The repo is [datasciencemonkey/diva](https://github.com/datasciencemonkey/diva). If you're sharing it with someone, start
+with these; [`docs/README.md`](docs/README.md#more-reading) has the longer list.
 
 - **Agent Bricks and Databricks Apps:** [Agent Bricks at Data + AI Summit 2026](https://www.databricks.com/blog/agent-bricks-dais-2026) ·
-  [Databricks Apps is Generally Available](https://www.databricks.com/blog/announcing-general-availability-databricks-apps) ·
-  [Production-ready data and AI apps with Databricks Apps and Lakebase](https://www.databricks.com/blog/how-build-production-ready-data-and-ai-apps-databricks-apps-and-lakebase) ·
-  Docs: [Databricks Apps](https://docs.databricks.com/aws/en/dev-tools/databricks-apps/) · [Deploy a Databricks app](https://docs.databricks.com/aws/en/dev-tools/databricks-apps/deploy) · [Use agents on Databricks](https://docs.databricks.com/aws/en/agents/custom-agents/build-agents)
+  Docs: [Databricks Apps](https://docs.databricks.com/aws/en/dev-tools/databricks-apps/)
 - **Unity Gateway:** [Generally Available](https://www.databricks.com/blog/unity-ai-gateway-generally-available) ·
-  [What's new at Data + AI Summit 2026](https://www.databricks.com/blog/ai-governance-data-ai-summit-2026-whats-new-unity-ai-gateway) ·
-  [Service policies, guardrails, observability and cost controls](https://www.databricks.com/blog/whats-new-unity-ai-gateway-service-policies-guardrails-observability-and-cost-controls-ai) ·
-  [Governance layer for agentic AI](https://www.databricks.com/blog/ai-gateway-governance-layer-agentic-ai) ·
-  Docs: [Unity Gateway](https://docs.databricks.com/aws/en/unity-gateway/) · [AI governance with Unity Gateway](https://docs.databricks.com/aws/en/ai-gateway/)
+  Docs: [Unity Gateway](https://docs.databricks.com/aws/en/unity-gateway/)
 - **Lakebase:** [Lakebase Search: full text and vector search for Postgres](https://www.databricks.com/blog/lakebase-search-state-art-full-text-and-vector-search-postgres)
   (`lakebase_vector` ANN + `lakebase_text` BM25; DIVA builds both and the voice tool uses ANN) ·
-  [Build apps with Lakebase and Databricks Apps](https://www.databricks.com/blog/how-use-lakebase-transactional-data-layer-databricks-apps) ·
   Docs: [Lakebase Postgres](https://docs.databricks.com/aws/en/oltp/)
-- **MLflow traces:** Docs: [Store OpenTelemetry traces in Unity Catalog](https://docs.databricks.com/aws/en/mlflow3/genai/tracing/trace-unity-catalog) ·
-  [Tracing overview](https://docs.databricks.com/aws/en/mlflow3/genai/tracing/overview)
+- **MLflow traces:** Docs: [Store OpenTelemetry traces in Unity Catalog](https://docs.databricks.com/aws/en/mlflow3/genai/tracing/trace-unity-catalog)
 - **AI Decide:** [Introducing ai_decide: make fast decisions on your governed data](https://www.databricks.com/blog/introducing-aidecide-make-fast-decisions-your-governed-data) ·
-  Docs: [`ai_decide` SQL function](https://docs.databricks.com/aws/en/sql/language-manual/functions/ai_decide) · [REST API](https://docs.databricks.com/api/ai-functions/v1/ai-decide)
-- **The voice stack:** [LiveKit Agents](https://docs.livekit.io/agents/) (the realtime framework the worker runs on) ·
-  [Deepgram](https://developers.deepgram.com/docs/models-languages-overview) (STT `nova-3`, TTS `aura-2`)
+  Docs: [`ai_decide` SQL function](https://docs.databricks.com/aws/en/sql/language-manual/functions/ai_decide)
+- **The voice stack:** [LiveKit Agents](https://docs.livekit.io/agents/) · [Deepgram](https://developers.deepgram.com/docs/models-languages-overview)
 
 ## License
 

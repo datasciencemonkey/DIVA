@@ -9,7 +9,7 @@ audio with Deepgram, and classifies the tag:
   no-audible-effect  not read aloud, but indistinguishable from the plain carrier (safe, but useless)
 
 Judged by transcript and duration, not by ear: "performed" means the voice did something other than read the tag,
-not that it did the intended thing. A human listen is the last check (README, "Verifying the voice").
+not that it did the intended thing. A human listen is the last check (docs/halloween-voice.md, "Verify the voice").
 
 Credentials come from the gitignored .env.local and are never printed. The ElevenLabs key may be scoped to speech
 only, so this tool never calls an account or model endpoint.
