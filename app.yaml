@@ -67,15 +67,12 @@ env:
     value: "system.ai.gpt-5-4"
 
   # --- Plan 5: AI Decide, the per-turn voice-mode decision (non-secret) ---
-  # The default engine needs `ai_decide` enabled on the workspace (admin ->
-  # Previews). Without it, explicit requests still work; set
-  # UG_DECIDE_ENGINE=uaig_chat to decide with a gateway-served chat model instead.
+  # AI Decide decides the voice mode each turn by calling the Databricks
+  # `ai_decide` function. It needs `ai_decide` enabled on the workspace (admin ->
+  # Previews); without it, explicit requests still work through the rule-based
+  # check. UG_AI_DECIDE=0 is the kill switch.
   - name: UG_AI_DECIDE
     value: "1"                        # kill switch: "0" = never classify, stay in the standard voice
-  - name: UG_DECIDE_ENGINE
-    value: "ai_decide"                # ai_decide | uaig_chat
-  - name: UG_DECIDE_MODEL
-    value: "system.ai.gpt-5-4-nano"   # uaig_chat engine only; keep a GPT-family model (Claude rejects json_object)
   - name: UG_DECIDE_TIMEOUT_S
     value: "3.0"                      # limit on the background decision call
   - name: UG_DECIDE_CUE_WAIT_S

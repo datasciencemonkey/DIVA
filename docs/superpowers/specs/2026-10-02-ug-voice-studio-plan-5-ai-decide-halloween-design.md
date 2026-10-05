@@ -1,5 +1,7 @@
 # UG Voice Studio — Plan 5: Expressive Mode + AI Decide Halloween Voice — Design Spec
 
+> **Update 2026-10-05 (#45):** the alternate `uaig_chat` engine described below (a Unity Gateway chat model standing in as the decider, with `UG_DECIDE_ENGINE`, `UG_DECIDE_MODEL` and `UG_DECIDE_REASONING_EFFORT`) was removed. AI Decide now uses only the Databricks `ai_decide` REST API. This spec is kept as the record of the original design.
+
 **Date:** 2026-10-02
 **Status:** Implemented — build/UI/deploy tasks complete and reviewed; code-complete on `plan-5-halloween-mode`. Owner-gated discovery (Task 1) and live validation (Task 13) remain.
 **Branch / worktree:** `plan-5-halloween-mode` (from `plan-4-frontend` @ `da942cb`), worktree

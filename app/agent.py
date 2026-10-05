@@ -243,8 +243,6 @@ async def entrypoint(ctx: agents.JobContext):
     profiles = resolve_profiles(os.environ)   # reads the mapping it is given; build_tts reads os.environ
     decider = DecideClient(
         host, token,
-        engine=os.environ.get("UG_DECIDE_ENGINE") or "ai_decide",
-        model=os.environ.get("UG_DECIDE_MODEL") or "databricks-gpt-5-4-nano",
         timeout_s=float(os.environ.get("UG_DECIDE_TIMEOUT_S") or "3.0"),
     )
     if ai_decide_on:

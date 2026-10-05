@@ -1,15 +1,19 @@
-"""Per-turn voice-mode decision engines (spec §7.6): one `DecideClient`, two engines behind it.
+"""Per-turn voice-mode decision (spec §7.6): one `DecideClient`, one engine, the Databricks `ai_decide` function.
 
-    ai_decide   POST {host}/api/2.0/ai-functions/ai-decide           Databricks AI Decide (Beta); the default
-    uaig_chat   POST {host}/ai-gateway/openai/v1/chat/completions    a small GPT-family chat model, JSON mode
+    POST {host}/api/2.0/ai-functions/ai-decide    Databricks AI Decide (Beta)
+
+The call follows the official API reference (https://docs.databricks.com/api/ai-functions/v1/ai-decide): a
+`state`, one `choice` question with its `instructions` and `criteria`, and `options.version`. The answer sits at
+`response.answers.voice_mode`. There is no other engine and no stand-in model: where the function is not
+enabled on the workspace, the decision fails closed (below) and explicit requests still work through the rules.
 
 Pure async, no LiveKit: it owns an `httpx.AsyncClient`. It must never call the blocking
 `src.services.gateway.post` / `uaig_chat.complete_json` (sync `requests`): this runs on the session's event
 loop, and blocking that loop would stall the audio.
 
 The decider sees the caller and nothing else (G10): {current_mode, agent_said, caller_said}, truncated.
-The builders take no other input, so no tier, name, customer id, dataset prompt or retrieved document can
-reach an engine.
+The builder takes no other input, so no tier, name, customer id, dataset prompt or retrieved document can
+reach the function.
 
 Failure is closed. `classify` never raises (asyncio cancellation aside, which must propagate): a timeout
 or any error becomes IntentVerdict("none", 0.0, "timeout" | "error"), so the mode stays put and the
@@ -19,7 +23,6 @@ that arrives late is worth nothing to the turn. The `UG_AI_DECIDE=0` kill switch
 from __future__ import annotations
 
 import asyncio
-import json
 import math
 import os
 import re
@@ -29,12 +32,10 @@ import httpx
 
 from src.policy.voice_mode import IntentVerdict
 
-AI_DECIDE, UAIG_CHAT = "ai_decide", "uaig_chat"
-DEFAULT_MODEL = "databricks-gpt-5-4-nano"  # GPT family on purpose: Claude on the gateway rejects json_object
+AI_DECIDE = "ai_decide"
 DEFAULT_TIMEOUT_S = 3.0
 
 _AI_DECIDE_PATH = "/api/2.0/ai-functions/ai-decide"
-_CHAT_PATH = "/ai-gateway/openai/v1/chat/completions"
 _LABELS = ("enter", "exit", "none")  # a tuple: `x in tuple` tolerates an unhashable x (a malformed reply)
 _CALLER_MAX, _AGENT_MAX = 300, 200
 _TAG = re.compile(r"\[[^\[\]]{1,32}\]")  # an expressive tag such as [whispers] or [inhales deeply]
@@ -50,28 +51,17 @@ _CRITERIA = {
     "none": ("Anything else, including Halloween-related questions that are not about the voice "
              "(for example, opening hours on Halloween)."),
 }
-# uaig_chat carries the same instructions and criteria in its system message. The reply format has to say
-# "JSON": OpenAI rejects response_format json_object otherwise.
-_CHAT_SYSTEM = "\n".join([
-    _INSTRUCTIONS,
-    "",
-    "The user message is a JSON object with the fields current_mode, agent_said and caller_said.",
-    "Choose exactly one intent:",
-    *(f"- {label}: {text}" for label, text in _CRITERIA.items()),
-    "",
-    'Reply with only a JSON object: {"intent": "enter" | "exit" | "none", "confidence": <a number from 0 to 1>}',
-])
 
 _ERROR = IntentVerdict("none", 0.0, "error")
 _TIMEOUT = IntentVerdict("none", 0.0, "timeout")
 
 
 # ---------------------------------------------------------------------------------------
-# Request builders (pure)
+# Request builder (pure)
 # ---------------------------------------------------------------------------------------
 
 def _state(utterance: str, last_agent_line: str, current_mode: str) -> dict:
-    """The only data an engine gets. The agent's line loses its expressive tags and keeps its *end* (the
+    """The only data the function gets. The agent's line loses its expressive tags and keeps its *end* (the
     question the caller is answering comes last); the caller's words keep their start."""
     agent = " ".join(_TAG.sub(" ", last_agent_line or "").split())
     caller = " ".join((utterance or "").split())
@@ -90,25 +80,8 @@ def build_ai_decide_body(utterance: str, last_agent_line: str, current_mode: str
     }
 
 
-def build_uaig_chat_body(utterance: str, last_agent_line: str, current_mode: str, model: str, *,
-                         reasoning_effort: str | None = None) -> dict:
-    body = {
-        "model": model,  # GPT family only: Claude on the gateway rejects response_format json_object
-        "messages": [
-            {"role": "system", "content": _CHAT_SYSTEM},
-            {"role": "user", "content": json.dumps(_state(utterance, last_agent_line, current_mode),
-                                                   ensure_ascii=False)},
-        ],
-        "response_format": {"type": "json_object"},
-    }
-    # No `temperature`: reasoning models reject a non-default value (same as uaig_chat.complete_json).
-    if reasoning_effort:
-        body["reasoning_effort"] = reasoning_effort
-    return body
-
-
 # ---------------------------------------------------------------------------------------
-# Response parsers (pure, strict, total): anything that is not exactly an answer is an error verdict
+# Response parser (pure, strict, total): anything that is not exactly an answer is an error verdict
 # ---------------------------------------------------------------------------------------
 
 def _dig(obj, *path):
@@ -151,17 +124,6 @@ def parse_ai_decide(resp: dict | None) -> IntentVerdict:
     return _verdict(answer.get("choice"), answer.get("confidence"), answer.get("probabilities"))
 
 
-def parse_uaig_chat(resp: dict | None) -> IntentVerdict:
-    """`resp` is the chat completion; the model's JSON reply is {"intent": ..., "confidence": ...}."""
-    try:
-        reply = json.loads(_dig(resp, "choices", 0, "message", "content"))
-    except (TypeError, ValueError):  # no content, or content that is not JSON
-        return _ERROR
-    if not isinstance(reply, dict):
-        return _ERROR
-    return _verdict(reply.get("intent"), reply.get("confidence"))
-
-
 # ---------------------------------------------------------------------------------------
 # The client
 # ---------------------------------------------------------------------------------------
@@ -175,14 +137,6 @@ def _say(message: str) -> None:
 
 def _env(name: str) -> str:
     return os.environ.get(name, "").strip()
-
-
-def _engine_name(requested: str | None) -> str:
-    name = (requested or _env("UG_DECIDE_ENGINE") or AI_DECIDE).strip().lower()
-    if name in (AI_DECIDE, UAIG_CHAT):
-        return name
-    _say(f"unknown engine {name!r}; using {AI_DECIDE}")
-    return AI_DECIDE
 
 
 def _timeout(*candidates) -> float:
@@ -210,23 +164,23 @@ class _HttpStatus(Exception):
 
 
 class DecideClient:
-    """Asks the configured engine what the caller wants for the voice. One instance can serve a whole call.
+    """Asks the Databricks `ai_decide` function what the caller wants for the voice. One instance can serve a
+    whole call.
 
-    `host` / `token` are the workspace URL and the agent's bearer token (`DATABRICKS_TOKEN`). Unset arguments
-    come from UG_DECIDE_ENGINE (ai_decide | uaig_chat, default ai_decide), UG_DECIDE_MODEL (uaig_chat only),
-    UG_DECIDE_TIMEOUT_S (default 3.0) and UG_DECIDE_REASONING_EFFORT (uaig_chat only, sent only if set).
-    `http` substitutes the httpx.AsyncClient (tests); the client owns whatever it holds and closes it in `aclose`.
+    `host` / `token` are the workspace URL and the agent's bearer token (`DATABRICKS_TOKEN`). An unset
+    `timeout_s` comes from UG_DECIDE_TIMEOUT_S (default 3.0). `http` substitutes the httpx.AsyncClient (tests);
+    the client owns whatever it holds and closes it in `aclose`.
+
+    `engine` ("ai_decide") and `label` ("Databricks AI Decide") are constants: the trace attribute and the
+    evidence card read them, and the function is the only thing that ever answers.
     """
 
-    def __init__(self, host: str, token: str, *, engine: str | None = None, model: str | None = None,
-                 timeout_s: float | None = None, http=None) -> None:
-        self.engine = _engine_name(engine)
-        self.model = model or _env("UG_DECIDE_MODEL") or DEFAULT_MODEL  # uaig_chat only
+    def __init__(self, host: str, token: str, *, timeout_s: float | None = None, http=None) -> None:
+        self.engine = AI_DECIDE
+        self.label = "Databricks AI Decide"
         self.timeout_s = _timeout(timeout_s, _env("UG_DECIDE_TIMEOUT_S"))
-        self.label = "Databricks AI Decide" if self.engine == AI_DECIDE else f"UAIG Chat · {self.model}"
         self._base = _base_url(host)
         self._headers = {"Authorization": f"Bearer {token}"}
-        self._reasoning_effort = _env("UG_DECIDE_REASONING_EFFORT") or None
         self._http = http if http is not None else httpx.AsyncClient(timeout=self.timeout_s)
         self._reported: set[str] = set()
 
@@ -252,10 +206,6 @@ class DecideClient:
         await self._http.aclose()
 
     async def _ask(self, utterance: str, last_agent_line: str, current_mode: str) -> IntentVerdict:
-        if self.engine == UAIG_CHAT:
-            body = build_uaig_chat_body(utterance, last_agent_line, current_mode, self.model,
-                                        reasoning_effort=self._reasoning_effort)
-            return parse_uaig_chat(await self._post(_CHAT_PATH, body))
         body = build_ai_decide_body(utterance, last_agent_line, current_mode)
         return parse_ai_decide(_dig(await self._post(_AI_DECIDE_PATH, body), "response"))
 

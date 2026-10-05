@@ -95,7 +95,7 @@ Re-verified against installed 1.8.3 (2026-10-02). C3–C13 + text-transform/PUA 
 - **No official `ai_decide` latency or pricing.** 📄⚠️ The 0.8–2 s figure circulating is measured on TypeSafe's *Jev*,
   not Databricks-hosted `ai_decide`. Keep a p50/p95 measurement gate in discovery; neither pricing page lists `ai_decide` yet.
 - **Claude models on the gateway reject `response_format: json_object`** (they accept `json_schema` only). 📄 Keep the
-  `uaig_chat` fallback decider on a GPT-family model. Also: `/ai-gateway/openai/v1/chat/completions` with bare
+  world generator (`UG_GEN_MODEL`, which asks for JSON) on a GPT-family model. Also: `/ai-gateway/openai/v1/chat/completions` with bare
   `databricks-gpt-*` names is used in-repo but only `/responses` + `/embeddings` were formally verified in discovery —
   live-test chat-completions or use `/ai-gateway/mlflow/v1`.
 

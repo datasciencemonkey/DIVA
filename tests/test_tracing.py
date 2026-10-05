@@ -149,7 +149,7 @@ def test_fill_reads_the_real_voice_mode_controller():
     """Pins the Task 7 interface Task 10 passes in: the state's fields, and the engine on the last evidence."""
     profiles = {"standard": VoiceProfile("standard", "Deepgram", "deepgram", frozenset(), None),
                 "halloween": VoiceProfile("halloween", "ElevenLabs", "elevenlabs", frozenset({"whispers"}), None)}
-    controller = VoiceModeController(SimpleNamespace(engine="uaig_chat", label="Fake decide"), profiles,
+    controller = VoiceModeController(SimpleNamespace(engine="fake_engine", label="Fake decide"), profiles,
                                      lambda profile: profile.key)
     controller.state.mode, controller.state.transitions = HALLOWEEN, 1   # production writes these via _transition
     controller.count_tag("whispers")
@@ -157,7 +157,7 @@ def test_fill_reads_the_real_voice_mode_controller():
 
     enr = {}
     fill_ug_metadata(enr, None, None, voice_mode=controller)
-    assert enr == {"ug.voice_mode": "halloween", "ug.voice_mode_transitions": 1, "ug.decide_engine": "uaig_chat",
+    assert enr == {"ug.voice_mode": "halloween", "ug.voice_mode_transitions": 1, "ug.decide_engine": "fake_engine",
                    "ug.expressive_tags": 1, "ug.voice_degraded": True}
 
 

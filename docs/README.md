@@ -28,4 +28,3 @@ The root README links the main Databricks post and doc for each product. These a
   Docs: [AI governance with Unity Gateway](https://docs.databricks.com/aws/en/ai-gateway/)
 - **Lakebase:** [Build apps with Lakebase and Databricks Apps](https://www.databricks.com/blog/how-use-lakebase-transactional-data-layer-databricks-apps)
 - **MLflow traces:** Docs: [Tracing overview](https://docs.databricks.com/aws/en/mlflow3/genai/tracing/overview)
-- **AI Decide:** Docs: [REST API](https://docs.databricks.com/api/ai-functions/v1/ai-decide)

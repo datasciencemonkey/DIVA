@@ -193,8 +193,6 @@
   .d-pill--context { stroke: color-mix(in srgb, var(--c-context) 45%, var(--hairline)); }
   .d-pill--control { stroke: color-mix(in srgb, var(--c-control) 45%, var(--hairline)); }
   .d-pill--lava    { stroke: color-mix(in srgb, var(--accent) 42%, var(--hairline)); }
-  /* the alternate decision engine: configured via UG_DECIDE_ENGINE, never an automatic failover */
-  .d-pill--alt     { stroke-dasharray: 4 4; stroke: var(--hairline-strong); }
   /* the governed choice for this call — the one model the app picked, which "locks in" */
   .route-chosen { fill: none; stroke: var(--accent); stroke-width: 2; }
 
@@ -388,7 +386,7 @@
       <!-- viewBox 1200 wide; min-width 1040 keeps even the small labels legible when scrolled on a phone.
            Strokes render fully drawn by default (CSS); GSAP only ADDS the entrance when it's live. -->
       <svg class="arch-svg draw-svg" viewBox="0 0 1200 992" role="img"
-           aria-label="Left to right: a caller in the browser reaches the Studio web tier, which mints a short-TTL LiveKit token carrying PII-free metadata and serves the SPA. The browser joins a LiveKit Cloud room whose token dispatch summons the agent worker, which runs in the same Databricks App container as the web tier. In the agent, Deepgram speech-to-text (nova-3) feeds the voice-mode policy. Each turn, outside the conversational model, the policy asks Databricks AI Decide (ai_decide, or by configuration a Unity Gateway chat model) whether the caller wants to enter or exit the spooky voice; the policy changes the mode at most once per turn and an explicit exit always wins. The LLM turn uses a model the app itself picks with route_for(tier) from the caller's governed tier, and calls it through the Unity Gateway, which gives governed access to the Standard, Premium and VIP models. Replies are spoken by Deepgram aura-2 in the standard voice, or by ElevenLabs eleven_v3_conversational with inline expressive tags in Halloween mode. Read-only tools reach Lakebase: read_loyalty_context returns the governed tier, semantic_search retrieves knowledge with Lakebase Search ANN, and record_lookup returns the caller's own records. The agent streams evidence to the Studio UI's four pillars, where the voice mode shows on the Control pillar, and flushes spans, including ug.ai_decide, to Unity Catalog as MLflow traces. Token usage is metered as costs. Separately, one time per world, the studio drafts synthetic data through the gateway and embeds it into Lakebase.">
+           aria-label="Left to right: a caller in the browser reaches the Studio web tier, which mints a short-TTL LiveKit token carrying PII-free metadata and serves the SPA. The browser joins a LiveKit Cloud room whose token dispatch summons the agent worker, which runs in the same Databricks App container as the web tier. In the agent, Deepgram speech-to-text (nova-3) feeds the voice-mode policy. Each turn, outside the conversational model, the policy asks Databricks AI Decide (the ai_decide REST API) whether the caller wants to enter or exit the spooky voice; the policy changes the mode at most once per turn and an explicit exit always wins. The LLM turn uses a model the app itself picks with route_for(tier) from the caller's governed tier, and calls it through the Unity Gateway, which gives governed access to the Standard, Premium and VIP models. Replies are spoken by Deepgram aura-2 in the standard voice, or by ElevenLabs eleven_v3_conversational with inline expressive tags in Halloween mode. Read-only tools reach Lakebase: read_loyalty_context returns the governed tier, semantic_search retrieves knowledge with Lakebase Search ANN, and record_lookup returns the caller's own records. The agent streams evidence to the Studio UI's four pillars, where the voice mode shows on the Control pillar, and flushes spans, including ug.ai_decide, to Unity Catalog as MLflow traces. Token usage is metered as costs. Separately, one time per world, the studio drafts synthetic data through the gateway and embeds it into Lakebase.">
 
               <!-- ============ NODES ============ -->
 
@@ -549,7 +547,7 @@
                 <text class="d-mono t-control" x="976" y="109" style="font-size:11.5px">ug.ai_decide &#183; ug.voice_*</text>
               </g>
 
-              <!-- Databricks AI Decide — the default decision engine (an AI Function). The alternate engine is a Unity Gateway chat model. -->
+              <!-- Databricks AI Decide — the decision engine (an AI Function, called over its REST API). -->
               <g class="d-reveal">
                 <rect class="d-node d-node--control" x="960" y="142" width="224" height="136" rx="18"/>
                 <g class="d-ic ic-control" transform="translate(976,158)">
@@ -561,9 +559,9 @@
                 <text class="d-title d-title--lg" x="1004" y="175">AI Decide</text>
                 <text class="d-note" x="976" y="198">Databricks AI Function</text>
                 <text class="d-mono t-control" x="976" y="218" style="font-size:12.5px">enter &#183; exit &#183; none</text>
-                <rect class="d-pill d-pill--alt" x="972" y="228" width="200" height="40" rx="10"/>
-                <text class="d-mono d-mono--mid" x="984" y="244" style="font-size:12px">alt engine: uaig_chat</text>
-                <text class="d-note" x="984" y="260" style="font-size:12px">a Unity Gateway chat model</text>
+                <rect class="d-pill d-pill--control" x="972" y="228" width="200" height="40" rx="10"/>
+                <text class="d-mono d-mono--mid" x="984" y="244" style="font-size:12px">ai_decide REST API</text>
+                <text class="d-note" x="984" y="260" style="font-size:12px">state &#183; questions &#183; options</text>
               </g>
 
               <!-- Unity Gateway — governed access to Databricks model serving. It does NOT route: the agent picks the
@@ -741,7 +739,7 @@
 +------------------+          | | [6] STT -&gt; LLM -&gt; TTS      | |          +----------------------+
 | Deepgram         |&lt;===[6]==&gt;| | [6] voice mode: AI Decide  | |--[6]----&gt;| Databricks AI Decide |
 | STT nova-3       |          | |    standard  -&gt; Deepgram   | |          | enter / exit / none  |
-| TTS aura-2       |          | |    halloween -&gt; ElevenLabs | |          | (or a Gateway model) |
+| TTS aura-2       |          | |    halloween -&gt; ElevenLabs | |          | (REST API)           |
 +------------------+          | |                            | |          +----------------------+
                               | | [7] tools: semantic_search | |
 +------------------+          | |            record_lookup   | |          +----------------------+
@@ -782,7 +780,7 @@
       <li><b>Join the room.</b> The browser connects to LiveKit Cloud over WebRTC with that token.</li>
       <li><b>Dispatch the agent.</b> LiveKit hands the job to the agent worker, which stays registered as <span class="mono">ug-agent</span> over a WebSocket.</li>
       <li><b>Bind and route.</b> The agent worker looks up the caller's tier in Lakebase (never from speech), and <span class="mono">route_for(tier)</span> picks the model from the <span class="mono">UG_MODEL_*</span> map. That choice is app logic: Unity Gateway only serves the model it names. The model never sees the tier.</li>
-      <li><b>Talk.</b> Deepgram STT (nova-3) turns speech into text and the routed LLM answers through the gateway's Responses API. A TTS voice speaks the reply: Deepgram (aura-2) in the standard voice, ElevenLabs (<span class="mono">eleven_v3_conversational</span>, with inline expressive tags) once the call is in Halloween mode, or a darker Deepgram voice if ElevenLabs isn't configured. Which voice applies is decided on every caller turn, outside the LLM: Databricks AI Decide classifies what the caller wants (<span class="mono">enter</span>, <span class="mono">exit</span> or <span class="mono">none</span>) and a deterministic policy applies it, with at most one change per turn and an explicit exit always winning. <span class="mono">UG_DECIDE_ENGINE=uaig_chat</span> swaps in a Unity Gateway chat model as the classifier.</li>
+      <li><b>Talk.</b> Deepgram STT (nova-3) turns speech into text and the routed LLM answers through the gateway's Responses API. A TTS voice speaks the reply: Deepgram (aura-2) in the standard voice, ElevenLabs (<span class="mono">eleven_v3_conversational</span>, with inline expressive tags) once the call is in Halloween mode, or a darker Deepgram voice if ElevenLabs isn't configured. Which voice applies is decided on every caller turn, outside the LLM: Databricks AI Decide classifies what the caller wants (<span class="mono">enter</span>, <span class="mono">exit</span> or <span class="mono">none</span>) and a deterministic policy applies it, with at most one change per turn and an explicit exit always winning.</li>
       <li><b>Ground.</b> <span class="mono">semantic_search</span> is <a href="https://www.databricks.com/blog/lakebase-search-state-art-full-text-and-vector-search-postgres">Lakebase Search</a> ANN (<span class="mono">ORDER BY embedding &lt;=&gt; $q</span> on the <span class="mono">lakebase_ann</span> index), with the question embedded through the gateway first; <span class="mono">record_lookup</span> is plain SQL and only returns the caller's own records. Both tools are scoped to the bound dataset.</li>
       <li><b>Show.</b> PII-free evidence (routing decision, retrieval hits, token usage, voice mode) streams to the UI over the LiveKit data channel, and the studio renders it as the Choice / Control / Context / Costs pillars. The voice mode shows on the Control pillar as a live &ldquo;Voice mode · AI Decide&rdquo; row.</li>
       <li><b>Trace.</b> The spans flush over OTLP into a Unity Catalog table, where they read as MLflow traces. Each voice-mode change adds a <span class="mono">ug.ai_decide</span> span, and the root span carries <span class="mono">ug.voice_mode</span>, <span class="mono">ug.voice_mode_transitions</span>, <span class="mono">ug.voice_degraded</span>, <span class="mono">ug.decide_engine</span> and <span class="mono">ug.expressive_tags</span>.</li>
