@@ -124,6 +124,26 @@ Keep `UG_HALLOWEEN_STABILITY` at 0.5. Neither setting read a cue aloud, so nothi
 - **The read-aloud check matches whole words.** It flags a tag as `spoken-aloud` only when one of the tag's own words is heard exactly, so an inflected rendering (for example "whispered" for `whispers`) could slip past it. None appeared in the 134 recorded tagged transcripts.
 - **Run-to-run variation.** Each tag was rendered once per carrier, and the noise floor comes from one pair of plain renderings per carrier, shared by every tag. In the full run that pair differed by 0.08 s (one audio step), so the bar was 0.16 s, barely above its 0.15 s floor. In an earlier 4-synthesis smoke run on the same voice the first carrier's pair differed by more than 0.27 s, and `whispers`, `performed` here, came back `no-audible-effect`. Verdicts near the bar are therefore not stable from run to run, and a tag that is read aloud only now and then could pass two renderings.
 
+## Do the sound cues make sound?
+
+The bake-off shows that a cue changed the clip length and was not read aloud. It cannot tell a laugh from a longer silence, so a second, smaller check looked for sound directly. It synthesized each cue once in front of the first carrier sentence, through the same plugin, voice, model and stability as the agent, had Deepgram time the spoken words, and measured the level of every stretch of at least 0.25 s that lies more than 0.1 s away from any word. In the plain clip and in the `pause` control such stretches sit near -46 dB (silence and the tails of words); a laugh or a breath sits well above that.
+
+| Cue | Longest stretch with no word | Level |
+|---|---|---|
+| `laughs` | 1.3 s before the sentence | -22.0 dB |
+| `chuckles` | 0.7 s inside the sentence | -16.8 dB |
+| `evil laugh` | 0.5 s after the sentence | -28.3 dB |
+| `gasps` | 0.4 s before the sentence | -27.2 dB |
+| `clears throat` | 1.0 s before the sentence | -23.3 dB |
+| `sighs` | 0.5 s before the sentence | -33.5 dB |
+| `inhales deeply` | 0.8 s before the sentence | -36.8 dB |
+| `heavy breathing` | 1.7 s before the sentence | -37.3 dB |
+| `giggles` | 0.5 s after the sentence | -49.4 dB (about the floor) |
+| `groans` | none of 0.25 s | n/a |
+| plain clip, `pause` (controls) | 0.3 s and 0.6 s after the sentence | -46.4 dB, -47.4 dB |
+
+Eight of the ten sound cues produce a distinct, audible sound. `giggles` and `groans` show none by this measure (the sound may be carried in the voice itself rather than as a separate stretch), so listen to those two first. This is one rendering per cue, made with a one-off script that is not in the repository, so it shows that a cue can make a sound, not how often it does, and a level above the floor is not proof that it sounds like a laugh.
+
 ## LLM compliance results
 
 _Run 2026-10-04 with `tools/expressive_llm_check.py`: 7 scripted utterances x 2 samples on each tier's model (Standard / Premium / VIP), `reasoning.effort=low`, the exact Halloween instructions the agent sends, every request to the Databricks Unity Gateway. The baseline before tuning used 3 samples per utterance. Tuning was limited to one round and one re-run, so the final figures rest on 2 samples per utterance._
@@ -178,4 +198,13 @@ Reading these figures:
 - **One-step emulation.** The tool shows the model a recorded tool result and a stand-in dataset prompt; it does not run the agent's tools or hold a multi-turn conversation.
 - **Cues, not sound.** It measures what the models write. Whether a cue sounds right is the listen in the README ("Verifying the voice").
 
-Targets (initial; changed only with evidence, recorded here): story median >= 5 cues per 100 words; >= 6 distinct cues per model; >= 1 cue in every factual reply; >= 95% of cues are vocabulary members once case/spacing are forgiven; 0 cues inside facts, stage directions, stacked cues, or missing facts. Added with the evidence above: no reply to a story request is shorter than 25 words.
+Targets (initial; changed only with evidence, recorded here): story median >= 5 cues per 100 words; >= 6 distinct cues per model; >= 1 cue in every factual reply; >= 95% of cues are vocabulary members once case/spacing are forgiven; 0 cues inside facts, stage directions, stacked cues, or missing facts. Added with the evidence above: no reply to a story request is shorter than 25 words. Added later with the laughter rule: at least 75% of the story replies carry a sound cue (laugh, gasp, sigh, breath), and no laughter is written out as words.
+
+### Laughter and noises
+
+The runs above showed the models rarely asked for laughter or noises: sound cues (the "Breath and sounds" group) were 1 of 37 cues on Standard, 4 of 39 on Premium and 4 of 33 on VIP, almost all `chuckles`. A later change added a cue rule: laughs, gasps, sighs and breaths only as cues, never written out as "ha ha" or `*laughs*` (the voice would read those aloud as words), and at least two sounds in every story, one at the scare and one on the last line. The tool now counts sound cues and laughter written as words.
+
+- **First wording** (soft: "work in at least one sound"), full run, 7 utterances x 3 samples, cue section +730 input tokens. Premium passed (12 of 55 cues were sounds, every story had one). VIP passed (12 of 47, every story had one). Standard failed: 6 of 61 cues were sounds and 4 of 6 stories had one; 5 of its cues were `[gasp]`, which is not on the list, so the filter would have dropped them, and 3 cues were stacked.
+- **Final wording** (firm, with exact spellings and where each sound goes), spot checks only: 6 Standard, 3 Premium and 3 VIP story replies. Every reply had 2 to 3 sound cues (`[gasps]`, `[deep breaths]` or `[sighs]` at the scare; `[laughs]` or `[chuckles]` on the last line); none was off the list, written out as words, or stacked. The cue section now costs +779 input tokens (2,801 characters).
+- **The price.** Stories are now formulaic: a gasp or breath, then a laugh, in much the same places. If that sounds repetitive, loosen the "Every story MUST include sounds" line.
+- **Not verified.** The full 69-call run was not repeated with the final wording, and 12 replies is a small sample.

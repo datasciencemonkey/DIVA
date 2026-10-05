@@ -165,8 +165,9 @@ plan without credentials or network.
 
 **The LLM check** sends seven scripted caller utterances to each tier's model with the exact Halloween instructions the
 agent uses. It reports cues per 100 words, distinct cues, how many cues are on the list, stage directions, stacked
-cues, facts kept verbatim, cues that split a fact, and how many input tokens the cue section adds. Every request goes
-to the Databricks-served model through Unity Gateway.
+cues, sound cues in the stories (laughs, gasps, sighs, breaths), laughter written out as words instead of a cue, facts
+kept verbatim, cues that split a fact, and how many input tokens the cue section adds. Every request goes to the
+Databricks-served model through Unity Gateway.
 
 - **Settings.** It reads `DATABRICKS_HOST`, `DATABRICKS_TOKEN` and the `UG_MODEL_*` names from `.env.local`, the same
   values the agent uses. It authenticates with that token, not a Databricks CLI profile.
@@ -174,14 +175,16 @@ to the Databricks-served model through Unity Gateway.
   replies per utterance (default 3). `--tiers Standard,Premium,VIP` picks the tiers (default all three). `--json PATH`
   saves every reply with its metrics (keep the file outside the repo).
 - **Cost.** A default run makes 69 calls (3 tiers x (7 utterances x 3 samples + 2 probe calls)) and refuses to start
-  above 100. The cue section adds +658 input tokens to a request (measured; only the ElevenLabs Halloween voice carries
+  above 100. The cue section adds +779 input tokens to a request (measured; only the ElevenLabs Halloween voice carries
   it, the normal voice and the Deepgram fallback do not).
 - **Exit codes.** `0` every tier passes, `1` a target was missed, `2` configuration or budget (missing `.env.local`
   values, an unknown tier, too many calls), `3` a gateway request failed.
 
-The latest pass rests on 2 samples per utterance (48 calls), not the default 3. Several targets allow no misses at all
-(a stage direction, a stacked cue, a missing fact), so one stray reply can trip them: read the pass as encouraging, not
-proof, and re-run with the default after any change to the prompt, a tier model, the palette or the voice. The figures, and how the prompt was tuned, are in
+The last full pass rests on 2 samples per utterance (48 calls), not the default 3, and it predates the laughter rule
+below, which was checked afterwards only by spot checks (12 story replies), not by a full run. Several targets allow no
+misses at all (a stage direction, a stacked cue, a missing fact), so one stray reply can trip them: read the results as
+encouraging, not proof, and re-run with the default after any change to the prompt, a tier model, the palette or the
+voice. The figures, and how the prompt was tuned, are in
 [the contract](docs/discovery/expressive-tags-contract.md#llm-compliance-results).
 
 The persona now lets the monster tell a made-up story. Without that line, the Premium and VIP models answered "tell me a
@@ -189,6 +192,12 @@ scary story" with "I don't have a story from my tools", because the governance s
 persona says a spooky story is play (four or five short sentences, no tool needed) and keeps real orders, prices,
 policies and people out of it; facts about the business still come only from the tools. It is a deliberate carve-out,
 so a listening test of a story is part of the recipe.
+
+Laughter and noises are asked for only as cues from the "Breath and sounds" list (`[laughs]`, `[gasps]`, `[sighs]`,
+`[deep breaths]`...), never written out as "ha ha" or `*laughs*`, which the voice would read aloud as words. The rule is
+part of the cue section, so only the ElevenLabs Halloween voice ever sees it. Every story must include a sound at the
+scare and a laugh on the last line. Left alone, the models rarely laughed (sound cues were 1 to 12% of their cues), and
+the price of the firm rule is that stories are formulaic, so listen for repetition too.
 
 Then listen once: run the studio locally (`PORT=8080 uv run --frozen python app/web_server.py` and
 `uv run --frozen python app/agent.py dev` in a second terminal), open http://localhost:8080, start a call, say
