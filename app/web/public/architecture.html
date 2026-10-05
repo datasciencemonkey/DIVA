@@ -480,7 +480,7 @@
                   <path d="M0 15V11M4 15V7M8 16V4M12 15V8M16 15V11" stroke-width="2"/>
                 </g>
                 <text class="d-role" x="728" y="120" style="fill:var(--text-hi);font-weight:700">Deepgram STT</text>
-                <text class="d-mono t-lava" x="728" y="140">nova-3</text>
+                <text class="d-mono t-lava" x="728" y="140">nova-3 &#183; external</text>
 
                 <!-- Voice mode — the deterministic policy. It asks AI Decide every turn, OUTSIDE the LLM. -->
                 <rect class="d-node d-node--control" x="686" y="170" width="228" height="100" rx="12"/>
@@ -513,7 +513,7 @@
                   <path d="M2 6v6h3l5 4V2L5 6z"/>
                   <path d="M13 6.5a4 4 0 0 1 0 5"/>
                 </g>
-                <text class="d-role" x="728" y="422" style="fill:var(--text-hi);font-weight:700">TTS &#183; voice by mode</text>
+                <text class="d-role" x="728" y="422" style="fill:var(--text-hi);font-weight:700">TTS &#183; by mode (external)</text>
                 <rect class="d-pill" x="700" y="438" width="200" height="30" rx="8"/>
                 <text class="d-mono" x="712" y="457" style="font-size:12.5px">Deepgram aura-2</text>
                 <text class="d-tag" x="888" y="457" text-anchor="end" style="font-size:11px">STANDARD</text>
@@ -532,6 +532,7 @@
                 </g>
                 <text class="d-title" x="484" y="514">Costs</text>
                 <text class="d-mono d-mono--mid" x="456" y="537" style="font-size:12px">session_usage_updated</text>
+                <text class="d-note" x="456" y="549" style="font-size:11px">via the LiveKit data channel</text>
                 <line x1="456" y1="556" x2="612" y2="556" stroke="var(--hairline-strong)" stroke-width="4" stroke-linecap="round"/>
                 <line x1="456" y1="556" x2="552" y2="556" stroke="var(--c-costs)" stroke-width="4" stroke-linecap="round"/>
               </g>
@@ -575,7 +576,7 @@
                 </g>
                 <text class="d-title d-title--lg" x="1004" y="331">Unity Gateway</text>
                 <text class="d-tag t-choice" x="976" y="354">CHOICE &#183; MODEL SERVING</text>
-                <text class="d-note" x="976" y="372" style="font-size:12px">serves the model the app picks</text>
+                <text class="d-note" x="976" y="372" style="font-size:12px">serves the picked model + embeddings</text>
                 <rect class="d-pill d-pill--choice" x="976" y="382" width="192" height="40" rx="10"/>
                 <text class="d-mono" x="988" y="399">gpt-6-sol</text>
                 <text class="d-note t-choice" x="1156" y="399" text-anchor="end">VIP</text>
@@ -697,7 +698,7 @@
                 <text class="edge-label--sm t-lava" x="336" y="408" text-anchor="middle">joins with the JWT &#183; WebRTC audio</text>
                 <text class="edge-label--sm t-lava" x="598" y="206">audio in</text>
                 <text class="edge-label--sm t-lava" x="634" y="396" text-anchor="end">audio out</text>
-                <text class="edge-label--sm" x="556" y="72" text-anchor="middle">evidence</text>
+                <text class="edge-label--sm" x="556" y="72" text-anchor="middle">evidence &#183; data channel</text>
                 <text class="edge-label--sm t-control" x="762" y="596">tier at bind</text>
                 <text class="edge-label--sm t-context" x="1004" y="572" text-anchor="middle">read-only tools</text>
               </g>
@@ -727,7 +728,7 @@
 +------------------+          | +----------------------------+ |
 | Browser          |--[1][2]-&gt;| | Web / token tier           | |
 | studio UI        |&lt;---JWT---| | web_server.py              | |
-| livekit-client   |          | | GET /   GET /api/token     | |
+| livekit-client   |          | | GET /  GET|POST /api/*     | |
 +------------------+          | +----------------------------+ |
     | [3]     ^ [8]           |                                |
     v         |               |                                |            Databricks workspace

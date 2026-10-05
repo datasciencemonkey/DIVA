@@ -1,6 +1,6 @@
 """UG Voice Studio frontend server: stdlib only, zero pip deps.
 
-Serves web/public/ (the page + vendored livekit-client) and mints LiveKit
+Serves web/public/ (the page; livekit-client and GSAP load from a CDN) and mints LiveKit
 access tokens on GET /api/token with agent dispatch embedded.  The token is
 a plain HS256 JWT signed with the LiveKit API secret — no LiveKit SDK needed
 on the serving path.
@@ -34,10 +34,6 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from src.generate import generate_dataset  # noqa: E402
-from src.services.db import SCHEMA, _run_query, create_pool  # noqa: E402
-from src.services.uaig_chat import complete_json  # noqa: E402
-
 ROOT = Path(__file__).parent
 PUBLIC = ROOT / "web" / "public"
 
@@ -61,7 +57,12 @@ def _load_env_local() -> None:
         return
 
 
+# Must run before the src imports: db.py and embeddings.py read UG_SCHEMA / UG_EMBED_MODEL at import time.
 _load_env_local()
+
+from src.generate import generate_dataset  # noqa: E402
+from src.services.db import SCHEMA, _run_query, create_pool  # noqa: E402
+from src.services.uaig_chat import complete_json  # noqa: E402
 
 LIVEKIT_URL = os.environ.get("LIVEKIT_URL", "")
 LIVEKIT_API_KEY = os.environ.get("LIVEKIT_API_KEY", "")

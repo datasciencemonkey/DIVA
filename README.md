@@ -137,8 +137,7 @@ uv run python app/web_server.py                      # terminal 2: studio UI on 
 uv run pytest -q --ignore=tests/test_integration_data_plane.py   # terminal 3: that one test is live and writes two worlds
 ```
 
-The agent worker reads `.env.local` itself. The web tier reads it too, but only after it has fixed `UG_SCHEMA` and
-`UG_EMBED_MODEL`, so export those two in its shell if you changed them.
+The agent worker and the web tier read `.env.local` themselves; only the two setup scripts need the exports.
 
 Open the studio, generate a world (or pick a ready one), enter the call, choose a caller and press **Connect & talk**.
 The studio suggests what to ask. Try an order question (Context), a Standard caller against a VIP one (Choice), then
