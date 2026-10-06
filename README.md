@@ -7,7 +7,7 @@
 [![MLflow traces](https://img.shields.io/badge/MLflow-traces-FF3621?labelColor=1B3139&logo=mlflow&logoColor=white)](https://docs.databricks.com/aws/en/mlflow3/genai/tracing/trace-unity-catalog)
 [![AI Decide](https://img.shields.io/badge/AI_Decide-ai__decide-FF3621?labelColor=1B3139&logo=databricks&logoColor=white)](https://www.databricks.com/blog/introducing-aidecide-make-fast-decisions-your-governed-data)
 
-[![Demo video](https://img.shields.io/badge/Demo-Watch_on_YouTube-FF0000?logo=youtube&logoColor=white)](https://www.youtube.com/watch?v=kOU8YqsbInU)
+[![Demo video](https://img.shields.io/badge/Demo-Watch_on_YouTube-FF0000?logo=youtube&logoColor=white)](https://www.youtube.com/watch?v=xe8X3-Mo7tc)
 [![LiveKit Agents](https://img.shields.io/badge/LiveKit-Agents-1B3139?logo=livekit&logoColor=white)](https://docs.livekit.io/agents/)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/downloads/)
 [![Built with uv](https://img.shields.io/badge/built_with-uv-DE5FE9?logo=uv&logoColor=white)](https://docs.astral.sh/uv/)
@@ -41,10 +41,11 @@ agent already knows the patterns and the traps. See [Agent skill](#agent-skill).
 
 ## See it
 
-[![Emotive Voice AI on Databricks: It Whispers, Decides, and Logs Everything (YouTube)](https://img.youtube.com/vi/kOU8YqsbInU/maxresdefault.jpg)](https://www.youtube.com/watch?v=kOU8YqsbInU)
+[![DIVA: Emotive Voice AI on Databricks: It Whispers, Decides, and Logs Everything (YouTube)](https://img.youtube.com/vi/xe8X3-Mo7tc/maxresdefault.jpg)](https://www.youtube.com/watch?v=xe8X3-Mo7tc)
 
-**[▶ Watch the walkthrough](https://www.youtube.com/watch?v=kOU8YqsbInU)** (7 min): the whole app on Databricks, from
-Lakebase Search and Unity Gateway to AI Decide and the MLflow trace. Stills from a call follow.
+**[▶ Watch the walkthrough](https://www.youtube.com/watch?v=xe8X3-Mo7tc)** (about 15 min): the architecture, then
+a live demo of the whole app on Databricks, from Lakebase Search and Unity Gateway to AI Decide and the MLflow trace.
+Stills from a call follow.
 
 A call in the standard voice. **Choice** routes the Standard tier to `system.ai.gpt-5-nano` through Unity Gateway, and
 **Control** shows the governance checks and the voice mode:
