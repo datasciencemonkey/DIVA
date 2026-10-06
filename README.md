@@ -8,6 +8,7 @@
 [![AI Decide](https://img.shields.io/badge/AI_Decide-ai__decide-FF3621?labelColor=1B3139&logo=databricks&logoColor=white)](https://www.databricks.com/blog/introducing-aidecide-make-fast-decisions-your-governed-data)
 
 [![Demo video](https://img.shields.io/badge/Demo-Watch_on_YouTube-FF0000?logo=youtube&logoColor=white)](https://www.youtube.com/watch?v=xe8X3-Mo7tc)
+[![Blog](https://img.shields.io/badge/Blog-Read_on_Medium-12100E?logo=medium&logoColor=white)](https://dsmonk.medium.com/building-voice-agents-on-databricks-f073ce8518a5)
 [![LiveKit Agents](https://img.shields.io/badge/LiveKit-Agents-1B3139?logo=livekit&logoColor=white)](https://docs.livekit.io/agents/)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/downloads/)
 [![Built with uv](https://img.shields.io/badge/built_with-uv-DE5FE9?logo=uv&logoColor=white)](https://docs.astral.sh/uv/)
@@ -45,7 +46,9 @@ agent already knows the patterns and the traps. See [Agent skill](#agent-skill).
 
 **[▶ Watch the walkthrough](https://www.youtube.com/watch?v=xe8X3-Mo7tc)** (about 15 min): the architecture, then
 a live demo of the whole app on Databricks, from Lakebase Search and Unity Gateway to AI Decide and the MLflow trace.
-Stills from a call follow.
+
+**[Read the blog](https://dsmonk.medium.com/building-voice-agents-on-databricks-f073ce8518a5)** (4 min read): the
+worries that come with voice agents, and the Databricks pieces that answer them. Stills from a call follow.
 
 A call in the standard voice. **Choice** routes the Standard tier to `system.ai.gpt-5-nano` through Unity Gateway, and
 **Control** shows the governance checks and the voice mode:
@@ -244,6 +247,8 @@ The call connects but no agent joins. Follow the skill.
 The repo is [datasciencemonkey/diva](https://github.com/datasciencemonkey/diva). If you're sharing it with someone, start
 with these; [`docs/README.md`](docs/README.md#more-reading) has the longer list.
 
+- **This project:** the blog, [Building Voice Agents on Databricks](https://dsmonk.medium.com/building-voice-agents-on-databricks-f073ce8518a5),
+  and the [walkthrough video](https://www.youtube.com/watch?v=xe8X3-Mo7tc)
 - **Agent Bricks and Databricks Apps:** [Agent Bricks at Data + AI Summit 2026](https://www.databricks.com/blog/agent-bricks-dais-2026) ·
   Docs: [Databricks Apps](https://docs.databricks.com/aws/en/dev-tools/databricks-apps/)
 - **Unity Gateway:** [Generally Available](https://www.databricks.com/blog/unity-ai-gateway-generally-available) ·
